@@ -1,0 +1,30 @@
+﻿/* Tailwind v4: tek satÄ±r import ile tÃ¼m stiller yÃ¼klenir */
+@import "tailwindcss";
+
+/* TÃ¼m kutularda padding/border box-sizing kullan */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* Mobil cihazlarda dokunma olaylarÄ±nÄ± daha hÄ±zlÄ± iÅŸle */
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(1200px 700px at 15% -10%, rgba(245, 158, 11, 0.10), transparent 55%),
+    radial-gradient(1000px 600px at 85% 0%, rgba(120, 113, 108, 0.12), transparent 52%),
+    #09090b;
+  color: #f4f4f5;
+}
+
+input,
+select,
+textarea {
+  color-scheme: dark;
+}
