@@ -2,8 +2,8 @@
   "/_not-found/page": "app/_not-found/page.js",
   "/admin/login/page": "app/admin/login/page.js",
   "/auth/page": "app/auth/page.js",
+  "/admin/(protected)/page": "app/admin/(protected)/page.js",
   "/(customer)/page": "app/(customer)/page.js",
-  "/(customer)/confirm/page": "app/(customer)/confirm/page.js",
   "/admin/(protected)/settings/page": "app/admin/(protected)/settings/page.js",
-  "/admin/(protected)/page": "app/admin/(protected)/page.js"
+  "/(customer)/confirm/page": "app/(customer)/confirm/page.js"
 }
