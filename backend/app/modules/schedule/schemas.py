@@ -60,6 +60,7 @@ class BarberSettingsResponse(BaseModel):
     slot_duration_minutes: int
     work_start_time: time
     work_end_time: time
+    weekly_closed_days: list[int]
 
 
 class BarberSettingsRequest(BaseModel):
@@ -70,6 +71,7 @@ class BarberSettingsRequest(BaseModel):
     slot_duration_minutes: int
     work_start_time: time
     work_end_time: time
+    weekly_closed_days: list[int] = []
 
     @field_validator("slot_duration_minutes")
     @classmethod
@@ -87,6 +89,14 @@ class BarberSettingsRequest(BaseModel):
         if start and v <= start:
             raise ValueError("BitiÅŸ saati baÅŸlangÄ±Ã§ saatinden bÃ¼yÃ¼k olmalÄ±dÄ±r")
         return v
+
+    @field_validator("weekly_closed_days")
+    @classmethod
+    def valid_weekly_days(cls, v: list[int]) -> list[int]:
+        """HaftanÄ±n gÃ¼nleri 0 ile 6 arasÄ±nda olmalÄ±dÄ±r."""
+        if any(day < 0 or day > 6 for day in v):
+            raise ValueError("HaftanÄ±n gÃ¼nleri 0 ile 6 arasÄ±nda olmalÄ±dÄ±r")
+        return sorted(set(v))
 
 
 # â”€â”€â”€ Admin: GÃ¼nlÃ¼k Override â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

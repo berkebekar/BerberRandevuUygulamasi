@@ -16,7 +16,7 @@ type UserMe = {
 type MyBooking = {
   id: string
   slot_time: string
-  status: "confirmed" | "cancelled"
+  status: "confirmed" | "cancelled" | "no_show"
 }
 
 function getWeekDays(): { date: string; label: string; shortDate: string }[] {

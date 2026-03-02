@@ -14,7 +14,6 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.enums import BookingStatus
 from app.modules.booking import service as booking_service
 
 
@@ -29,30 +28,19 @@ async def get_dashboard(
     Çalışma sırası:
     1. booking_service.get_bookings_by_date() ile o günün tüm randevularını çek
        (bu fonksiyon Booking + User JOIN'i yapıyor — ayrı sorgu gerekmez)
-    2. confirmed_count: status='confirmed' olanları say
-       (CURSOR_PROMPTS.md ADIM 9: "Günlük tıraş sayısı = confirmed olanlar")
-    3. Veriyi DashboardResponse formatına uygun dict olarak döndür
+    2. Veriyi DashboardResponse formatına uygun dict olarak döndür
 
     Neden cancelled randevular da döndürülüyor?
     Admin o günün tam geçmişini görmeli — iptal edilenler de takip edilsin.
-    Ama sayıya (confirmed_count) dahil edilmez.
 
     Returns:
         dict: {
             "date": date,
-            "confirmed_count": int,
             "bookings": [{"id": ..., "user_first_name": ..., ...}, ...]
         }
     """
     # Günün tüm randevularını müşteri bilgileriyle çek (slot_time ASC sıralı)
     rows = await booking_service.get_bookings_by_date(db, tenant_id, target_date)
-
-    # confirmed_count: sadece status='confirmed' olanları say
-    # Cancelled randevular iptal edilmiş — tıraş gerçekleşmemiş, sayıya dahil etme
-    confirmed_count = sum(
-        1 for booking, _ in rows
-        if booking.status == BookingStatus.confirmed
-    )
 
     # Her (booking, user) çiftini dashboard item formatına çevir
     bookings = [
@@ -70,6 +58,5 @@ async def get_dashboard(
 
     return {
         "date": target_date,
-        "confirmed_count": confirmed_count,
         "bookings": bookings,
     }

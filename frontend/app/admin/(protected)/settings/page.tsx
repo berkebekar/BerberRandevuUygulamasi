@@ -14,7 +14,19 @@ type BarberSettings = {
   slot_duration_minutes: number
   work_start_time: string // "09:00:00" veya "09:00"
   work_end_time: string
+  weekly_closed_days: number[]
 }
+
+const WEEK_DAYS = [
+  // Python datetime.weekday() ile uyumlu: Pzt=0 ... Paz=6
+  { label: "Pzt", value: 0 },
+  { label: "Sal", value: 1 },
+  { label: "Çar", value: 2 },
+  { label: "Per", value: 3 },
+  { label: "Cum", value: 4 },
+  { label: "Cmt", value: 5 },
+  { label: "Paz", value: 6 },
+]
 
 export default function AdminSettingsPage() {
   const router = useRouter()
@@ -23,11 +35,18 @@ export default function AdminSettingsPage() {
   const [slotDuration, setSlotDuration] = useState(30)
   const [workStart, setWorkStart] = useState("09:00")
   const [workEnd, setWorkEnd] = useState("19:00")
+  const [closedDays, setClosedDays] = useState<number[]>([])
 
   // UI state
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+
+  const toggleDay = (value: number) => {
+    setClosedDays((prev) =>
+      prev.includes(value) ? prev.filter((day) => day !== value) : [...prev, value]
+    )
+  }
 
   /**
    * Backend'den mevcut ayarlari cek.
@@ -43,6 +62,7 @@ export default function AdminSettingsPage() {
           setSlotDuration(data.slot_duration_minutes)
           setWorkStart(data.work_start_time.slice(0, 5))
           setWorkEnd(data.work_end_time.slice(0, 5))
+          setClosedDays(data.weekly_closed_days ?? [])
         }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Ayarlar yuklenemedi.")
@@ -70,6 +90,7 @@ export default function AdminSettingsPage() {
         slot_duration_minutes: slotDuration,
         work_start_time: workStart,
         work_end_time: workEnd,
+        weekly_closed_days: closedDays,
       })
       setSuccess("Ayarlar kaydedildi.")
     } catch (err: unknown) {
@@ -141,6 +162,35 @@ export default function AdminSettingsPage() {
                 {value} dk
               </label>
             ))}
+          </div>
+        </div>
+
+        {/* İzin günleri */}
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+          <h2 className="text-sm font-semibold text-zinc-200">İzin Günleri</h2>
+          <p className="text-xs text-zinc-400">
+            Berberin çalışmadığı haftanın günlerini seçin. Bu günlerde slotlar kapalı görünür.
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            {WEEK_DAYS.map((day) => {
+              const isActive = closedDays.includes(day.value)
+              return (
+                <button
+                  key={day.value}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => toggleDay(day.value)}
+                  className={`px-3 py-2 rounded-lg border text-sm font-semibold transition-colors
+                    ${
+                      isActive
+                        ? "bg-emerald-500 text-zinc-950 border-emerald-400"
+                        : "bg-zinc-950 text-zinc-300 border-zinc-800 hover:border-zinc-500"
+                    }`}
+                >
+                  {day.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 

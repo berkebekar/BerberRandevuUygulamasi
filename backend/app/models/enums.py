@@ -10,6 +10,7 @@ class BookingStatus(str, enum.Enum):
     """Randevu durumu: onaylı veya iptal."""
     confirmed = "confirmed"
     cancelled = "cancelled"
+    no_show = "no_show"
 
 
 class CancelledBy(str, enum.Enum):

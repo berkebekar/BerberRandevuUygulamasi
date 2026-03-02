@@ -98,6 +98,7 @@ async def get_schedule_settings(
         slot_duration_minutes=profile.slot_duration_minutes,
         work_start_time=profile.work_start_time,
         work_end_time=profile.work_end_time,
+        weekly_closed_days=profile.weekly_closed_days,
     )
 
 
@@ -118,11 +119,13 @@ async def update_schedule_settings(
         body.slot_duration_minutes,
         body.work_start_time,
         body.work_end_time,
+        body.weekly_closed_days,
     )
     return BarberSettingsResponse(
         slot_duration_minutes=profile.slot_duration_minutes,
         work_start_time=profile.work_start_time,
         work_end_time=profile.work_end_time,
+        weekly_closed_days=profile.weekly_closed_days,
     )
 
 

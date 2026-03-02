@@ -43,6 +43,7 @@ def _make_profile(
     slot_duration_minutes: int = 30,
     work_start: time = time(9, 0),
     work_end: time = time(19, 0),
+    weekly_closed_days: list[int] | None = None,
 ) -> SimpleNamespace:
     """Test için BarberProfile benzeri nesne üretir."""
     return SimpleNamespace(
@@ -51,6 +52,7 @@ def _make_profile(
         slot_duration_minutes=slot_duration_minutes,
         work_start_time=work_start,
         work_end_time=work_end,
+        weekly_closed_days=weekly_closed_days or [],
     )
 
 
@@ -68,7 +70,11 @@ def _make_booking(
         tenant_id=TEST_TENANT_ID,
         user_id=user_id or TEST_USER_ID,
         slot_time=slot_dt,
-        status=BookingStatus.confirmed if status == "confirmed" else BookingStatus.cancelled,
+        status=(
+            BookingStatus.confirmed
+            if status == "confirmed"
+            else BookingStatus.no_show if status == "no_show" else BookingStatus.cancelled
+        ),
         cancelled_by=CancelledBy.admin if status == "cancelled" else None,
         created_at=datetime.now(TZ),
         updated_at=datetime.now(TZ),
@@ -226,6 +232,26 @@ async def test_gecersiz_slot_kapali_gun_400():
     session = _make_mock_session(
         _make_db_result(profile),
         _make_db_result(kapali_gun_override),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await booking_service.create_booking(session, TEST_TENANT_ID, TEST_USER_ID, yarin_slot)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["error"] == "invalid_slot"
+
+
+@pytest.mark.asyncio
+async def test_gecersiz_slot_haftalik_kapali_gun_400():
+    """
+    Profilde haftalik kapali gun olarak tanimli bir gunde slot alinamaz.
+    """
+    yarin_slot = _future_slot(days_ahead=1)
+    weekly_closed = [yarin_slot.weekday()]
+    profile = _make_profile(weekly_closed_days=weekly_closed)
+
+    session = _make_mock_session(
+        _make_db_result(profile),  # BarberProfile var ama gun kapali
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -450,14 +476,84 @@ async def test_basarili_randevu_olusturma():
 
     # Commit çağrılmış olmalı
     session.commit.assert_called_once()
-    # add() çağrılmış olmalı (booking session'a eklendi)
     session.add.assert_called_once()
-
-    # Dönen booking doğru bilgilere sahip olmalı
     assert booking.tenant_id == TEST_TENANT_ID
     assert booking.user_id == TEST_USER_ID
     assert booking.status == BookingStatus.confirmed
     assert booking.cancelled_by is None
+
+
+@pytest.mark.asyncio
+async def test_admin_iptal_gecmis_randevu_409():
+    """
+    Slot saati gelmis/gecmis randevu admin tarafindan iptal edilemez.
+    """
+    booking_id = uuid.uuid4()
+    gecmis_slot = _future_slot(days_ahead=-1)
+    confirmed_booking = _make_booking(gecmis_slot, status="confirmed")
+    confirmed_booking.id = booking_id
+
+    session = _make_mock_session(
+        _make_db_result(confirmed_booking),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await booking_service.cancel_booking_admin(session, TEST_TENANT_ID, booking_id)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["error"] == "booking_cancellation_window_passed"
+
+
+@pytest.mark.asyncio
+async def test_admin_mark_no_show_ve_confirmed_donus():
+    """
+    Gecmis confirmed randevu no_show yapilabilir ve tekrar confirmed'e donebilir.
+    """
+    booking_id = uuid.uuid4()
+    gecmis_slot = _future_slot(days_ahead=-1)
+    confirmed_booking = _make_booking(gecmis_slot, status="confirmed")
+    confirmed_booking.id = booking_id
+
+    session_to_no_show = _make_mock_session(
+        _make_db_result(confirmed_booking),
+    )
+    booking_after_no_show = await booking_service.set_booking_no_show_admin(
+        session_to_no_show, TEST_TENANT_ID, booking_id
+    )
+    assert booking_after_no_show.status == BookingStatus.no_show
+    assert booking_after_no_show.cancelled_by is None
+    session_to_no_show.commit.assert_called_once()
+
+    session_to_confirmed = _make_mock_session(
+        _make_db_result(booking_after_no_show),
+    )
+    booking_after_confirmed = await booking_service.set_booking_confirmed_admin(
+        session_to_confirmed, TEST_TENANT_ID, booking_id
+    )
+    assert booking_after_confirmed.status == BookingStatus.confirmed
+    assert booking_after_confirmed.cancelled_by is None
+    session_to_confirmed.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_admin_mark_no_show_future_409():
+    """
+    no_show isaretleme sadece slot saati gelmis/gecmis randevularda yapilabilir.
+    """
+    booking_id = uuid.uuid4()
+    gelecek_slot = _future_slot(days_ahead=1)
+    confirmed_booking = _make_booking(gelecek_slot, status="confirmed")
+    confirmed_booking.id = booking_id
+
+    session = _make_mock_session(
+        _make_db_result(confirmed_booking),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await booking_service.set_booking_no_show_admin(session, TEST_TENANT_ID, booking_id)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["error"] == "booking_not_started"
 
 
 # ─── Test 11: Admin İptal ─────────────────────────────────────────────────────

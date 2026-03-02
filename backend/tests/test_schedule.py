@@ -36,6 +36,7 @@ def _make_profile(
     slot_duration_minutes: int = 30,
     work_start: time = time(9, 0),
     work_end: time = time(19, 0),
+    weekly_closed_days: list[int] | None = None,
 ) -> SimpleNamespace:
     """Test için BarberProfile benzeri nesne üretir."""
     return SimpleNamespace(
@@ -44,6 +45,7 @@ def _make_profile(
         slot_duration_minutes=slot_duration_minutes,
         work_start_time=work_start,
         work_end_time=work_end,
+        weekly_closed_days=weekly_closed_days or [],
     )
 
 
@@ -204,6 +206,30 @@ async def test_kapali_gunde_bos_liste():
         _make_scalar_result(profile),   # 1. execute: BarberProfile
         _make_scalar_result(override),  # 2. execute: DayOverride (kapalı)
         # 3. ve 4. execute çağrılmaz — is_closed=True erken return yapar
+    )
+
+    result = await schedule_service.get_slots_for_date(
+        session, TEST_TENANT_ID, TEST_DATE, now=TEST_NOW
+    )
+
+    assert result.is_closed is True
+    assert result.slots == []
+
+
+@pytest.mark.asyncio
+async def test_haftalik_kapali_gunde_bos_liste():
+    """
+    Profilde haftalik kapali gun olarak tanimli gunde slot olusturulmaz.
+    DayOverride olmasa bile is_closed=True ve slots=[] donmelidir.
+    """
+    # TEST_DATE = 2026-06-15 Pazartesi -> weekday=0
+    profile = _make_profile(weekly_closed_days=[0])
+
+    session = _make_mock_session(
+        _make_scalar_result(profile),
+        _make_scalar_result(None),
+        _make_scalars_result([]),
+        _make_scalars_result([]),
     )
 
     result = await schedule_service.get_slots_for_date(

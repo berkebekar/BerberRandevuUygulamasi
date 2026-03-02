@@ -76,6 +76,11 @@ def _build_day_slots(
       3. blocked — admin kapattı
       4. available — serbest
     """
+    # Haftalık kapalı gün kontrolü
+    weekday = target_date.weekday()
+    if profile.weekly_closed_days and weekday in profile.weekly_closed_days:
+        return DaySlots(date=target_date, is_closed=True, slots=[])
+
     # DayOverride var ve gün kapalıysa: hiç slot üretme
     if override and override.is_closed:
         return DaySlots(date=target_date, is_closed=True, slots=[])
@@ -314,6 +319,7 @@ async def upsert_barber_settings(
     slot_duration_minutes: int,
     work_start_time: time,
     work_end_time: time,
+    weekly_closed_days: list[int],
 ) -> BarberProfile:
     """
     Berber çalışma ayarlarını oluşturur veya günceller (upsert).
@@ -331,6 +337,7 @@ async def upsert_barber_settings(
         existing.slot_duration_minutes = slot_duration_minutes
         existing.work_start_time = work_start_time
         existing.work_end_time = work_end_time
+        existing.weekly_closed_days = weekly_closed_days
         # updated_at modelde onupdate yok; her güncellemede manuel set et
         existing.updated_at = datetime.now(timezone.utc)
     else:
@@ -340,6 +347,7 @@ async def upsert_barber_settings(
             slot_duration_minutes=slot_duration_minutes,
             work_start_time=work_start_time,
             work_end_time=work_end_time,
+            weekly_closed_days=weekly_closed_days,
         )
         db.add(existing)
 

@@ -2,9 +2,9 @@
 test_admin_api.py — Admin panel endpoint'leri için otomatik testler.
 
 Test senaryoları (CURSOR_PROMPTS.md ADIM 9):
-  1. Dashboard doğru confirmed_count döndürüyor
-  2. Cancelled randevular sayıya dahil değil
-  3. Boş gün için dashboard (0 randevu, 0 confirmed_count)
+  1. Dashboard booking listesi doğru dönüyor
+  2. Cancelled randevular listede yer alıyor
+  3. Boş gün için dashboard (0 randevu)
   4. Manuel randevu: mevcut kullanıcı telefonu ile başarılı
   5. Manuel randevu: yeni kullanıcı için isim/soyisim ile başarılı
   6. Manuel randevu: yeni kullanıcı, isim eksik → 422 missing_user_info
@@ -111,9 +111,9 @@ def _make_mock_db_for_dashboard(rows: list) -> AsyncMock:
 # ─── Dashboard Testleri ───────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_dashboard_confirmed_count_correct():
+async def test_dashboard_booking_list_correct():
     """
-    Test 1: Günde 3 confirmed randevu varsa confirmed_count=3 döner.
+    Test 1: Günde 3 confirmed randevu varsa booking listesinde 3 kayıt döner.
     Para bilgisi response'da yoktur (bu test para alanı olmadığını da doğrular).
     """
     target = _target_date(1)
@@ -130,8 +130,6 @@ async def test_dashboard_confirmed_count_correct():
 
     result = await admin_service.get_dashboard(db, TEST_TENANT_ID, target)
 
-    # 3 confirmed randevu — sayı doğru mu?
-    assert result["confirmed_count"] == 3
     # Toplam randevu sayısı da 3 olmalı
     assert len(result["bookings"]) == 3
     # Para bilgisi döndürülmüyor mu? (CLAUDE.md: ödeme MVP dışı)
@@ -145,8 +143,8 @@ async def test_dashboard_confirmed_count_correct():
 @pytest.mark.asyncio
 async def test_dashboard_cancelled_not_counted():
     """
-    Test 2: Cancelled randevular confirmed_count'a dahil edilmez.
-    2 confirmed + 1 cancelled → confirmed_count=2
+    Test 2: Cancelled randevular booking listesinde görünür.
+    2 confirmed + 1 cancelled → toplam liste 3 kayıt olmalı.
     """
     target = _target_date(1)
     user = _make_user()
@@ -166,16 +164,14 @@ async def test_dashboard_cancelled_not_counted():
 
     result = await admin_service.get_dashboard(db, TEST_TENANT_ID, target)
 
-    # 2 confirmed, 1 cancelled → confirmed_count 2 olmalı
-    assert result["confirmed_count"] == 2
-    # Ama toplam randevu listesinde 3 kayıt dönmeli (cancelled de görünür)
+    # Toplam randevu listesinde 3 kayıt dönmeli (cancelled de görünür)
     assert len(result["bookings"]) == 3
 
 
 @pytest.mark.asyncio
 async def test_dashboard_empty_day():
     """
-    Test 3: Hiç randevu yoksa confirmed_count=0, bookings=[] döner.
+    Test 3: Hiç randevu yoksa bookings=[] döner.
     Boş gün hata vermemeli.
     """
     target = _target_date(2)
@@ -183,7 +179,6 @@ async def test_dashboard_empty_day():
 
     result = await admin_service.get_dashboard(db, TEST_TENANT_ID, target)
 
-    assert result["confirmed_count"] == 0
     assert result["bookings"] == []
     assert result["date"] == target
 
@@ -214,9 +209,9 @@ async def test_dashboard_booking_has_user_info():
 
 
 @pytest.mark.asyncio
-async def test_dashboard_all_cancelled_count_zero():
+async def test_dashboard_all_cancelled_listed():
     """
-    Test 5: Günün tüm randevuları cancelled ise confirmed_count=0 döner.
+    Test 5: Günün tüm randevuları cancelled ise listede yine görünmelidir.
     """
     target = _target_date(1)
     user = _make_user()
@@ -237,7 +232,5 @@ async def test_dashboard_all_cancelled_count_zero():
     db = _make_mock_db_for_dashboard(rows)
     result = await admin_service.get_dashboard(db, TEST_TENANT_ID, target)
 
-    # Hepsi iptal — confirmed sayısı 0 olmalı
-    assert result["confirmed_count"] == 0
-    # Ama liste 2 kayıt içermeli
+    # Liste 2 kayıt içermeli
     assert len(result["bookings"]) == 2

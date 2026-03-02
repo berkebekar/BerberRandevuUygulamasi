@@ -27,7 +27,7 @@ class DashboardBookingItem(BaseModel):
     user_last_name: str
     user_phone: str
     slot_time: datetime          # TR timezone (Europe/Istanbul)
-    status: BookingStatus        # confirmed | cancelled
+    status: BookingStatus        # confirmed | cancelled | no_show
     cancelled_by: CancelledBy | None  # Sadece iptal edilmiş randevularda dolu
 
 
@@ -37,10 +37,7 @@ class DashboardResponse(BaseModel):
 
     Alanlar:
     - date: Sorgulanan gün (YYYY-MM-DD)
-    - confirmed_count: O gün status='confirmed' olan randevu sayısı
-      (Günlük tıraş sayısı olarak kullanılır — cancelled dahil değil)
     - bookings: O günün tüm randevuları (confirmed + cancelled), slot_time ASC sıralı
     """
     date: date
-    confirmed_count: int         # Sadece confirmed'lar sayılır — cancelled hariç
     bookings: list[DashboardBookingItem]

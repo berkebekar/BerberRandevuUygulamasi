@@ -14,7 +14,7 @@ Timezone: TÃ¼m iÅŸlemler Europe/Istanbul (UTC+3) Ã¼zerinden yÃ¼rÃ¼r.
 
 import logging
 import uuid
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
@@ -36,6 +36,16 @@ TZ = ZoneInfo("Europe/Istanbul")
 
 # Randevu alÄ±nabilecek maksimum ileri tarih (CLAUDE.md: 7 gÃ¼n kuralÄ±)
 MAX_DAYS_AHEAD = 7
+
+
+def _to_local_tz(dt: datetime) -> datetime:
+    """
+    DB'den gelen datetime'i guvenli sekilde Istanbul timezone'una cevirir.
+    Naive deger gelirse UTC kabul edilip Istanbul'a donusturulur.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc).astimezone(TZ)
+    return dt.astimezone(TZ)
 
 
 # â”€â”€â”€ YardÄ±mcÄ±: Slot Takvimde GeÃ§erli mi? â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -68,6 +78,11 @@ async def _validate_slot_in_schedule(
     profile = profile_result.scalar_one_or_none()
     if profile is None:
         # Berber henÃ¼z Ã§alÄ±ÅŸma ayarlarÄ±nÄ± girmemiÅŸ â€” geÃ§ersiz slot
+        return False
+
+    # Haftalik kapali gunlerde slot gecersizdir.
+    weekly_closed_days = getattr(profile, "weekly_closed_days", []) or []
+    if slot_local.weekday() in weekly_closed_days:
         return False
 
     # DayOverride: o gÃ¼n iÃ§in Ã¶zel ayar var mÄ±?
@@ -355,9 +370,15 @@ async def cancel_booking_admin(
         # Randevu yok ya da baÅŸka tenant'a ait â€” 404
         raise HTTPException(404, {"error": "booking_not_found"})
 
-    if booking.status == BookingStatus.cancelled:
-        # Zaten iptal edilmiÅŸ â€” tekrar iptal edilemez
+    if booking.status != BookingStatus.confirmed:
+        # Sadece aktif (confirmed) randevular iptal edilebilir
         raise HTTPException(404, {"error": "booking_not_found"})
+
+    # Iptal sadece randevu saatinden once yapilabilir
+    now_local = datetime.now(TZ)
+    booking_local = _to_local_tz(booking.slot_time)
+    if booking_local <= now_local:
+        raise HTTPException(409, {"error": "booking_cancellation_window_passed"})
 
     # MÃ¼ÅŸteriyi bul â€” notification background task iÃ§in telefon numarasÄ± lazÄ±m
     user_result = await db.execute(
@@ -383,6 +404,76 @@ async def cancel_booking_admin(
     )
     # user_phone: booking/router.py'nin notification background task'Ä± baÅŸlatmasÄ± iÃ§in
     return booking, user_phone
+
+
+async def set_booking_no_show_admin(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    booking_id: uuid.UUID,
+) -> Booking:
+    """
+    Randevuyu "gerceklesmedi" (no_show) olarak isaretler.
+    Sadece slot saati gelmis/gecmis ve status='confirmed' olan kayitlar icin gecerlidir.
+    """
+    result = await db.execute(
+        select(Booking).where(
+            Booking.id == booking_id,
+            Booking.tenant_id == tenant_id,
+        )
+    )
+    booking = result.scalar_one_or_none()
+
+    if booking is None:
+        raise HTTPException(404, {"error": "booking_not_found"})
+
+    if booking.status == BookingStatus.cancelled:
+        raise HTTPException(404, {"error": "booking_not_found"})
+
+    now_local = datetime.now(TZ)
+    booking_local = _to_local_tz(booking.slot_time)
+    if booking_local > now_local:
+        raise HTTPException(409, {"error": "booking_not_started"})
+
+    booking.status = BookingStatus.no_show
+    booking.cancelled_by = None
+    await db.commit()
+    await db.refresh(booking)
+    return booking
+
+
+async def set_booking_confirmed_admin(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    booking_id: uuid.UUID,
+) -> Booking:
+    """
+    no_show olan bir randevuyu tekrar "gerceklesti varsayilan" durumuna (confirmed) alir.
+    Sadece slot saati gelmis/gecmis kayitlar icin gecerlidir.
+    """
+    result = await db.execute(
+        select(Booking).where(
+            Booking.id == booking_id,
+            Booking.tenant_id == tenant_id,
+        )
+    )
+    booking = result.scalar_one_or_none()
+
+    if booking is None:
+        raise HTTPException(404, {"error": "booking_not_found"})
+
+    if booking.status == BookingStatus.cancelled:
+        raise HTTPException(404, {"error": "booking_not_found"})
+
+    now_local = datetime.now(TZ)
+    booking_local = _to_local_tz(booking.slot_time)
+    if booking_local > now_local:
+        raise HTTPException(409, {"error": "booking_not_started"})
+
+    booking.status = BookingStatus.confirmed
+    booking.cancelled_by = None
+    await db.commit()
+    await db.refresh(booking)
+    return booking
 
 
 # â”€â”€â”€ Admin: Manuel Randevu OluÅŸturma â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

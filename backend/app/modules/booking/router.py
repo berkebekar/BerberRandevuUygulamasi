@@ -8,6 +8,8 @@ MÃ¼ÅŸteri endpoint'leri (user_session cookie gerektirir):
 Admin endpoint'leri (admin_session cookie gerektirir):
   GET  /bookings?date=YYYY-MM-DD    â†’ Belirli gÃ¼n iÃ§in randevu listesi
   DELETE /bookings/{id}             â†’ Randevu iptal (cancelled_by='admin')
+  POST /admin/bookings/{id}/mark-no-show   â†’ Gecmis randevuyu gerceklesmedi isaretle
+  POST /admin/bookings/{id}/mark-confirmed â†’ Gecmis no_show randevuyu geri al
   POST /admin/bookings              â†’ Manuel randevu oluÅŸtur (belirli kullanÄ±cÄ± iÃ§in)
 
 Business logic booking/service.py iÃ§indedir; bu dosya sadece HTTP katmanÄ±dÄ±r.
@@ -201,6 +203,54 @@ async def cancel_booking(
             NotificationMessageType.booking_cancelled,
         )
 
+    return BookingResponse(
+        id=booking.id,
+        user_id=booking.user_id,
+        slot_time=booking.slot_time,
+        status=booking.status,
+        cancelled_by=booking.cancelled_by,
+        created_at=booking.created_at,
+    )
+
+
+@router.post("/admin/bookings/{booking_id}/mark-no-show", response_model=BookingResponse)
+async def mark_booking_no_show(
+    booking_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    """
+    Slot saati gelmis/gecmis confirmed randevuyu no_show olarak isaretler.
+    """
+    booking = await booking_service.set_booking_no_show_admin(
+        db,
+        tenant_id=admin.tenant_id,
+        booking_id=booking_id,
+    )
+    return BookingResponse(
+        id=booking.id,
+        user_id=booking.user_id,
+        slot_time=booking.slot_time,
+        status=booking.status,
+        cancelled_by=booking.cancelled_by,
+        created_at=booking.created_at,
+    )
+
+
+@router.post("/admin/bookings/{booking_id}/mark-confirmed", response_model=BookingResponse)
+async def mark_booking_confirmed(
+    booking_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    """
+    no_show randevuyu tekrar confirmed durumuna alir.
+    """
+    booking = await booking_service.set_booking_confirmed_admin(
+        db,
+        tenant_id=admin.tenant_id,
+        booking_id=booking_id,
+    )
     return BookingResponse(
         id=booking.id,
         user_id=booking.user_id,

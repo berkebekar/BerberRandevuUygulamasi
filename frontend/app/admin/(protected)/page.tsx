@@ -3,7 +3,6 @@
  *
  * Kurallar:
  * - Bugunun tarihi varsayilan
- * - Ustte "Bugun X randevu" sayaci
  * - Altinda randevu listesi + "Iptal Et" butonu
  * - Slot yonetimi: slota tikla -> Kapat / Ac
  * - Manuel randevu ekleme formu
@@ -24,13 +23,12 @@ type DashboardBookingItem = {
   user_last_name: string
   user_phone: string
   slot_time: string
-  status: "confirmed" | "cancelled"
+  status: "confirmed" | "cancelled" | "no_show"
   cancelled_by?: "admin" | "user" | null
 }
 
 type DashboardResponse = {
   date: string
-  confirmed_count: number
   bookings: DashboardBookingItem[]
 }
 
@@ -63,6 +61,18 @@ type ConfirmAction =
     }
   | {
       kind: "cancel_booking"
+      title: string
+      description: string
+      payload: { bookingId: string }
+    }
+  | {
+      kind: "mark_no_show"
+      title: string
+      description: string
+      payload: { bookingId: string }
+    }
+  | {
+      kind: "mark_confirmed"
       title: string
       description: string
       payload: { bookingId: string }
@@ -138,6 +148,10 @@ function formatManualSlotTime(datetime: string) {
     minute: "2-digit",
     timeZone: "Europe/Istanbul",
   })
+}
+
+function isSlotPastOrNow(slotTime: string): boolean {
+  return new Date(slotTime).getTime() <= Date.now()
 }
 
 export default function AdminDashboardPage() {
@@ -339,6 +353,46 @@ export default function AdminDashboardPage() {
     })
   }
 
+  async function handleMarkNoShow(bookingId: string) {
+    const booking = (dashboard?.bookings ?? []).find((b) => b.id === bookingId)
+    const timeText = booking
+      ? new Date(booking.slot_time).toLocaleTimeString("tr-TR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Europe/Istanbul",
+        })
+      : ""
+    const person = booking ? `${booking.user_first_name} ${booking.user_last_name}` : "musteri"
+
+    setPendingAction({
+      kind: "mark_no_show",
+      title: "Gerceklesmedi Olarak Isaretle",
+      description:
+        `Bu randevuyu gerceklesmedi olarak isaretlemek ister misiniz? (${timeText} - ${person})`,
+      payload: { bookingId },
+    })
+  }
+
+  async function handleMarkConfirmed(bookingId: string) {
+    const booking = (dashboard?.bookings ?? []).find((b) => b.id === bookingId)
+    const timeText = booking
+      ? new Date(booking.slot_time).toLocaleTimeString("tr-TR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Europe/Istanbul",
+        })
+      : ""
+    const person = booking ? `${booking.user_first_name} ${booking.user_last_name}` : "musteri"
+
+    setPendingAction({
+      kind: "mark_confirmed",
+      title: "Gerceklesti Olarak Isaretle",
+      description:
+        `Bu randevuyu gerceklesti olarak isaretlemek ister misiniz? (${timeText} - ${person})`,
+      payload: { bookingId },
+    })
+  }
+
   /**
    * Manuel randevu olustur.
    */
@@ -421,6 +475,18 @@ export default function AdminDashboardPage() {
 
       if (pendingAction.kind === "cancel_booking") {
         await apiDelete(`/api/v1/bookings/${pendingAction.payload.bookingId}`)
+        await fetchDashboard(selectedDate)
+        await fetchSlots(selectedDate)
+      }
+
+      if (pendingAction.kind === "mark_no_show") {
+        await apiPost(`/api/v1/admin/bookings/${pendingAction.payload.bookingId}/mark-no-show`, {})
+        await fetchDashboard(selectedDate)
+        await fetchSlots(selectedDate)
+      }
+
+      if (pendingAction.kind === "mark_confirmed") {
+        await apiPost(`/api/v1/admin/bookings/${pendingAction.payload.bookingId}/mark-confirmed`, {})
         await fetchDashboard(selectedDate)
         await fetchSlots(selectedDate)
       }
@@ -542,11 +608,21 @@ export default function AdminDashboardPage() {
             <div className="space-y-3">
               {(dashboard?.bookings ?? []).map((b) => {
                 const isCancelled = b.status === "cancelled"
+                const isNoShow = b.status === "no_show"
+                const isPastBooking = isSlotPastOrNow(b.slot_time)
                 const timeStr = new Date(b.slot_time).toLocaleTimeString("tr-TR", {
                   hour: "2-digit",
                   minute: "2-digit",
                   timeZone: "Europe/Istanbul",
                 })
+                const showPhone = TR_PHONE_REGEX.test(b.user_phone)
+                const statusText = isCancelled
+                  ? "Iptal edildi"
+                  : isNoShow
+                    ? "Randevu gerceklesmedi"
+                    : isPastBooking
+                      ? "Randevu Gerceklesti"
+                      : ""
 
                 return (
                   <div
@@ -559,19 +635,50 @@ export default function AdminDashboardPage() {
                       <p className="text-sm font-medium text-zinc-100">
                         {timeStr} — {b.user_first_name} {b.user_last_name}
                       </p>
-                      <p className="text-xs text-zinc-400">{b.user_phone}</p>
-                      {/* Randevu iptal edildiyse durum etiketi */}
-                      {isCancelled && (
-                        <p className="text-xs text-zinc-500 mt-0.5">Iptal edildi</p>
+                      {showPhone && (
+                        <p className="text-xs text-zinc-400">{b.user_phone}</p>
+                      )}
+                      {/* Randevu durum etiketi */}
+                      {statusText && (
+                        <p className="text-xs text-zinc-500 mt-0.5">{statusText}</p>
                       )}
                     </div>
-                    <button
-                      onClick={() => handleCancelBooking(b.id)}
-                      disabled={isCancelled}
-                      className="text-xs text-red-300 hover:text-red-200 disabled:text-zinc-600"
-                    >
-                      Iptal Et
-                    </button>
+                    {!isCancelled && !isNoShow && !isPastBooking && (
+                      <button
+                        onClick={() => handleCancelBooking(b.id)}
+                        className="text-xs text-red-300 hover:text-red-200"
+                      >
+                        Iptal Et
+                      </button>
+                    )}
+                    {!isCancelled && isPastBooking && !isNoShow && (
+                      <button
+                        type="button"
+                        aria-label="Gerceklesmedi olarak isaretle"
+                        onClick={() => handleMarkNoShow(b.id)}
+                        className="text-sm font-semibold text-emerald-300 hover:text-emerald-200"
+                      >
+                        ✓
+                      </button>
+                    )}
+                    {!isCancelled && isPastBooking && isNoShow && (
+                      <button
+                        type="button"
+                        aria-label="Gerceklesti olarak isaretle"
+                        onClick={() => handleMarkConfirmed(b.id)}
+                        className="text-sm font-semibold text-red-300 hover:text-red-200"
+                      >
+                        ✕
+                      </button>
+                    )}
+                    {isCancelled && (
+                      <button
+                        disabled
+                        className="text-xs text-zinc-600"
+                      >
+                        Iptal Et
+                      </button>
+                    )}
                   </div>
                 )
               })}

@@ -37,6 +37,8 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   slot_blocked: "Sectiginiz saat isletme tarafindan kapatildi.",
   already_booked_today: "Ayni gun icinde sadece bir randevu alabilirsiniz.",
   booking_not_found: "Randevu bulunamadi.",
+  booking_cancellation_window_passed: "Randevu saatinden sonra iptal edilemez.",
+  booking_not_started: "Bu islem sadece randevu saati geldikten sonra yapilabilir.",
   rate_limit_exceeded: "Cok sik deneme yaptiniz. Lutfen 60 saniye bekleyin.",
   otp_not_found: "Dogrulama kodu bulunamadi veya suresi doldu.",
   otp_invalid: "Dogrulama kodu hatali.",

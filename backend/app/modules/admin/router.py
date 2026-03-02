@@ -9,7 +9,7 @@ Bu dosya sadece HTTP katmanıdır:
 Business logic admin/service.py içindedir.
 
 Endpoint'ler:
-  GET /admin/dashboard?date=YYYY-MM-DD  — Günlük özet: tıraş sayısı + randevu listesi
+  GET /admin/dashboard?date=YYYY-MM-DD  — Günlük randevu listesi
 """
 
 from datetime import date
@@ -39,8 +39,6 @@ async def get_dashboard(
     Admin için günlük özet dashboard.
 
     Döndürdükleri:
-    - confirmed_count: O gün status='confirmed' olan randevu sayısı
-      (Günlük tıraş sayısı — cancelled randevular bu sayıya dahil değil)
     - bookings: O günün tüm randevuları (confirmed + cancelled), slot_time ASC sıralı
       Her randevuda müşteri adı, soyadı ve telefonu vardır.
 
