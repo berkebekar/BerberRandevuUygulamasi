@@ -71,14 +71,13 @@ def _get_cookie_domain(request: Request) -> str | None:
     """
     Cookie domain'ini belirler.
 
-    Kurallar:
-    - Production'da sadece spesifik subdomain (berke.app.com) set edilir
-    - Wildcard (.app.com) KULLANILMAZ
-    - Development ortaminda domain set edilmez
+    Production:
+      - Subdomain'ler arası auth için .bbsoft.com.tr gibi parent domain kullanılır.
+    Dev:
+      - None (domain set edilmez)
     """
     settings = get_settings()
 
-    # Development'da domain set etmiyoruz (localhost uyumu)
     if settings.env != "production":
         return None
 
@@ -86,21 +85,8 @@ def _get_cookie_domain(request: Request) -> str | None:
     if not app_domain:
         return None
 
-    # Host header'dan portu temizle
-    host = (request.headers.get("host", "") or "").split(":")[0].lower()
-    if not host:
-        return None
-
-    # Ana domain'e dogrudan cookie yazma (subdomain zorunlu)
-    if host == app_domain:
-        return None
-
-    # Host, app_domain ile bitmeli (ornek: berke.app.com)
-    if not host.endswith("." + app_domain):
-        return None
-
-    # Domain olarak full host kullan (wildcard yok)
-    return host
+    # Parent domain'e cookie yaz (subdomain'ler arası paylaşım için)
+    return "." + app_domain
 
 def _set_session_cookie(request: Request, response: Response, user_id) -> None:
     """
