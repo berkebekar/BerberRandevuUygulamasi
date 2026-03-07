@@ -7,7 +7,7 @@ MÃ¼ÅŸteri endpoint'leri (user_session cookie gerektirir):
 
 Admin endpoint'leri (admin_session cookie gerektirir):
   GET  /bookings?date=YYYY-MM-DD    â†’ Belirli gÃ¼n iÃ§in randevu listesi
-  DELETE /bookings/{id}             â†’ Randevu iptal (cancelled_by='admin')
+  DELETE /admin/bookings/{id}       â†’ Randevu iptal (cancelled_by='admin')
   POST /admin/bookings/{id}/mark-no-show   â†’ Gecmis randevuyu gerceklesmedi isaretle
   POST /admin/bookings/{id}/mark-confirmed â†’ Gecmis no_show randevuyu geri al
   POST /admin/bookings              â†’ Manuel randevu oluÅŸtur (belirli kullanÄ±cÄ± iÃ§in)
@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.dependencies import get_current_admin, get_current_user
+from app.core.phone import normalize_tr_phone, phone_variants
 from app.models.admin import Admin
 from app.models.enums import NotificationMessageType
 from app.models.user import User
@@ -52,7 +53,9 @@ def _normalize_phone(phone: str | None) -> str | None:
     if phone is None:
         return None
     normalized = phone.strip()
-    return normalized if normalized else None
+    if not normalized:
+        return None
+    return normalize_tr_phone(normalized)
 
 
 def _build_placeholder_phone() -> str:
@@ -80,13 +83,15 @@ async def create_booking(
     - invalid_slot: Slot berber takvimine gÃ¶re geÃ§ersiz
     - slot_taken: Bu slotta zaten confirmed randevu var
     - slot_blocked: Bu slot admin tarafÄ±ndan kapatÄ±lmÄ±ÅŸ
-    - already_booked_today: KullanÄ±cÄ± bu gÃ¼n iÃ§in zaten randevu almÄ±ÅŸ
+    - additional_booking_confirmation_required: Ayni gun ek randevu icin kullanici onayi gerekli
+    - daily_booking_limit_exceeded: Ayni gun en fazla 3 randevu siniri asildi
     """
     booking = await booking_service.create_booking(
         db,
         tenant_id=user.tenant_id,
         user_id=user.id,
         slot_time=body.slot_time,
+        confirm_additional_same_day=body.confirm_additional_same_day,
     )
     return BookingResponse(
         id=booking.id,
@@ -162,10 +167,38 @@ async def get_bookings_by_date(
     ]
 
 
+@router.delete("/bookings/{booking_id}", response_model=BookingResponse)
+async def cancel_my_booking(
+    booking_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Kullanici kendi randevusunu iptal eder.
+
+    - Sadece kullanicinin kendi booking kaydi iptal edilebilir
+    - Slot saatine 15 dakikadan az kaldiysa iptal edilemez
+    """
+    booking = await booking_service.cancel_booking_user(
+        db,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        booking_id=booking_id,
+    )
+    return BookingResponse(
+        id=booking.id,
+        user_id=booking.user_id,
+        slot_time=booking.slot_time,
+        status=booking.status,
+        cancelled_by=booking.cancelled_by,
+        created_at=booking.created_at,
+    )
+
+
 # â”€â”€â”€ Admin: Randevu Ä°ptal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-@router.delete("/bookings/{booking_id}", response_model=BookingResponse)
-async def cancel_booking(
+@router.delete("/admin/bookings/{booking_id}", response_model=BookingResponse)
+async def cancel_booking_admin(
     booking_id: uuid.UUID,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
@@ -283,17 +316,19 @@ async def create_booking_admin(
        yeni User kaydÄ± aÃ§Ä±lÄ±r, ardÄ±ndan randevu oluÅŸturulur
 
     TÃ¼m booking iÅŸ kurallarÄ± geÃ§erlidir:
-    slot_taken, slot_blocked, already_booked_today, slot_in_past vb.
+    slot_taken, slot_blocked, additional_booking_confirmation_required,
+    daily_booking_limit_exceeded, slot_in_past vb.
     """
     input_phone = _normalize_phone(body.phone)
     user = None
 
     # Telefon girilmisse mevcut kullaniciyi ara, bos ise direkt yeni kayit akisina gec.
     if input_phone is not None:
+        phone_candidates = phone_variants(input_phone)
         result = await db.execute(
             select(User).where(
                 User.tenant_id == admin.tenant_id,
-                User.phone == input_phone,
+                User.phone.in_(phone_candidates),
             )
         )
         user = result.scalar_one_or_none()
@@ -329,10 +364,11 @@ async def create_booking_admin(
             # diÄŸeri Ã¶nce commit etti. Rollback yapÄ±p mevcut kullanÄ±cÄ±yÄ± yeniden al.
             await db.rollback()
             if input_phone is not None:
+                phone_candidates = phone_variants(input_phone)
                 result = await db.execute(
                     select(User).where(
                         User.tenant_id == admin.tenant_id,
-                        User.phone == input_phone,
+                        User.phone.in_(phone_candidates),
                     )
                 )
                 user = result.scalar_one_or_none()

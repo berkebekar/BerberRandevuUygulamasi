@@ -32,16 +32,12 @@ type DashboardResponse = {
   bookings: DashboardBookingItem[]
 }
 
-// Slot listesi endpoint tipi
-type DaySlotsResponse = {
+// Birlesik admin endpoint tipi
+type AdminOverviewResponse = {
   date: string
   is_closed: boolean
+  bookings: DashboardBookingItem[]
   slots: { datetime: string; end_datetime?: string; status: AdminSlotStatus }[]
-}
-
-// Admin blocks listesi endpoint tipi
-type BlockedSlotsResponse = {
-  date: string
   blocks: { id: string; blocked_at: string; reason?: string | null }[]
 }
 
@@ -81,13 +77,13 @@ type ConfirmAction =
 const TR_PHONE_REGEX = /^\+90\d{10}$/
 
 /**
- * Bugunden itibaren 7 gunluk tarih listesi olusturur.
+ * Bugunden itibaren 14 gunluk tarih listesi olusturur.
  */
 function getWeekDays(): { date: string; label: string; shortDate: string }[] {
   const days = []
   const now = new Date()
 
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 14; i++) {
     const d = new Date(now)
     d.setDate(now.getDate() + i)
 
@@ -197,58 +193,42 @@ export default function AdminDashboardPage() {
   )
 
   /**
-   * Dashboard verisini cek.
+   * Dashboard + slot + block verisini tek endpoint'ten cek.
    */
-  const fetchDashboard = useCallback(async (date: string) => {
-    setDashboardLoading(true)
-    setError("")
-    try {
-      const data = await apiFetch<DashboardResponse>(`/api/v1/admin/dashboard?date=${date}`)
-      setDashboard(data)
-    } catch (err: unknown) {
-      setDashboard(null)
-      setError(mapAdminError(err))
-    } finally {
-      setDashboardLoading(false)
+  const fetchOverview = useCallback(async (date: string, options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false
+    if (!silent) {
+      setDashboardLoading(true)
+      setSlotLoading(true)
     }
-  }, [])
-
-  /**
-   * Slot listesi cek.
-   */
-  const fetchSlots = useCallback(async (date: string) => {
-    setSlotLoading(true)
     setError("")
     try {
-      const data = await apiFetch<DaySlotsResponse>(`/api/v1/slots?date=${date}`)
+      const data = await apiFetch<AdminOverviewResponse>(`/api/v1/admin/overview?date=${date}`)
+      setDashboard({
+        date: data.date,
+        bookings: data.bookings,
+      })
       const normalized: AdminSlotItem[] = (data.slots ?? []).map((slot) => ({
         datetime: slot.datetime,
         end_datetime: slot.end_datetime,
         status: slot.status,
       }))
       setSlots(normalized)
-    } catch (err: unknown) {
-      setSlots([])
-      setError(mapAdminError(err))
-    } finally {
-      setSlotLoading(false)
-    }
-  }, [])
-
-  /**
-   * Block listesi cek ve map olustur.
-   */
-  const fetchBlocks = useCallback(async (date: string) => {
-    try {
-      const data = await apiFetch<BlockedSlotsResponse>(`/api/v1/admin/slots/blocks?date=${date}`)
       const map: Record<string, string> = {}
       for (const block of data.blocks ?? []) {
         map[normalizeKey(block.blocked_at)] = block.id
       }
       setBlockMap(map)
     } catch (err: unknown) {
-      // Block listesi basarisiz olsa bile dashboard calissin
+      setDashboard(null)
+      setSlots([])
       setBlockMap({})
+      setError(mapAdminError(err))
+    } finally {
+      if (!silent) {
+        setDashboardLoading(false)
+        setSlotLoading(false)
+      }
     }
   }, [])
 
@@ -256,10 +236,28 @@ export default function AdminDashboardPage() {
    * Tarih degistikce dashboard + slots + blocks cek.
    */
   useEffect(() => {
-    fetchDashboard(selectedDate)
-    fetchSlots(selectedDate)
-    fetchBlocks(selectedDate)
-  }, [selectedDate, fetchDashboard, fetchSlots, fetchBlocks])
+    fetchOverview(selectedDate)
+  }, [selectedDate, fetchOverview])
+
+  useEffect(() => {
+    const refreshOverview = () => {
+      if (document.hidden) return
+      fetchOverview(selectedDate, { silent: true })
+    }
+
+    const intervalId = window.setInterval(refreshOverview, 15000)
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchOverview(selectedDate, { silent: true })
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  }, [selectedDate, fetchOverview])
 
   useEffect(() => {
     if (!success) return
@@ -295,7 +293,7 @@ export default function AdminDashboardPage() {
     } catch {
       // Logout hatasi olsa da yonlendir
     } finally {
-      router.push("/admin/login")
+      router.push("/auth")
     }
   }
 
@@ -425,8 +423,7 @@ export default function AdminDashboardPage() {
       setManualSlot("")
       setShowManual(false)
       setSuccess("Islem basariyla tamamlandi.")
-      await fetchDashboard(selectedDate)
-      await fetchSlots(selectedDate)
+      await fetchOverview(selectedDate)
     } catch (err: unknown) {
       setError(mapAdminError(err))
     } finally {
@@ -463,32 +460,27 @@ export default function AdminDashboardPage() {
         await apiPost("/api/v1/admin/slots/block", {
           slot_datetime: pendingAction.payload.slotDatetime,
         })
-        await fetchSlots(selectedDate)
-        await fetchBlocks(selectedDate)
+        await fetchOverview(selectedDate)
       }
 
       if (pendingAction.kind === "unblock_slot") {
         await apiDelete(`/api/v1/admin/slots/block/${pendingAction.payload.blockId}`)
-        await fetchSlots(selectedDate)
-        await fetchBlocks(selectedDate)
+        await fetchOverview(selectedDate)
       }
 
       if (pendingAction.kind === "cancel_booking") {
-        await apiDelete(`/api/v1/bookings/${pendingAction.payload.bookingId}`)
-        await fetchDashboard(selectedDate)
-        await fetchSlots(selectedDate)
+        await apiDelete(`/api/v1/admin/bookings/${pendingAction.payload.bookingId}`)
+        await fetchOverview(selectedDate)
       }
 
       if (pendingAction.kind === "mark_no_show") {
         await apiPost(`/api/v1/admin/bookings/${pendingAction.payload.bookingId}/mark-no-show`, {})
-        await fetchDashboard(selectedDate)
-        await fetchSlots(selectedDate)
+        await fetchOverview(selectedDate)
       }
 
       if (pendingAction.kind === "mark_confirmed") {
         await apiPost(`/api/v1/admin/bookings/${pendingAction.payload.bookingId}/mark-confirmed`, {})
-        await fetchDashboard(selectedDate)
-        await fetchSlots(selectedDate)
+        await fetchOverview(selectedDate)
       }
 
       setSuccess("Islem basariyla tamamlandi.")
@@ -532,10 +524,12 @@ export default function AdminDashboardPage() {
       <div className="px-4 pt-4 space-y-6">
         {/* Tarih secici */}
         <div>
-          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-2">
-            Tarih Secin
-          </p>
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+          <div className="mb-2">
+            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+              TARİH SEÇİN
+            </p>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
             {weekDays.map((day) => {
               const isSelected = day.date === selectedDate
               return (
@@ -689,7 +683,7 @@ export default function AdminDashboardPage() {
         {/* Slot yonetimi */}
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-zinc-200">Slot Yonetimi</h2>
+            <h2 className="text-sm font-semibold text-zinc-200">Randevu Yontemi</h2>
             <span className="text-xs text-zinc-500">{selectedDate}</span>
           </div>
           <p className="text-xs text-zinc-400 mb-3">

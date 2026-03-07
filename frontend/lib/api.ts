@@ -22,6 +22,7 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   server_error: "Sunucuda beklenmeyen bir hata olustu. Lutfen tekrar deneyin.",
   not_authenticated: "Bu islem icin giris yapmaniz gerekiyor.",
   invalid_token: "Oturum gecersiz veya suresi dolmus. Lutfen tekrar giris yapin.",
+  session_revoked: "Bu hesap baska bir cihazda acildi. Lutfen tekrar giris yapin.",
   forbidden: "Bu islem icin yetkiniz bulunmuyor.",
   admin_not_found: "Yonetici hesabi bulunamadi.",
   user_not_found: "Kullanici hesabi bulunamadi.",
@@ -36,8 +37,10 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   slot_taken: "Sectiginiz saat dolu.",
   slot_blocked: "Sectiginiz saat isletme tarafindan kapatildi.",
   already_booked_today: "Ayni gun icinde sadece bir randevu alabilirsiniz.",
+  additional_booking_confirmation_required: "Bugun icin mevcut randevunuz var. Devam etmek icin onay verin.",
+  daily_booking_limit_exceeded: "Ayni gun icin 3'ten fazla randevu alamazsiniz.",
   booking_not_found: "Randevu bulunamadi.",
-  booking_cancellation_window_passed: "Randevu saatinden sonra iptal edilemez.",
+  booking_cancellation_window_passed: "Randevuya 15 dakikadan az kala veya randevu saatinden sonra iptal edilemez.",
   booking_not_started: "Bu islem sadece randevu saati geldikten sonra yapilabilir.",
   rate_limit_exceeded: "Cok sik deneme yaptiniz. Lutfen 60 saniye bekleyin.",
   otp_not_found: "Dogrulama kodu bulunamadi veya suresi doldu.",
@@ -45,24 +48,35 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   admin_already_exists: "Bu isletme icin yonetici hesabi zaten kayitli.",
   admin_not_registered: "Bu telefon numarasi ile kayitli yonetici bulunamadi.",
   invalid_credentials: "Email veya sifre hatali.",
+  otp_required: "Guvenlik geregi yonetici girisi sadece SMS dogrulama ile yapilir.",
 }
 
-async function parseError(res: Response): Promise<string> {
+type ParsedApiError = {
+  message: string
+  errorCode?: string
+  payload?: Record<string, unknown>
+}
+
+async function parseError(res: Response): Promise<ParsedApiError> {
   try {
-    const data = await res.json()
+    const data = (await res.json()) as Record<string, unknown>
 
     if (typeof data?.error === "string") {
-      return ERROR_CODE_MESSAGES[data.error] ?? STATUS_MESSAGES[res.status] ?? "Bir hata olustu."
+      return {
+        message: ERROR_CODE_MESSAGES[data.error] ?? STATUS_MESSAGES[res.status] ?? "Bir hata olustu.",
+        errorCode: data.error,
+        payload: data,
+      }
     }
 
     if (typeof data?.detail === "string") {
-      return data.detail
+      return { message: data.detail, payload: data }
     }
   } catch {
     // no-op
   }
 
-  return STATUS_MESSAGES[res.status] ?? "Islem tamamlanamadi. Lutfen tekrar deneyin."
+  return { message: STATUS_MESSAGES[res.status] ?? "Islem tamamlanamadi. Lutfen tekrar deneyin." }
 }
 
 export async function apiFetch<T = unknown>(
@@ -79,21 +93,26 @@ export async function apiFetch<T = unknown>(
   })
 
   if (!res.ok) {
-    const message = await parseError(res)
+    const parsedError = await parseError(res)
     if (
       res.status === 401 &&
       typeof window !== "undefined" &&
       !path.startsWith("/api/v1/auth/")
     ) {
       const currentPath = window.location.pathname
-      const isAdminArea = currentPath.startsWith("/admin")
-      const target = isAdminArea ? "/admin/login" : "/auth"
+      const target = "/auth"
       if (currentPath !== target) {
         window.location.href = target
       }
     }
-    const err = new Error(message) as Error & { status: number }
+    const err = new Error(parsedError.message) as Error & {
+      status: number
+      errorCode?: string
+      payload?: Record<string, unknown>
+    }
     err.status = res.status
+    err.errorCode = parsedError.errorCode
+    err.payload = parsedError.payload
     throw err
   }
 

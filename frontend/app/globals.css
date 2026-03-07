@@ -23,6 +23,16 @@ body {
   color: #f4f4f5;
 }
 
+/* Yatay kaydirilan alanlarda scrollbar'i gorunmez yapar. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 input,
 select,
 textarea {

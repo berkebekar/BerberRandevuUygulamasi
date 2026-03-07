@@ -25,6 +25,7 @@ from fastapi import HTTPException
 
 from app.models.enums import BookingStatus, CancelledBy
 from app.modules.admin import service as admin_service
+from app.modules.schedule.schemas import SlotStatus
 
 TZ = ZoneInfo("Europe/Istanbul")
 TEST_TENANT_ID = uuid.uuid4()
@@ -234,3 +235,65 @@ async def test_dashboard_all_cancelled_listed():
 
     # Liste 2 kayıt içermeli
     assert len(result["bookings"]) == 2
+
+
+
+@pytest.mark.asyncio
+async def test_overview_birlesik_veri_doner(monkeypatch):
+    """
+    Test: get_overview tek cagriyla bookings + slots + blocks verisini birlestirir.
+    """
+    target = _target_date(1)
+    user = _make_user(first_name="Ayse", last_name="Kaya", phone="+905551111111")
+    booking = _make_booking(_slot(1, 12), status=BookingStatus.confirmed)
+
+    async def fake_get_bookings_by_date(db, tenant_id, target_date):
+        return [(booking, user)]
+
+    day_slots = SimpleNamespace(
+        is_closed=False,
+        slots=[
+            SimpleNamespace(
+                time="12:00",
+                datetime=booking.slot_time,
+                end_datetime=booking.slot_time + timedelta(minutes=30),
+                status=SlotStatus.booked,
+            )
+        ],
+    )
+
+    async def fake_get_slots_for_date(db, tenant_id, target_date):
+        return day_slots
+
+    block = SimpleNamespace(
+        id=uuid.uuid4(),
+        blocked_at=booking.slot_time + timedelta(hours=1),
+        reason="Mola",
+    )
+
+    async def fake_get_blocks_for_date(db, tenant_id, target_date):
+        return [block]
+
+    monkeypatch.setattr(
+        "app.modules.admin.service.booking_service.get_bookings_by_date",
+        fake_get_bookings_by_date,
+    )
+    monkeypatch.setattr(
+        "app.modules.admin.service.schedule_service.get_slots_for_date",
+        fake_get_slots_for_date,
+    )
+    monkeypatch.setattr(
+        "app.modules.admin.service.schedule_service.get_blocks_for_date",
+        fake_get_blocks_for_date,
+    )
+
+    result = await admin_service.get_overview(AsyncMock(), TEST_TENANT_ID, target)
+
+    assert result["date"] == target
+    assert len(result["bookings"]) == 1
+    assert result["bookings"][0]["user_first_name"] == "Ayse"
+    assert len(result["slots"]) == 1
+    assert result["slots"][0]["status"] == SlotStatus.booked
+    assert len(result["blocks"]) == 1
+    assert result["blocks"][0]["id"] == block.id
+

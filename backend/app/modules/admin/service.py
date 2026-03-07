@@ -1,12 +1,8 @@
 """
-admin/service.py — Admin panel business logic.
+admin/service.py - Admin panel business logic.
 
-Bu dosya admin dashboard için veri toplama işlemlerini yapar.
-HTTP katmanı (router.py) buradan aldığı veriyi response'a çevirir.
-
-Bağımlılıklar:
-- booking/service.py: get_bookings_by_date() fonksiyonu dashboard için yeniden kullanılır
-  (kod tekrarından kaçınmak için — booking listesi zaten oradan geliyor)
+Bu dosya admin paneli icin veri toplama islemlerini yapar.
+HTTP katmani (router.py) buradan aldigi veriyi response'a cevirir.
 """
 
 import uuid
@@ -15,35 +11,15 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.booking import service as booking_service
+from app.modules.schedule import service as schedule_service
 
 
-async def get_dashboard(
-    db: AsyncSession,
-    tenant_id: uuid.UUID,
-    target_date: date,
-) -> dict:
+def _serialize_dashboard_rows(rows: list[tuple]) -> list[dict]:
     """
-    Belirli bir gün için admin dashboard verisini hazırlar.
-
-    Çalışma sırası:
-    1. booking_service.get_bookings_by_date() ile o günün tüm randevularını çek
-       (bu fonksiyon Booking + User JOIN'i yapıyor — ayrı sorgu gerekmez)
-    2. Veriyi DashboardResponse formatına uygun dict olarak döndür
-
-    Neden cancelled randevular da döndürülüyor?
-    Admin o günün tam geçmişini görmeli — iptal edilenler de takip edilsin.
-
-    Returns:
-        dict: {
-            "date": date,
-            "bookings": [{"id": ..., "user_first_name": ..., ...}, ...]
-        }
+    Booking + User satirlarini dashboard item listesine cevirir.
+    Bu donusum tek yerde tutulur; dashboard ve overview ayni veriyi kullanir.
     """
-    # Günün tüm randevularını müşteri bilgileriyle çek (slot_time ASC sıralı)
-    rows = await booking_service.get_bookings_by_date(db, tenant_id, target_date)
-
-    # Her (booking, user) çiftini dashboard item formatına çevir
-    bookings = [
+    return [
         {
             "id": booking.id,
             "user_first_name": user.first_name,
@@ -56,7 +32,62 @@ async def get_dashboard(
         for booking, user in rows
     ]
 
+
+async def get_dashboard(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    target_date: date,
+) -> dict:
+    """
+    Belirli bir gun icin admin dashboard verisini hazirlar.
+    """
+    rows = await booking_service.get_bookings_by_date(db, tenant_id, target_date)
+
     return {
         "date": target_date,
-        "bookings": bookings,
+        "bookings": _serialize_dashboard_rows(rows),
+    }
+
+
+async def get_overview(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    target_date: date,
+) -> dict:
+    """
+    Admin paneli icin birlesik veri dondurur.
+
+    Tek cagrida dashboard + gunluk slotlar + bloklu slotlar birlesir.
+    Bu yapi, frontend'in ayri ayri polling cagrilarini azaltir.
+    """
+    # Dashboard listesi icin booking + user satirlarini cek.
+    booking_rows = await booking_service.get_bookings_by_date(db, tenant_id, target_date)
+
+    # Gunluk slot listesini cek.
+    day_slots = await schedule_service.get_slots_for_date(db, tenant_id, target_date)
+
+    # Slot acma islemi icin block_id'ler gerekir.
+    blocks = await schedule_service.get_blocks_for_date(db, tenant_id, target_date)
+
+    return {
+        "date": target_date,
+        "bookings": _serialize_dashboard_rows(booking_rows),
+        "is_closed": day_slots.is_closed,
+        "slots": [
+            {
+                "time": slot.time,
+                "datetime": slot.datetime,
+                "end_datetime": slot.end_datetime,
+                "status": slot.status,
+            }
+            for slot in day_slots.slots
+        ],
+        "blocks": [
+            {
+                "id": block.id,
+                "blocked_at": block.blocked_at,
+                "reason": block.reason,
+            }
+            for block in blocks
+        ],
     }

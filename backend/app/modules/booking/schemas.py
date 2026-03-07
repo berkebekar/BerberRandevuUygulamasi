@@ -17,6 +17,8 @@ class BookingCreateRequest(BaseModel):
     """Musteri randevu olusturma istegi."""
 
     slot_time: datetime
+    # Ayni gun ek randevu alinirken kullanicinin acik onay verdigini belirtir.
+    confirm_additional_same_day: bool = False
 
     @field_validator("slot_time")
     @classmethod

@@ -20,7 +20,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.core.database import get_db
-from app.core.security import create_token, hash_password
+from app.core.security import create_token, decode_token, hash_password
 from app.main import app
 from app.modules.auth import service as auth_service
 from app.modules.auth.router import get_tenant_id
@@ -47,6 +47,7 @@ def _make_admin(
         email=email,
         phone=phone,
         password_hash=hash_password(password),  # bcrypt hash — verify_password ile karşılaştırılır
+        session_version=str(uuid.uuid4()),
     )
 
 
@@ -153,16 +154,11 @@ async def test_ikinci_admin_kaydi_409():
 
 
 @pytest.mark.asyncio
-async def test_yanlis_sifre_401():
+async def test_admin_password_login_devre_disi_403():
     """
-    Yanlış şifre ile giriş → 401 invalid_credentials dönmeli.
-    DB'de admin bulunuyor ama şifre hash eşleşmiyor.
+    Admin password login endpoint'i güvenlik politikası gereği devre dışı olmalı.
     """
-    # Şifre "dogru_sifre" ama biz "yanlis_sifre" göndereceğiz
-    admin = _make_admin(password="dogru_sifre")
-
-    # Execute: email ile admin bul → admin döndür
-    session = _make_mock_session(_make_db_result(admin))
+    session = _make_mock_session(_make_db_result(None))
 
     async def override_db():
         yield session
@@ -176,35 +172,8 @@ async def test_yanlis_sifre_401():
             json={"email": "berber@test.com", "password": "yanlis_sifre"},
         )
 
-    assert r.status_code == 401
-    assert r.json() == {"error": "invalid_credentials"}
-
-
-@pytest.mark.asyncio
-async def test_sifre_ile_giris_basarili_cookie():
-    """
-    Doğru email + şifre ile giriş → 200 ve admin_session cookie set edilmeli.
-    """
-    admin = _make_admin(password="dogru_sifre")
-
-    session = _make_mock_session(_make_db_result(admin))
-
-    async def override_db():
-        yield session
-
-    app.dependency_overrides[get_db] = override_db
-    app.dependency_overrides[get_tenant_id] = _override_tenant_id
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
-        r = await client.post(
-            "/api/v1/auth/admin/login/password",
-            json={"email": "berber@test.com", "password": "dogru_sifre"},
-        )
-
-    assert r.status_code == 200
-    assert r.json() == {"message": "login_successful"}
-    # admin_session cookie set edilmiş olmalı
-    assert "admin_session" in r.cookies
+    assert r.status_code == 403
+    assert r.json() == {"error": "otp_required"}
 
 
 @pytest.mark.asyncio
@@ -238,6 +207,18 @@ async def test_otp_ile_giris_basarili_cookie():
     assert r.json() == {"message": "login_successful"}
     # admin_session cookie set edilmiş olmalı
     assert "admin_session" in r.cookies
+
+    # Session token icinde tek cihaz kontrolu icin sv alani olmali.
+    token = r.cookies.get("admin_session")
+    payload = decode_token(token)
+    assert payload.get("role") == "admin"
+    assert payload.get("sv")
+
+    # Exp suresi 40 gun civari olmalı (dakika bazli toleransli kontrol).
+    exp_ts = payload.get("exp")
+    assert isinstance(exp_ts, int)
+    delta_seconds = exp_ts - int(datetime.now(timezone.utc).timestamp())
+    assert 39 * 24 * 60 * 60 <= delta_seconds <= 40 * 24 * 60 * 60 + 120
 
 
 @pytest.mark.asyncio
@@ -320,3 +301,32 @@ async def test_admin_rate_limit_tenant_scoped_allows_other_tenant():
     session.add.assert_called_once()
     added = session.add.call_args.args[0]
     assert added.tenant_id == TEST_OTHER_TENANT_ID
+
+
+@pytest.mark.asyncio
+async def test_logout_admin_token_sunucu_tarafinda_iptal_edilir():
+    """
+    Logout cagrisi admin token'i icin session_version rotate etmelidir.
+    """
+    admin = _make_admin()
+    token = create_token(
+        {"sub": str(admin.id), "role": "admin", "sv": str(uuid.uuid4())},
+        expires_minutes=30,
+    )
+    session = _make_mock_session(_make_db_result(admin))
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_tenant_id] = _override_tenant_id
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        r = await client.post(
+            "/api/v1/auth/logout",
+            cookies={"admin_session": token},
+        )
+
+    assert r.status_code == 200
+    assert r.json() == {"message": "logged_out"}
+    session.commit.assert_called_once()

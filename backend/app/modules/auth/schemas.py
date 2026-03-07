@@ -43,6 +43,18 @@ class VerifyOTPResponse(BaseModel):
     registration_token: str | None = None
 
 
+class UnifiedVerifyOTPResponse(BaseModel):
+    """
+    Tek giris endpoint'i icin OTP dogrulama yaniti.
+    - next=admin: admin_session cookie yazildi, /admin'a yonlen
+    - next=user: user_session cookie yazildi, /'a yonlen
+    - next=register: yeni kullanici, registration_token ile kayit adimina gec
+    """
+
+    next: Literal["admin", "user", "register"]
+    registration_token: str | None = None
+
+
 # ─── Admin Şemaları ───────────────────────────────────────────────────────────
 
 class AdminRegisterRequest(BaseModel):
