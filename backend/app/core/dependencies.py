@@ -16,12 +16,68 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db
-from app.core.security import decode_token
+from app.core.security import create_token, decode_token
 from app.models.admin import Admin
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
+
+# Sliding session süresi: 40 gün.
+_SESSION_MAX_AGE = 60 * 60 * 24 * 40
+_SESSION_EXPIRES_MINUTES = 60 * 24 * 40
+
+
+def _get_cookie_domain(request: Request) -> str | None:
+    """
+    Cookie domain'ini auth/router ile aynı kuralla belirler.
+    """
+    settings = get_settings()
+    if settings.env != "production":
+        return None
+    app_domain = (settings.app_domain or "").strip().lower()
+    if not app_domain:
+        return None
+    return "." + app_domain
+
+
+def _renew_user_cookie(request: Request, user: User) -> None:
+    """
+    Her yetkili istekte user cookie'sini yeniden yazarak sliding session sağlar.
+    """
+    settings = get_settings()
+    token = create_token(
+        {"sub": str(user.id), "role": "user", "sv": user.session_version},
+        expires_minutes=_SESSION_EXPIRES_MINUTES,
+    )
+    request.state._renew_user_session_cookie = {
+        "value": token,
+        "httponly": True,
+        "secure": (settings.env == "production"),
+        "samesite": "lax",
+        "max_age": _SESSION_MAX_AGE,
+        "domain": _get_cookie_domain(request),
+    }
+
+
+def _renew_admin_cookie(request: Request, admin: Admin) -> None:
+    """
+    Her yetkili istekte admin cookie'sini yeniden yazarak sliding session sağlar.
+    """
+    settings = get_settings()
+    token = create_token(
+        {"sub": str(admin.id), "role": "admin", "sv": admin.session_version},
+        expires_minutes=_SESSION_EXPIRES_MINUTES,
+    )
+    request.state._renew_admin_session_cookie = {
+        "value": token,
+        "httponly": True,
+        "secure": (settings.env == "production"),
+        "samesite": "lax",
+        "max_age": _SESSION_MAX_AGE,
+        "domain": _get_cookie_domain(request),
+    }
 
 
 def get_tenant_id_from_request(request: Request):
@@ -91,6 +147,9 @@ async def get_current_admin(
     if not admin_id:
         # Token'da sub alanı yok — hatalı token
         raise HTTPException(401, {"error": "invalid_token"})
+    token_session_version = payload.get("sv")
+    if not token_session_version:
+        raise HTTPException(401, {"error": "invalid_token"})
 
     # Tenant ID'yi middleware'den al
     tenant_id = get_tenant_id_from_request(request)
@@ -107,6 +166,14 @@ async def get_current_admin(
     if admin is None:
         # Token geçerli ama DB'de bu admin yok (silinmiş veya tenant uyuşmazlığı)
         raise HTTPException(401, {"error": "admin_not_found"})
+
+    # Tek aktif oturum kuralı:
+    # Token'daki session_version DB'deki güncel değerle uyuşmuyorsa token iptal edilmiştir.
+    if admin.session_version != token_session_version:
+        raise HTTPException(401, {"error": "session_revoked"})
+
+    # Sliding session için cookie yenilemesini response middleware'e bırak.
+    _renew_admin_cookie(request, admin)
 
     return admin
 
@@ -153,6 +220,9 @@ async def get_current_user(
     if not user_id:
         # Token'da sub alanı yok — hatalı token
         raise HTTPException(401, {"error": "invalid_token"})
+    token_session_version = payload.get("sv")
+    if not token_session_version:
+        raise HTTPException(401, {"error": "invalid_token"})
 
     # Tenant ID'yi middleware'den al
     tenant_id = get_tenant_id_from_request(request)
@@ -169,5 +239,13 @@ async def get_current_user(
     if user is None:
         # Token geçerli ama DB'de bu kullanıcı yok (silinmiş veya tenant uyuşmazlığı)
         raise HTTPException(401, {"error": "user_not_found"})
+
+    # Tek aktif oturum kuralı:
+    # Token'daki session_version DB'deki güncel değerle uyuşmuyorsa token iptal edilmiştir.
+    if user.session_version != token_session_version:
+        raise HTTPException(401, {"error": "session_revoked"})
+
+    # Sliding session için cookie yenilemesini response middleware'e bırak.
+    _renew_user_cookie(request, user)
 
     return user

@@ -1,8 +1,8 @@
 """
-admin/schemas.py — Admin panel request/response Pydantic şemaları.
+admin/schemas.py - Admin panel request/response Pydantic semalari.
 
-Bu dosya admin dashboard endpoint'inin veri modellerini tanımlar.
-Business logic yoktur; sadece veri doğrulama ve serileştirme yapılır.
+Bu dosya admin endpoint'lerinin veri modellerini tanimlar.
+Business logic yoktur; sadece veri dogrulama ve serilestirme yapilir.
 """
 
 import uuid
@@ -11,33 +11,65 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 from app.models.enums import BookingStatus, CancelledBy
+from app.modules.schedule.schemas import SlotStatus
 
-
-# ─── Dashboard Response Şemaları ──────────────────────────────────────────────
 
 class DashboardBookingItem(BaseModel):
     """
-    Dashboard'da gösterilen tek randevu satırı.
-    Her randevuya müşterinin adı, soyadı ve telefonu dahildir —
-    admin kimin geldiğini anında görebilsin.
-    Para bilgisi yoktur (CLAUDE.md: ödeme MVP dışı).
+    Dashboard'da gosterilen tek randevu satiri.
+    Her randevuya musterinin adi, soyadi ve telefonu dahildir.
     """
     id: uuid.UUID
     user_first_name: str
     user_last_name: str
     user_phone: str
-    slot_time: datetime          # TR timezone (Europe/Istanbul)
-    status: BookingStatus        # confirmed | cancelled | no_show
-    cancelled_by: CancelledBy | None  # Sadece iptal edilmiş randevularda dolu
+    slot_time: datetime
+    status: BookingStatus
+    cancelled_by: CancelledBy | None
 
 
 class DashboardResponse(BaseModel):
     """
-    Admin dashboard yanıtı.
+    Admin dashboard yaniti.
 
     Alanlar:
-    - date: Sorgulanan gün (YYYY-MM-DD)
-    - bookings: O günün tüm randevuları (confirmed + cancelled), slot_time ASC sıralı
+    - date: Sorgulanan gun (YYYY-MM-DD)
+    - bookings: O gunun tum randevulari (confirmed + cancelled), slot_time ASC sirali
     """
     date: date
     bookings: list[DashboardBookingItem]
+
+
+class OverviewSlotItem(BaseModel):
+    """
+    Admin overview icinde donen tek bir slot kaydi.
+    'time' alani UI'da hizli gosterim icin korunur.
+    """
+    time: str
+    datetime: datetime
+    end_datetime: datetime
+    status: SlotStatus
+
+
+class OverviewBlockedSlotItem(BaseModel):
+    """
+    Admin overview icinde donen tek blok kaydi.
+    block_id, slot acma islemi icin UI'da gereklidir.
+    """
+    id: uuid.UUID
+    blocked_at: datetime
+    reason: str | None
+
+
+class AdminOverviewResponse(BaseModel):
+    """
+    Admin paneli icin birlesik yanit.
+
+    Tek cagrida dashboard + slotlar + bloklar doner.
+    Boylece ayri ayri polling cagrilari azaltilir.
+    """
+    date: date
+    bookings: list[DashboardBookingItem]
+    is_closed: bool
+    slots: list[OverviewSlotItem]
+    blocks: list[OverviewBlockedSlotItem]

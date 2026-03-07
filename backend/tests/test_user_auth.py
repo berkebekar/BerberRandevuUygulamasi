@@ -21,7 +21,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.core.database import get_db
-from app.core.security import hash_password
+from app.core.security import create_token, decode_token, hash_password
 from app.main import app
 from app.modules.auth import service as auth_service
 from app.modules.auth.router import get_tenant_id
@@ -68,6 +68,7 @@ def _make_user(phone: str = "5551234567") -> SimpleNamespace:
         phone=phone,
         first_name="Test",
         last_name="Kullanici",
+        session_version=str(uuid.uuid4()),
     )
 
 
@@ -151,6 +152,14 @@ async def test_dogru_otp_mevcut_kullanici_200_cookie():
     assert r.json()["status"] == "returning_user"
     # HTTP-only cookie set edilmeli
     assert "user_session" in r.cookies
+    token = r.cookies.get("user_session")
+    payload = decode_token(token)
+    assert payload.get("role") == "user"
+    assert payload.get("sv")
+    exp_ts = payload.get("exp")
+    assert isinstance(exp_ts, int)
+    delta_seconds = exp_ts - int(datetime.now(timezone.utc).timestamp())
+    assert 39 * 24 * 60 * 60 <= delta_seconds <= 40 * 24 * 60 * 60 + 120
 
 
 @pytest.mark.asyncio
@@ -329,3 +338,35 @@ async def test_verify_otp_cross_tenant_not_found():
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == {"error": "otp_not_found"}
+
+
+@pytest.mark.asyncio
+async def test_logout_user_token_sunucu_tarafinda_iptal_edilir():
+    """
+    Logout cagrisi geldiginde user token decode edilir ve session_version rotate edilir.
+    """
+    user_id = uuid.uuid4()
+    token = create_token(
+        {"sub": str(user_id), "role": "user", "sv": str(uuid.uuid4())},
+        expires_minutes=30,
+    )
+    user = _make_user()
+    user.id = user_id
+
+    session = _make_mock_session(_make_db_result(user))
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_tenant_id] = _override_tenant_id
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        r = await client.post(
+            "/api/v1/auth/logout",
+            cookies={"user_session": token},
+        )
+
+    assert r.status_code == 200
+    assert r.json() == {"message": "logged_out"}
+    session.commit.assert_called_once()

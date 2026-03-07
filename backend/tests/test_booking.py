@@ -112,6 +112,19 @@ def _make_db_result(value) -> MagicMock:
     return result
 
 
+def _make_db_scalars_result(values: list) -> MagicMock:
+    """
+    db.execute() sonucu icin scalars().all() yolunu simule eder.
+    Gunluk randevu sayisi gibi coklu kayit okunan sorgularda kullanilir.
+    """
+    result = MagicMock()
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = values
+    result.scalars.return_value = scalars_result
+    result.scalar_one_or_none.return_value = values[0] if values else None
+    return result
+
+
 def _make_mock_session(*execute_return_values) -> AsyncMock:
     """
     DB session mock'u oluşturur.
@@ -327,38 +340,39 @@ async def test_bloklu_slot_409():
 # ─── Test 7: Aynı Gün İkinci Randevu ─────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_ayni_gun_ikinci_randevu_409():
+async def test_ayni_gun_ikinci_randevu_onay_gerekli_409():
     """
-    Kullanıcı bugün için zaten randevu almış → 409 already_booked_today.
-    SELECT FOR UPDATE kullanıcının günlük randevusunu bulursa hata fırlatılır.
+    Kullanici ayni gunde ikinci randevuyu onaysiz almaya calisirsa
+    409 additional_booking_confirmation_required donmelidir.
     """
-    # Aynı gün farklı slot: sabah 09:00'da randevu var, 10:00'a almak istiyor
+    # Ayni gun farkli slot: sabah 09:00'da randevu var, 10:00'a almak istiyor
     yarin_09 = _future_slot(days_ahead=1, hour=9)
     yarin_10 = _future_slot(days_ahead=1, hour=10)
 
-    # Kullanıcının o gün için mevcut randevusu
+    # Kullanicinin o gun icin mevcut randevusu
     gun_randevusu = _make_booking(yarin_09, user_id=TEST_USER_ID)
 
     profile = _make_profile()
 
-    # execute() #1: BarberProfile → var
-    # execute() #2: DayOverride → yok
-    # execute() #3: SELECT booking FOR UPDATE (slot check) → yok (10:00 boş)
-    # execute() #4: SELECT slot_block FOR UPDATE → yok
-    # execute() #5: SELECT booking FOR UPDATE (user day) → gun_randevusu bulundu!
+    # execute() #1: BarberProfile -> var
+    # execute() #2: DayOverride -> yok
+    # execute() #3: SELECT booking FOR UPDATE (slot check) -> yok (10:00 bos)
+    # execute() #4: SELECT slot_block FOR UPDATE -> yok
+    # execute() #5: SELECT booking FOR UPDATE (user day) -> gun randevusu bulundu
     session = _make_mock_session(
         _make_db_result(profile),
-        _make_db_result(None),         # DayOverride yok
-        _make_db_result(None),         # 10:00 slotu boş
-        _make_db_result(None),         # Slot bloklu değil
-        _make_db_result(gun_randevusu),  # Kullanıcının o günkü randevusu var!
+        _make_db_result(None),
+        _make_db_result(None),
+        _make_db_result(None),
+        _make_db_scalars_result([gun_randevusu]),
     )
 
     with pytest.raises(HTTPException) as exc_info:
         await booking_service.create_booking(session, TEST_TENANT_ID, TEST_USER_ID, yarin_10)
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail["error"] == "already_booked_today"
+    assert exc_info.value.detail["error"] == "additional_booking_confirmation_required"
+    assert exc_info.value.detail["current_count"] == 1
     session.rollback.assert_called_once()
 
 
@@ -383,7 +397,7 @@ async def test_integrity_error_slot_taken_409():
         _make_db_result(None),     # DayOverride yok
         _make_db_result(None),     # Booking yok (slot boş)
         _make_db_result(None),     # SlotBlock yok
-        _make_db_result(None),     # User day booking yok
+        _make_db_scalars_result([]),  # User day booking yok
     )
 
     # commit() IntegrityError fırlatır — slot unique index ihlali
@@ -408,40 +422,81 @@ async def test_integrity_error_slot_taken_409():
 # ─── Test 9: IntegrityError → already_booked_today ───────────────────────────
 
 @pytest.mark.asyncio
-async def test_integrity_error_ayni_gun_409():
+async def test_ayni_gun_ucuncu_randevu_onayla_basarili():
     """
-    Eşzamanlı iki istek aynı kullanıcı için aynı gün farklı slotlara geldi:
-    Her ikisi de SELECT FOR UPDATE'te "o gün randevu yok" gördü,
-    ama commit'te günlük unique index ihlali oluştu → 409 already_booked_today.
+    Kullanici ayni gunde 2 aktif randevusu varken, ek onay vererek 3. randevuyu alabilir.
     """
-    yarin_slot = _future_slot(days_ahead=1)
+    yarin_slot = _future_slot(days_ahead=1, hour=11)
+    yarin_09 = _future_slot(days_ahead=1, hour=9)
+    yarin_10 = _future_slot(days_ahead=1, hour=10)
     profile = _make_profile()
+    day_bookings = [
+        _make_booking(yarin_09, user_id=TEST_USER_ID),
+        _make_booking(yarin_10, user_id=TEST_USER_ID),
+    ]
 
     session = _make_mock_session(
         _make_db_result(profile),
         _make_db_result(None),
         _make_db_result(None),
         _make_db_result(None),
-        _make_db_result(None),
+        _make_db_scalars_result(day_bookings),
     )
 
-    # ix_bookings_tenant_user_date_confirmed: günlük unique index ihlali
-    session.commit = AsyncMock(
-        side_effect=IntegrityError(
-            "INSERT violates unique constraint ix_bookings_tenant_user_date_confirmed",
-            params={},
-            orig=Exception("ix_bookings_tenant_user_date_confirmed"),
-        )
+    async def mock_refresh(obj):
+        obj.id = uuid.uuid4()
+        obj.created_at = datetime.now(TZ)
+        obj.updated_at = datetime.now(TZ)
+        obj.cancelled_by = None
+
+    session.refresh = mock_refresh
+
+    booking = await booking_service.create_booking(
+        session,
+        TEST_TENANT_ID,
+        TEST_USER_ID,
+        yarin_slot,
+        confirm_additional_same_day=True,
+    )
+
+    assert booking.status == BookingStatus.confirmed
+    session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_ayni_gun_dorduncu_randevu_409():
+    """
+    Kullanici ayni gunde 3 confirmed randevusu varken 4. randevuyu alamaz.
+    """
+    yarin_slot = _future_slot(days_ahead=1, hour=12)
+    profile = _make_profile()
+    day_bookings = [
+        _make_booking(_future_slot(days_ahead=1, hour=9), user_id=TEST_USER_ID),
+        _make_booking(_future_slot(days_ahead=1, hour=10), user_id=TEST_USER_ID),
+        _make_booking(_future_slot(days_ahead=1, hour=11), user_id=TEST_USER_ID),
+    ]
+
+    session = _make_mock_session(
+        _make_db_result(profile),
+        _make_db_result(None),
+        _make_db_result(None),
+        _make_db_result(None),
+        _make_db_scalars_result(day_bookings),
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await booking_service.create_booking(session, TEST_TENANT_ID, TEST_USER_ID, yarin_slot)
+        await booking_service.create_booking(
+            session,
+            TEST_TENANT_ID,
+            TEST_USER_ID,
+            yarin_slot,
+            confirm_additional_same_day=True,
+        )
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail["error"] == "already_booked_today"
-
-
-# ─── Test 10: Başarılı Randevu Oluşturma ─────────────────────────────────────
+    assert exc_info.value.detail["error"] == "daily_booking_limit_exceeded"
+    assert exc_info.value.detail["current_count"] == 3
+    session.rollback.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_basarili_randevu_olusturma():
@@ -458,7 +513,7 @@ async def test_basarili_randevu_olusturma():
         _make_db_result(None),     # DayOverride: yok
         _make_db_result(None),     # Booking FOR UPDATE: yok (slot boş)
         _make_db_result(None),     # SlotBlock FOR UPDATE: yok
-        _make_db_result(None),     # User day booking FOR UPDATE: yok
+        _make_db_scalars_result([]),  # User day booking FOR UPDATE: yok
     )
 
     # refresh: oluşturulan booking nesnesine id ve created_at atar
@@ -499,6 +554,85 @@ async def test_admin_iptal_gecmis_randevu_409():
 
     with pytest.raises(HTTPException) as exc_info:
         await booking_service.cancel_booking_admin(session, TEST_TENANT_ID, booking_id)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["error"] == "booking_cancellation_window_passed"
+
+
+@pytest.mark.asyncio
+async def test_kullanici_iptal_200():
+    """
+    Kullanici kendi confirmed ve gelecekteki randevusunu iptal edebilir.
+    cancelled_by=user olmalidir.
+    """
+    booking_id = uuid.uuid4()
+    yarin_slot = _future_slot(days_ahead=1, hour=10)
+    confirmed_booking = _make_booking(yarin_slot, user_id=TEST_USER_ID, status="confirmed")
+    confirmed_booking.id = booking_id
+
+    session = _make_mock_session(
+        _make_db_result(confirmed_booking),
+    )
+
+    booking = await booking_service.cancel_booking_user(
+        session,
+        TEST_TENANT_ID,
+        TEST_USER_ID,
+        booking_id,
+    )
+
+    assert booking.status == BookingStatus.cancelled
+    assert booking.cancelled_by == CancelledBy.user
+    session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_kullanici_baskasinin_randevusunu_iptal_edemez_404():
+    """
+    Kullanici kendi olmayan booking kaydini iptal edemez.
+    """
+    booking_id = uuid.uuid4()
+    yarin_slot = _future_slot(days_ahead=1, hour=11)
+    baska_user_booking = _make_booking(yarin_slot, user_id=uuid.uuid4(), status="confirmed")
+    baska_user_booking.id = booking_id
+
+    session = _make_mock_session(
+        _make_db_result(baska_user_booking),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await booking_service.cancel_booking_user(
+            session,
+            TEST_TENANT_ID,
+            TEST_USER_ID,
+            booking_id,
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail["error"] == "booking_not_found"
+
+
+@pytest.mark.asyncio
+async def test_kullanici_iptal_15_dakikadan_az_kaldiysa_409():
+    """
+    Kullanici, slot saatine 15 dakikadan az kaldiysa iptal edemez.
+    """
+    booking_id = uuid.uuid4()
+    yakin_slot = datetime.now(TZ) + timedelta(minutes=10)
+    confirmed_booking = _make_booking(yakin_slot, user_id=TEST_USER_ID, status="confirmed")
+    confirmed_booking.id = booking_id
+
+    session = _make_mock_session(
+        _make_db_result(confirmed_booking),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await booking_service.cancel_booking_user(
+            session,
+            TEST_TENANT_ID,
+            TEST_USER_ID,
+            booking_id,
+        )
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail["error"] == "booking_cancellation_window_passed"
@@ -715,7 +849,7 @@ async def test_race_condition_10_eslik_istek():
             _make_db_result(None),     # DayOverride: yok
             _make_db_result(None),     # Booking FOR UPDATE: boş
             _make_db_result(None),     # SlotBlock FOR UPDATE: yok
-            _make_db_result(None),     # User day booking FOR UPDATE: yok
+            _make_db_scalars_result([]),  # User day booking FOR UPDATE: yok
         ])
 
         async def mock_commit():
@@ -778,3 +912,4 @@ async def test_race_condition_10_eslik_istek():
     # Tüm çakışma hatalarının slot_taken olduğunu kontrol et
     for conflict in conflict_results:
         assert conflict.detail["error"] == "slot_taken"
+

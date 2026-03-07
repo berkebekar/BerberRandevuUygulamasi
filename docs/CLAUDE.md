@@ -135,7 +135,7 @@ Bir özellik MVP olarak bu dosyada açıkça belirtilmemişse → KODLAMA **YOK*
 - Berber sayısı      : TAM OLARAK 1
 - Aynı anda müşteri  : TAM OLARAK 1
 - Slot başına randevu: TAM OLARAK 1
-- Günlük müşteri     : 1 müşteri = max 1 randevu/gün
+- Günlük müşteri     : 1 müşteri = max 3 randevu/gün
 - Ödeme              : YOK
 - Çoklu berber       : YOK
 - Otomatik slot kaydırma : YOK
@@ -284,7 +284,7 @@ created_at   TIMESTAMPTZ NOT NULL
 updated_at   TIMESTAMPTZ NOT NULL
 
 [UNIQUE: tenant_id + slot_time]        WHERE status='confirmed'
-[UNIQUE: tenant_id + user_id + date]   WHERE status='confirmed'
+[UNIQUE: tenant_id + user_id + date]   YOK (MVP kurali: ayni gunde max 3 randevu API katmaninda kontrol edilir)
 ```
 
 ### OTPRecord
@@ -461,3 +461,4 @@ ENV=                 # development | production
 ---
 
 *Son güncelleme: v1.0 — MVP*
+

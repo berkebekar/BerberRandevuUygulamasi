@@ -6,7 +6,7 @@
  *   2. "otp"      → 6 haneli SMS kodunu gir (60sn geri sayım, tekrar gönder)
  *   3. "register" → Yeni kullanıcıysa isim ve soyisim gir
  *
- * Başarılı girişte "/" ana sayfasına yönlendirir.
+ * Başarılı girişte role göre "/" veya "/admin" sayfasına yönlendirir.
  */
 
 "use client"
@@ -60,7 +60,7 @@ export default function AuthPage() {
     setError("")
     setIsLoading(true)
     try {
-      await apiPost("/api/v1/auth/user/send-otp", { phone })
+      await apiPost("/api/v1/auth/send-otp", { phone })
       // Başarıyla gönderildiyse OTP aşamasına geç
       setStep("otp")
       // 60 saniye geri sayım başlat — rate limit aynı süre
@@ -81,15 +81,18 @@ export default function AuthPage() {
     setError("")
     setIsLoading(true)
     try {
-      const res = await apiPost<{ status: "returning_user" | "new_user"; registration_token?: string }>(
-        "/api/v1/auth/user/verify-otp",
+      const res = await apiPost<{ next: "admin" | "user" | "register"; registration_token?: string }>(
+        "/api/v1/auth/verify-otp",
         { phone, code }
       )
 
-      if (res.status === "new_user") {
+      if (res.next === "register") {
         // Yeni kullanıcı — registration_token ile isim/soyisim kayıt aşamasına geç
         setRegistrationToken(res.registration_token ?? "")
         setStep("register")
+      } else if (res.next === "admin") {
+        // Admin oturumu açıldı
+        router.push("/admin")
       } else {
         // Mevcut kullanıcı — oturum açıldı, ana sayfaya yönlendir
         router.push("/")
@@ -137,7 +140,7 @@ export default function AuthPage() {
     setError("")
     setIsLoading(true)
     try {
-      await apiPost("/api/v1/auth/user/send-otp", { phone })
+      await apiPost("/api/v1/auth/send-otp", { phone })
       setCountdown(60)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Kod gönderilemedi.")

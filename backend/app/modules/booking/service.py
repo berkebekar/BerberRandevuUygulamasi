@@ -37,6 +37,10 @@ TZ = ZoneInfo("Europe/Istanbul")
 # Randevu alÄ±nabilecek maksimum ileri tarih (CLAUDE.md: 7 gÃ¼n kuralÄ±)
 MAX_DAYS_AHEAD = 7
 
+# Ayni kullanicinin ayni gun alabilecegi maksimum confirmed randevu sayisi.
+MAX_BOOKINGS_PER_DAY = 3
+USER_CANCELLATION_MINUTES_BEFORE = 15
+
 
 def _to_local_tz(dt: datetime) -> datetime:
     """
@@ -146,6 +150,7 @@ async def create_booking(
     tenant_id: uuid.UUID,
     user_id: uuid.UUID,
     slot_time: datetime,
+    confirm_additional_same_day: bool = False,
 ) -> Booking:
     """
     Atomik randevu oluÅŸturur.
@@ -158,7 +163,9 @@ async def create_booking(
     2. Atomik transaction (SELECT FOR UPDATE ile kilitli kontroller):
        - Bu slota confirmed randevu var mÄ±? â†’ 409 slot_taken
        - Bu slot bloklu mu? â†’ 409 slot_blocked
-       - KullanÄ±cÄ± bugÃ¼n baÅŸka randevu aldÄ± mÄ±? â†’ 409 already_booked_today
+       - KullanÄ±cÄ±nÄ±n bugunku confirmed sayisi kontrolu:
+         - 1 veya 2 randevusu varsa ve onay verilmediyse 409 additional_booking_confirmation_required
+         - 3 ve uzeri ise 409 daily_booking_limit_exceeded
        - INSERT booking
     3. IntegrityError yakalama: eÅŸzamanlÄ± ekleme denemesi â†’ 409
 
@@ -175,7 +182,8 @@ async def create_booking(
         400 invalid_slot: Slot berber takvimine gÃ¶re geÃ§ersiz
         409 slot_taken: Bu slotta zaten confirmed randevu var
         409 slot_blocked: Bu slot admin tarafÄ±ndan bloklanmÄ±ÅŸ
-        409 already_booked_today: KullanÄ±cÄ± bu gÃ¼n iÃ§in zaten randevu almÄ±ÅŸ
+        409 additional_booking_confirmation_required: Ek randevu icin kullanici onayi gerekir
+        409 daily_booking_limit_exceeded: Ayni gun en fazla 3 randevu alinabilir
     """
     now = datetime.now(TZ)
 
@@ -231,8 +239,8 @@ async def create_booking(
             # Slot kapalÄ± â€” admin bu saati engellemiÅŸ
             raise HTTPException(409, {"error": "slot_blocked"})
 
-        # Kontrol 3: KullanÄ±cÄ± bugÃ¼n baÅŸka bir confirmed randevu almÄ±ÅŸ mÄ±?
-        # (CLAUDE.md: gÃ¼nde 1 randevu kuralÄ±)
+        # Kontrol 3: KullanÄ±cÄ±nÄ±n ayni gundeki confirmed randevu sayisini al.
+        # Not: Bu sorguda tum kayitlar cekilir; sayi ve limit kontrolu service katmaninda yapilir.
         result = await db.execute(
             select(Booking).where(
                 Booking.tenant_id == tenant_id,
@@ -243,9 +251,30 @@ async def create_booking(
             )
             .with_for_update()  # KullanÄ±cÄ±nÄ±n gÃ¼nlÃ¼k randevusunu kilitle
         )
-        if result.scalar_one_or_none():
-            # MÃ¼ÅŸteri bu gÃ¼n iÃ§in zaten randevu almÄ±ÅŸ
-            raise HTTPException(409, {"error": "already_booked_today"})
+        existing_same_day_bookings = list(result.scalars().all())
+        existing_count = len(existing_same_day_bookings)
+
+        # Ayni gun 3 sinirini astiginda yeni randevuya izin verme.
+        if existing_count >= MAX_BOOKINGS_PER_DAY:
+            raise HTTPException(
+                409,
+                {
+                    "error": "daily_booking_limit_exceeded",
+                    "current_count": existing_count,
+                    "max_allowed": MAX_BOOKINGS_PER_DAY,
+                },
+            )
+
+        # Kullanici ayni gun ilk ek randevuyu alirken acik onay istenir.
+        if existing_count >= 1 and not confirm_additional_same_day:
+            raise HTTPException(
+                409,
+                {
+                    "error": "additional_booking_confirmation_required",
+                    "current_count": existing_count,
+                    "max_allowed": MAX_BOOKINGS_PER_DAY,
+                },
+            )
 
         # TÃ¼m kontroller geÃ§ti â€” randevuyu oluÅŸtur
         booking = Booking(
@@ -266,14 +295,10 @@ async def create_booking(
 
     except IntegrityError as e:
         # EÅŸzamanlÄ± istek durumu: iki transaction aynÄ± anda geÃ§ti ve aynÄ± satÄ±rÄ± eklemeye Ã§alÄ±ÅŸtÄ±.
-        # Partial unique index (ix_bookings_tenant_slot_confirmed veya
-        # ix_bookings_tenant_user_date_confirmed) ihlali â†’ 409
+        # Partial unique index (ix_bookings_tenant_slot_confirmed) ihlali â†’ 409
         await db.rollback()
-        error_str = str(e)
-        if "ix_bookings_tenant_user_date_confirmed" in error_str:
-            # AynÄ± gÃ¼n baÅŸka bir concurrent istek Ã¶nce commit etti
-            raise HTTPException(409, {"error": "already_booked_today"})
-        # Slot iÃ§in concurrent istek Ã¶nce commit etti
+        # Slot iÃ§in concurrent istek Ã¶nce commit etti.
+        logger.warning("Booking IntegrityError | tenant_id=%s | user_id=%s | error=%s", tenant_id, user_id, e)
         raise HTTPException(409, {"error": "slot_taken"})
 
 
@@ -406,6 +431,50 @@ async def cancel_booking_admin(
     return booking, user_phone
 
 
+async def cancel_booking_user(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    booking_id: uuid.UUID,
+) -> Booking:
+    """
+    Kullanici tarafindan randevu iptali.
+
+    Kurallar:
+    - Booking, ayni tenant ve ayni user'a ait olmali
+    - Sadece confirmed booking iptal edilebilir
+    - Slot saatine 15 dakikadan az kaldiysa (veya saat gectiyse) iptal edilemez
+    """
+    result = await db.execute(
+        select(Booking).where(
+            Booking.id == booking_id,
+            Booking.tenant_id == tenant_id,
+        )
+    )
+    booking = result.scalar_one_or_none()
+
+    if booking is None:
+        raise HTTPException(404, {"error": "booking_not_found"})
+
+    if booking.user_id != user_id:
+        raise HTTPException(404, {"error": "booking_not_found"})
+
+    if booking.status != BookingStatus.confirmed:
+        raise HTTPException(404, {"error": "booking_not_found"})
+
+    now_local = datetime.now(TZ)
+    booking_local = _to_local_tz(booking.slot_time)
+    if booking_local - now_local < timedelta(minutes=USER_CANCELLATION_MINUTES_BEFORE):
+        raise HTTPException(409, {"error": "booking_cancellation_window_passed"})
+
+    booking.status = BookingStatus.cancelled
+    booking.cancelled_by = CancelledBy.user
+
+    await db.commit()
+    await db.refresh(booking)
+    return booking
+
+
 async def set_booking_no_show_admin(
     db: AsyncSession,
     tenant_id: uuid.UUID,
@@ -495,5 +564,11 @@ async def create_booking_admin(
     create_booking fonksiyonunu user_id ile Ã§aÄŸÄ±rÄ±r â€” mantÄ±k tekrar yazÄ±lmaz.
     """
     # create_booking'i admin iÃ§in de kullan â€” aynÄ± atomik mantÄ±k
-    return await create_booking(db, tenant_id, user_id, slot_time)
+    return await create_booking(
+        db,
+        tenant_id,
+        user_id,
+        slot_time,
+        confirm_additional_same_day=True,
+    )
 

@@ -10,6 +10,7 @@ Bu dosya sistemin kritik kurallarÄ±nÄ± iÃ§erir:
 """
 
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
@@ -17,6 +18,7 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.phone import normalize_tr_phone, phone_variants
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.models.admin import Admin
 from app.models.enums import OTPRole
@@ -39,13 +41,16 @@ async def send_otp(db: AsyncSession, tenant_id, phone: str) -> str:
     Returns:
         code: 6 haneli OTP string (SMS iÃ§in)
     """
+    normalized_phone = normalize_tr_phone(phone)
+    phone_candidates = phone_variants(normalized_phone)
+
     # Son 60 saniyede bu numaraya gÃ¶nderilmiÅŸ aktif OTP var mÄ±?
     # Varsa rate limit ihlali â€” 429 dÃ¶n
     sixty_seconds_ago = datetime.now(timezone.utc) - timedelta(seconds=60)
     result = await db.execute(
         select(OTPRecord).where(
             OTPRecord.tenant_id == tenant_id,
-            OTPRecord.phone == phone,
+            OTPRecord.phone.in_(phone_candidates),
             OTPRecord.role == OTPRole.user,
             OTPRecord.is_used == False,  # noqa: E712
             OTPRecord.created_at > sixty_seconds_ago,
@@ -63,7 +68,7 @@ async def send_otp(db: AsyncSession, tenant_id, phone: str) -> str:
     # OTP'yi hash'leyerek kaydet â€” plain text asla DB'ye yazÄ±lmaz (CLAUDE.md)
     record = OTPRecord(
         tenant_id=tenant_id,
-        phone=phone,
+        phone=normalized_phone,
         code_hash=hash_password(code),
         role=OTPRole.user,
         expires_at=expires_at,
@@ -93,6 +98,8 @@ async def verify_otp(
     BaÅŸarÄ±sÄ±z durumlarda HTTPException fÄ±rlatÄ±r:
     - 401: OTP bulunamadÄ±, sÃ¼resi dolmuÅŸ veya yanlÄ±ÅŸ
     """
+    normalized_phone = normalize_tr_phone(phone)
+    phone_candidates = phone_variants(normalized_phone)
     now = datetime.now(timezone.utc)
 
     # En gÃ¼ncel aktif OTP kaydÄ±nÄ± bul (sÃ¼resi geÃ§memiÅŸ, kullanÄ±lmamÄ±ÅŸ)
@@ -100,7 +107,7 @@ async def verify_otp(
         select(OTPRecord)
         .where(
             OTPRecord.tenant_id == tenant_id,
-            OTPRecord.phone == phone,
+            OTPRecord.phone.in_(phone_candidates),
             OTPRecord.role == OTPRole.user,
             OTPRecord.is_used == False,  # noqa: E712
             OTPRecord.expires_at > now,
@@ -135,7 +142,7 @@ async def verify_otp(
     user_result = await db.execute(
         select(User).where(
             User.tenant_id == tenant_id,
-            User.phone == phone,
+            User.phone.in_(phone_candidates),
         )
     )
     user = user_result.scalar_one_or_none()
@@ -145,13 +152,19 @@ async def verify_otp(
         # Frontend bu token'Ä± alÄ±p isim/soyisim girdikten sonra complete-registration'a gÃ¶nderecek
         registration_token = create_token(
             {
-                "sub": phone,
+                "sub": normalized_phone,
                 "tenant_id": str(tenant_id),
                 "type": "registration",  # Session token ile karÄ±ÅŸmamasÄ± iÃ§in tip belirlendi
             },
             expires_minutes=10,
         )
         return {"status": "new_user", "registration_token": registration_token, "user": None}
+
+    # Mevcut kullanici tekrar giris yaptiginda tek aktif oturum kurali icin
+    # session_version degerini degistiriyoruz. Eski tokenlar bu andan itibaren gecersiz olur.
+    user.session_version = str(uuid.uuid4())
+    await db.commit()
+    await db.refresh(user)
 
     return {"status": "returning_user", "registration_token": None, "user": user}
 
@@ -175,6 +188,7 @@ async def register_admin(
     Returns:
         Admin: Yeni oluÅŸturulan admin nesnesi.
     """
+    normalized_phone = normalize_tr_phone(phone)
     # Bu tenant'ta admin var mÄ±? UNIQUE constraint DB'de de var ama Ã¶nce API seviyesinde kontrol et
     existing_result = await db.execute(
         select(Admin).where(Admin.tenant_id == tenant_id)
@@ -186,7 +200,7 @@ async def register_admin(
     admin = Admin(
         tenant_id=tenant_id,
         email=email,
-        phone=phone,
+        phone=normalized_phone,
         password_hash=hash_password(password),  # Åifreyi hash'le; plain text saklanmaz
     )
     db.add(admin)
@@ -206,12 +220,15 @@ async def send_admin_otp(db: AsyncSession, tenant_id, phone: str) -> str:
     Returns:
         code: 6 haneli OTP string (SMS iÃ§in router'a dÃ¶ner).
     """
+    normalized_phone = normalize_tr_phone(phone)
+    phone_candidates = phone_variants(normalized_phone)
+
     # Son 60 saniyede bu numaraya admin OTP gÃ¶nderilmiÅŸ mi?
     sixty_seconds_ago = datetime.now(timezone.utc) - timedelta(seconds=60)
     result = await db.execute(
         select(OTPRecord).where(
             OTPRecord.tenant_id == tenant_id,
-            OTPRecord.phone == phone,
+            OTPRecord.phone.in_(phone_candidates),
             OTPRecord.role == OTPRole.admin,  # Sadece admin OTP'leri kontrol et
             OTPRecord.is_used == False,  # noqa: E712
             OTPRecord.created_at > sixty_seconds_ago,
@@ -228,7 +245,7 @@ async def send_admin_otp(db: AsyncSession, tenant_id, phone: str) -> str:
 
     record = OTPRecord(
         tenant_id=tenant_id,
-        phone=phone,
+        phone=normalized_phone,
         code_hash=hash_password(code),  # Plain text saklanmaz (CLAUDE.md)
         role=OTPRole.admin,             # Admin rolÃ¼ â€” user ile karÄ±ÅŸmaz
         expires_at=expires_at,
@@ -256,6 +273,8 @@ async def verify_admin_otp(
     Returns:
         Admin: DoÄŸrulama baÅŸarÄ±lÄ±ysa ilgili admin nesnesi.
     """
+    normalized_phone = normalize_tr_phone(phone)
+    phone_candidates = phone_variants(normalized_phone)
     now = datetime.now(timezone.utc)
 
     # Aktif ve sÃ¼resi geÃ§memiÅŸ admin OTP'sini bul
@@ -263,7 +282,7 @@ async def verify_admin_otp(
         select(OTPRecord)
         .where(
             OTPRecord.tenant_id == tenant_id,
-            OTPRecord.phone == phone,
+            OTPRecord.phone.in_(phone_candidates),
             OTPRecord.role == OTPRole.admin,  # Admin OTP'si olduÄŸundan emin ol
             OTPRecord.is_used == False,  # noqa: E712
             OTPRecord.expires_at > now,
@@ -298,7 +317,7 @@ async def verify_admin_otp(
     admin_result = await db.execute(
         select(Admin).where(
             Admin.tenant_id == tenant_id,
-            Admin.phone == phone,
+            Admin.phone.in_(phone_candidates),
         )
     )
     admin = admin_result.scalar_one_or_none()
@@ -307,6 +326,11 @@ async def verify_admin_otp(
         # OTP doÄŸru ama bu tenant'ta admin kaydÄ± yok â€” Ã¶nce kayÄ±t gerekli
         raise HTTPException(401, {"error": "admin_not_registered"})
 
+    # Admin tekrar giris yaptiginda session_version rotate edilir.
+    # Boylece eski cihazdaki tokenlar bir sonraki istekte gecersiz kalir.
+    admin.session_version = str(uuid.uuid4())
+    await db.commit()
+    await db.refresh(admin)
     return admin
 
 
@@ -342,6 +366,60 @@ async def login_admin_password(
     return admin
 
 
+async def rotate_user_session_version_by_id(
+    db: AsyncSession,
+    tenant_id,
+    user_id: str,
+) -> None:
+    """
+    Belirli kullanicinin session_version degerini degistirir.
+    Logout ve sunucu tarafi token iptalinde kullanilir.
+    """
+    try:
+        parsed_user_id = uuid.UUID(str(user_id))
+    except (TypeError, ValueError):
+        return
+
+    result = await db.execute(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.id == parsed_user_id,
+        )
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        return
+    user.session_version = str(uuid.uuid4())
+    await db.commit()
+
+
+async def rotate_admin_session_version_by_id(
+    db: AsyncSession,
+    tenant_id,
+    admin_id: str,
+) -> None:
+    """
+    Belirli adminin session_version degerini degistirir.
+    Logout ve sunucu tarafi token iptalinde kullanilir.
+    """
+    try:
+        parsed_admin_id = uuid.UUID(str(admin_id))
+    except (TypeError, ValueError):
+        return
+
+    result = await db.execute(
+        select(Admin).where(
+            Admin.tenant_id == tenant_id,
+            Admin.id == parsed_admin_id,
+        )
+    )
+    admin = result.scalar_one_or_none()
+    if admin is None:
+        return
+    admin.session_version = str(uuid.uuid4())
+    await db.commit()
+
+
 async def complete_registration(
     db: AsyncSession,
     tenant_id,
@@ -366,6 +444,8 @@ async def complete_registration(
         raise HTTPException(401, {"error": "invalid_token"})
 
     phone = payload.get("sub")
+    normalized_phone = normalize_tr_phone(phone or "")
+    phone_candidates = phone_variants(normalized_phone)
 
     if str(tenant_id) != payload.get("tenant_id"):
         # Token farklÄ± bir tenant iÃ§in Ã¼retilmiÅŸ
@@ -373,7 +453,7 @@ async def complete_registration(
 
     # Idempotent: KullanÄ±cÄ± zaten oluÅŸturulmuÅŸsa (aÄŸ yeniden denemesi olabilir) mevcut kaydÄ± dÃ¶n
     result = await db.execute(
-        select(User).where(User.tenant_id == tenant_id, User.phone == phone)
+        select(User).where(User.tenant_id == tenant_id, User.phone.in_(phone_candidates))
     )
     existing = result.scalar_one_or_none()
     if existing:
@@ -381,7 +461,7 @@ async def complete_registration(
 
     user = User(
         tenant_id=tenant_id,
-        phone=phone,
+        phone=normalized_phone,
         first_name=first_name,
         last_name=last_name,
     )
@@ -389,5 +469,3 @@ async def complete_registration(
     await db.commit()
     await db.refresh(user)
     return user
-
-

@@ -11,8 +11,14 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { BookingCard } from "@/components"
+import { ActionConfirmSheet, BookingCard } from "@/components"
 import { apiPost } from "@/lib/api"
+
+type ApiError = Error & {
+  status?: number
+  errorCode?: string
+  payload?: Record<string, unknown>
+}
 
 export default function ConfirmPage() {
   const router = useRouter()
@@ -21,6 +27,8 @@ export default function ConfirmPage() {
   const [slotTime, setSlotTime] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [isAdditionalConfirmOpen, setIsAdditionalConfirmOpen] = useState(false)
+  const [sameDayBookingCount, setSameDayBookingCount] = useState(1)
 
   // Randevu başarıyla oluşturulduysa true
   const [isSuccess, setIsSuccess] = useState(false)
@@ -41,24 +49,51 @@ export default function ConfirmPage() {
    * Randevu oluşturma isteği gönderir.
    * SELECT FOR UPDATE ile atomik işlem backend'de yapılır.
    */
-  async function handleConfirm() {
+  async function submitBooking(confirmAdditionalSameDay: boolean) {
     if (!slotTime) return
 
     setError("")
     setIsLoading(true)
 
     try {
-      await apiPost("/api/v1/bookings", { slot_time: slotTime })
+      await apiPost("/api/v1/bookings", {
+        slot_time: slotTime,
+        confirm_additional_same_day: confirmAdditionalSameDay,
+      })
 
       // Başarılı: sessionStorage'ı temizle, başarı ekranını göster
       sessionStorage.removeItem("pendingSlot")
       sessionStorage.removeItem("pendingDate")
+      setIsAdditionalConfirmOpen(false)
       setIsSuccess(true)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Randevu oluşturulamadı.")
+      const apiError = err as ApiError
+      if (apiError.errorCode === "additional_booking_confirmation_required") {
+        const currentCount = Number(apiError.payload?.current_count)
+        if (Number.isFinite(currentCount) && currentCount >= 1) {
+          setSameDayBookingCount(currentCount)
+        }
+        setIsAdditionalConfirmOpen(true)
+        return
+      }
+
+      if (apiError.errorCode === "daily_booking_limit_exceeded") {
+        setError("Aynı gün için 3'ten fazla randevu alamazsınız.")
+        return
+      }
+
+      setError(apiError instanceof Error ? apiError.message : "Randevu oluşturulamadı.")
     } finally {
       setIsLoading(false)
     }
+  }
+
+  async function handleConfirm() {
+    await submitBooking(false)
+  }
+
+  async function handleConfirmAdditional() {
+    await submitBooking(true)
   }
 
   // Slot bilgisi yüklenene kadar boş ekran göster
@@ -135,13 +170,6 @@ export default function ConfirmPage() {
         {/* Randevu özet kartı */}
         <BookingCard slotTime={slotTime} />
 
-        {/* Bilgi notu */}
-        <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg px-3 py-2.5">
-          <p className="text-sm text-sky-300">
-            Randevunuzu onayladıktan sonra iptal için berberinizle iletişime geçin.
-          </p>
-        </div>
-
         {/* Hata mesajı */}
         {error && (
           <div className="text-sm text-red-300 bg-red-500/10 rounded-lg px-3 py-2.5">
@@ -168,6 +196,18 @@ export default function ConfirmPage() {
         </button>
 
       </div>
+
+      {/* Ek randevu onay kutusu: mevcut randevu sayisini gosterip acik onay alir */}
+      <ActionConfirmSheet
+        open={isAdditionalConfirmOpen}
+        title="Ek Randevu Onayı"
+        description={`Bugüne ait ${sameDayBookingCount} randevunuz bulunmaktadır. Bir Randevu daha almak istediğinize emin misiniz ?`}
+        confirmText="Evet, Devam Et"
+        cancelText="Vazgec"
+        isLoading={isLoading}
+        onCancel={() => setIsAdditionalConfirmOpen(false)}
+        onConfirm={handleConfirmAdditional}
+      />
     </div>
   )
 }

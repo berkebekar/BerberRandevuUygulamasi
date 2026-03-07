@@ -1,7 +1,7 @@
 ﻿/**
  * app/admin/(protected)/layout.tsx â€” Admin sayfalari icin route korumasi.
  *
- * admin_session cookie yoksa /admin/login sayfasina yonlendirir.
+ * admin_session cookie yoksa /auth sayfasina yonlendirir.
  * Bu kontrol server component'ta calisir, client'a veri sizmadan yapilir.
  */
 
@@ -16,11 +16,11 @@ export default function AdminProtectedLayout({
   // HTTP-only cookie'yi server tarafinda oku
   const cookieStore = cookies()
 
-  // admin_session yoksa login sayfasina yonlendir
+  // admin_session yoksa auth sayfasina yonlendir
   const hasSession = cookieStore.has("admin_session")
-  // Session yoksa login sayfasina yonlendir
+  // Session yoksa auth sayfasina yonlendir
   if (!hasSession) {
-    redirect("/admin/login")
+    redirect("/auth")
   }
 
   return (

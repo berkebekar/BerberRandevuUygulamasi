@@ -109,6 +109,40 @@ def create_app() -> FastAPI:
         # Kullaniciya genel hata mesaji don
         return JSONResponse({"error": "server_error"}, status_code=500)
 
+    @app.middleware("http")
+    async def sliding_session_cookie_middleware(request: Request, call_next):
+        """
+        Dependency katmaninda request.state'e yazilan yenileme bilgisini
+        response cikisinda cookie'ye uygular.
+        """
+        response = await call_next(request)
+
+        user_cookie = getattr(request.state, "_renew_user_session_cookie", None)
+        if user_cookie:
+            response.set_cookie(
+                key="user_session",
+                value=user_cookie["value"],
+                httponly=user_cookie["httponly"],
+                secure=user_cookie["secure"],
+                samesite=user_cookie["samesite"],
+                max_age=user_cookie["max_age"],
+                domain=user_cookie["domain"],
+            )
+
+        admin_cookie = getattr(request.state, "_renew_admin_session_cookie", None)
+        if admin_cookie:
+            response.set_cookie(
+                key="admin_session",
+                value=admin_cookie["value"],
+                httponly=admin_cookie["httponly"],
+                secure=admin_cookie["secure"],
+                samesite=admin_cookie["samesite"],
+                max_age=admin_cookie["max_age"],
+                domain=admin_cookie["domain"],
+            )
+
+        return response
+
     @app.get("/health")
     async def health() -> dict:
         """

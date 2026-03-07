@@ -21,11 +21,15 @@ Business logic auth/service.py içindedir; bu dosya sadece HTTP katmanıdır.
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from jose import JWTError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal, get_db
-from app.core.security import create_token
+from app.core.phone import phone_variants
+from app.core.security import create_token, decode_token
+from app.models.admin import Admin
 from app.models.enums import NotificationMessageType
 from app.modules.auth import service as auth_service
 from app.modules.auth.schemas import (
@@ -34,6 +38,7 @@ from app.modules.auth.schemas import (
     AdminVerifyOTPRequest,
     CompleteRegistrationRequest,
     SendOTPRequest,
+    UnifiedVerifyOTPResponse,
     VerifyOTPRequest,
     VerifyOTPResponse,
 )
@@ -43,10 +48,10 @@ from app.modules.notification.provider import get_sms_provider
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Session cookie ömrü: 7 gün (saniye cinsinden)
-_SESSION_MAX_AGE = 60 * 60 * 24 * 7
-# Session token geçerlilik süresi: 7 gün (dakika cinsinden)
-_SESSION_EXPIRES_MINUTES = 60 * 24 * 7
+# Session cookie ömrü: 40 gün (saniye cinsinden)
+_SESSION_MAX_AGE = 60 * 60 * 24 * 40
+# Session token geçerlilik süresi: 40 gün (dakika cinsinden)
+_SESSION_EXPIRES_MINUTES = 60 * 24 * 40
 
 
 def get_tenant_id(request: Request):
@@ -71,14 +76,13 @@ def _get_cookie_domain(request: Request) -> str | None:
     """
     Cookie domain'ini belirler.
 
-    Kurallar:
-    - Production'da sadece spesifik subdomain (berke.app.com) set edilir
-    - Wildcard (.app.com) KULLANILMAZ
-    - Development ortaminda domain set edilmez
+    Production:
+      - Subdomain'ler arası auth için .bbsoft.com.tr gibi parent domain kullanılır.
+    Dev:
+      - None (domain set edilmez)
     """
     settings = get_settings()
 
-    # Development'da domain set etmiyoruz (localhost uyumu)
     if settings.env != "production":
         return None
 
@@ -86,23 +90,10 @@ def _get_cookie_domain(request: Request) -> str | None:
     if not app_domain:
         return None
 
-    # Host header'dan portu temizle
-    host = (request.headers.get("host", "") or "").split(":")[0].lower()
-    if not host:
-        return None
+    # Parent domain'e cookie yaz (subdomain'ler arası paylaşım için)
+    return "." + app_domain
 
-    # Ana domain'e dogrudan cookie yazma (subdomain zorunlu)
-    if host == app_domain:
-        return None
-
-    # Host, app_domain ile bitmeli (ornek: berke.app.com)
-    if not host.endswith("." + app_domain):
-        return None
-
-    # Domain olarak full host kullan (wildcard yok)
-    return host
-
-def _set_session_cookie(request: Request, response: Response, user_id) -> None:
+def _set_session_cookie(request: Request, response: Response, user_id, session_version: str) -> None:
     """
     Kullanıcı (customer) için HTTP-only session cookie set eder.
     Token içeriği: user id + role=user.
@@ -111,7 +102,7 @@ def _set_session_cookie(request: Request, response: Response, user_id) -> None:
     settings = get_settings()
     cookie_domain = _get_cookie_domain(request)
     token = create_token(
-        {"sub": str(user_id), "role": "user"},
+        {"sub": str(user_id), "role": "user", "sv": session_version},
         expires_minutes=_SESSION_EXPIRES_MINUTES,
     )
     response.set_cookie(
@@ -125,7 +116,7 @@ def _set_session_cookie(request: Request, response: Response, user_id) -> None:
     )
 
 
-def _set_admin_session_cookie(request: Request, response: Response, admin_id) -> None:
+def _set_admin_session_cookie(request: Request, response: Response, admin_id, session_version: str) -> None:
     """
     Admin için HTTP-only session cookie set eder.
     Cookie adı 'admin_session' — kullanıcının 'user_session' cookie'sinden ayrıdır.
@@ -134,7 +125,7 @@ def _set_admin_session_cookie(request: Request, response: Response, admin_id) ->
     settings = get_settings()
     cookie_domain = _get_cookie_domain(request)
     token = create_token(
-        {"sub": str(admin_id), "role": "admin"},  # role=admin: user cookie'sinden ayrışır
+        {"sub": str(admin_id), "role": "admin", "sv": session_version},  # role=admin: user cookie'sinden ayrışır
         expires_minutes=_SESSION_EXPIRES_MINUTES,
     )
     response.set_cookie(
@@ -145,6 +136,90 @@ def _set_admin_session_cookie(request: Request, response: Response, admin_id) ->
         samesite="lax",
         max_age=_SESSION_MAX_AGE,
         domain=cookie_domain,
+    )
+
+
+@router.post("/send-otp", status_code=200)
+async def send_otp_unified(
+    body: SendOTPRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    tenant_id=Depends(get_tenant_id),
+):
+    """
+    Tek giris endpoint'i.
+    Telefon bu tenant'ta admin'e aitse admin OTP, degilse user OTP uretir.
+    """
+    phone_candidates = phone_variants(body.phone)
+    admin_result = await db.execute(
+        select(Admin).where(
+            Admin.tenant_id == tenant_id,
+            Admin.phone.in_(phone_candidates),
+        )
+    )
+    admin_exists = admin_result.scalar_one_or_none() is not None
+
+    if admin_exists:
+        code = await auth_service.send_admin_otp(db, tenant_id, body.phone)
+    else:
+        code = await auth_service.send_otp(db, tenant_id, body.phone)
+
+    background_tasks.add_task(
+        notification_service.send_sms_task,
+        AsyncSessionLocal,
+        _get_provider(),
+        tenant_id,
+        body.phone,
+        notification_service.format_otp_message(code),
+        NotificationMessageType.otp,
+    )
+    return {"message": "otp_sent"}
+
+
+@router.post("/verify-otp", status_code=200, response_model=UnifiedVerifyOTPResponse)
+async def verify_otp_unified(
+    body: VerifyOTPRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    tenant_id=Depends(get_tenant_id),
+):
+    """
+    Tek giris endpoint'i.
+    Telefon admin'e aitse admin cookie, degilse user akisi calisir.
+    """
+    phone_candidates = phone_variants(body.phone)
+    admin_result = await db.execute(
+        select(Admin).where(
+            Admin.tenant_id == tenant_id,
+            Admin.phone.in_(phone_candidates),
+        )
+    )
+    admin = admin_result.scalar_one_or_none()
+    if admin is not None:
+        verified_admin = await auth_service.verify_admin_otp(
+            db,
+            tenant_id,
+            body.phone,
+            body.code,
+        )
+        _set_admin_session_cookie(
+            request,
+            response,
+            verified_admin.id,
+            verified_admin.session_version,
+        )
+        return UnifiedVerifyOTPResponse(next="admin")
+
+    result = await auth_service.verify_otp(db, tenant_id, body.phone, body.code)
+    if result["status"] == "returning_user":
+        user = result["user"]
+        _set_session_cookie(request, response, user.id, user.session_version)
+        return UnifiedVerifyOTPResponse(next="user")
+
+    return UnifiedVerifyOTPResponse(
+        next="register",
+        registration_token=result["registration_token"],
     )
 
 
@@ -198,7 +273,7 @@ async def verify_otp(
 
     if result["status"] == "returning_user":
         user = result["user"]
-        _set_session_cookie(request, response, user.id)
+        _set_session_cookie(request, response, user.id, user.session_version)
         return VerifyOTPResponse(status="returning_user")
 
     # Yeni kullanıcı: henüz kayıt tamamlanmadı, cookie set edilmez
@@ -224,7 +299,7 @@ async def complete_registration(
     user = await auth_service.complete_registration(
         db, tenant_id, body.registration_token, body.first_name, body.last_name
     )
-    _set_session_cookie(request, response, user.id)
+    _set_session_cookie(request, response, user.id, user.session_version)
     return {"status": "registered"}
 
 
@@ -291,7 +366,7 @@ async def admin_verify_otp(
     admin önce /auth/admin/register ile kayıt olmuş olmalıdır.
     """
     admin = await auth_service.verify_admin_otp(db, tenant_id, body.phone, body.code)
-    _set_admin_session_cookie(request, response, admin.id)
+    _set_admin_session_cookie(request, response, admin.id, admin.session_version)
     return {"message": "login_successful"}
 
 
@@ -304,26 +379,55 @@ async def admin_login_password(
     tenant_id=Depends(get_tenant_id),
 ):
     """
-    Email + şifre ile admin girişi.
-    Başarılıysa admin_session cookie set edilir.
-    Email veya şifre yanlışsa 401 döner (hangisinin yanlış olduğu belirtilmez — güvenlik).
+    Admin girisi yalnizca OTP ile yapilir.
+    Bu endpoint bilerek devre disidir.
     """
-    admin = await auth_service.login_admin_password(db, tenant_id, body.email, body.password)
-    _set_admin_session_cookie(request, response, admin.id)
-    return {"message": "login_successful"}
+    raise HTTPException(403, {"error": "otp_required"})
 
 
 # ─── Ortak: Logout ────────────────────────────────────────────────────────────
 
 @router.post("/logout", status_code=200)
-async def logout(request: Request, response: Response):
+async def logout(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    tenant_id=Depends(get_tenant_id),
+):
     """
     Hem user_session hem admin_session cookie'lerini temizler.
     Hangi tip kullanıcı olduğundan bağımsız çalışır; her iki cookie varsa ikisini de siler.
     """
+    # Cookie varsa ilgili token'i decode edip session_version rotate et.
+    # Decode basarisizsa sadece cookie temizlenir; logout idempotent kalir.
+    user_token = request.cookies.get("user_session")
+    if user_token:
+        try:
+            payload = decode_token(user_token)
+            if payload.get("role") == "user" and payload.get("sub"):
+                await auth_service.rotate_user_session_version_by_id(
+                    db,
+                    tenant_id,
+                    payload["sub"],
+                )
+        except JWTError:
+            pass
+
+    admin_token = request.cookies.get("admin_session")
+    if admin_token:
+        try:
+            payload = decode_token(admin_token)
+            if payload.get("role") == "admin" and payload.get("sub"):
+                await auth_service.rotate_admin_session_version_by_id(
+                    db,
+                    tenant_id,
+                    payload["sub"],
+                )
+        except JWTError:
+            pass
+
     # Her iki cookie'yi de sil; sadece biri set edilmişse diğerini silmek sorun değil
     cookie_domain = _get_cookie_domain(request)
     response.delete_cookie("user_session", domain=cookie_domain)
     response.delete_cookie("admin_session", domain=cookie_domain)
     return {"message": "logged_out"}
-
