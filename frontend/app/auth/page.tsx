@@ -89,7 +89,7 @@ export default function AuthPage() {
         setStep("register")
       } else if (res.next === "admin") {
         // Admin oturumu açıldı
-        router.push("/admin")
+        window.location.assign("/admin")
       } else {
         // Cookie set işleminin tüm tarayıcılarda kesinleşmesi için tam sayfa yönlendirme kullan.
         window.location.assign("/")
