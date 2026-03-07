@@ -12,7 +12,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { PhoneInput, OTPInput } from "@/components"
 import { apiPost } from "@/lib/api"
 
@@ -21,8 +20,6 @@ type Step = "phone" | "otp" | "register"
 const TR_PHONE_REGEX = /^\+90\d{10}$/
 
 export default function AuthPage() {
-  const router = useRouter()
-
   // Hangi aşamadayız
   const [step, setStep] = useState<Step>("phone")
 
@@ -94,8 +91,8 @@ export default function AuthPage() {
         // Admin oturumu açıldı
         router.push("/admin")
       } else {
-        // Mevcut kullanıcı — oturum açıldı, ana sayfaya yönlendir
-        router.push("/")
+        // Cookie set işleminin tüm tarayıcılarda kesinleşmesi için tam sayfa yönlendirme kullan.
+        window.location.assign("/")
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Kod doğrulanamadı.")
@@ -123,8 +120,8 @@ export default function AuthPage() {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
       })
-      // Kayıt tamamlandı, ana sayfaya yönlendir
-      router.push("/")
+      // Cookie set işleminin tüm tarayıcılarda kesinleşmesi için tam sayfa yönlendirme kullan.
+      window.location.assign("/")
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Kayıt tamamlanamadı.")
     } finally {
@@ -150,8 +147,8 @@ export default function AuthPage() {
   }
 
   return (
-    // Tam ekran, dikey ortala — mobilde üstten boşluk bırak
-    <div className="min-h-screen bg-zinc-950 flex flex-col justify-center px-4 py-12">
+    // Mobilde klavye acildiginda ziplamayi azaltmak icin dikey ortalama yerine ustten hizala.
+    <div className="min-h-[100dvh] bg-zinc-950 px-4 py-6 sm:py-10">
       <div className="w-full max-w-sm mx-auto">
 
         {/* Logo / Başlık */}
@@ -255,7 +252,7 @@ export default function AuthPage() {
                   onChange={(e) => setFirstName(e.target.value)}
                   disabled={isLoading}
                   placeholder="Adınız"
-                  className="w-full px-3 py-3 border border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent disabled:bg-zinc-950"
+                  className="w-full px-3 py-3 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent disabled:bg-zinc-950"
                 />
               </div>
 
@@ -267,7 +264,7 @@ export default function AuthPage() {
                   onChange={(e) => setLastName(e.target.value)}
                   disabled={isLoading}
                   placeholder="Soyadınız"
-                  className="w-full px-3 py-3 border border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent disabled:bg-zinc-950"
+                  className="w-full px-3 py-3 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent disabled:bg-zinc-950"
                 />
               </div>
 

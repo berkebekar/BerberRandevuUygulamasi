@@ -117,7 +117,7 @@ export default function AdminSettingsPage() {
 
       <div className="px-4 pt-6 space-y-4 max-w-sm mx-auto">
         {/* Calisma saatleri */}
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3 overflow-hidden">
           <h2 className="text-sm font-semibold text-zinc-200">Calisma Saatleri</h2>
 
           <div>
@@ -128,7 +128,7 @@ export default function AdminSettingsPage() {
               type="time"
               value={workStart}
               onChange={(e) => setWorkStart(e.target.value)}
-              className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
+              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
             />
           </div>
 
@@ -140,7 +140,7 @@ export default function AdminSettingsPage() {
               type="time"
               value={workEnd}
               onChange={(e) => setWorkEnd(e.target.value)}
-              className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
+              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
             />
           </div>
         </div>
