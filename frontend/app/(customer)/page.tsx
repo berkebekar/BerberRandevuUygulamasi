@@ -231,25 +231,25 @@ export default function HomePage() {
                       isCancelled ? "bg-zinc-950 border-zinc-800" : "bg-zinc-900 border-zinc-700"
                     }`}
                   >
-                    <div>
-                      <p className={`text-sm font-semibold ${isCancelled ? "text-zinc-300" : "text-zinc-100"}`}>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-semibold break-words ${isCancelled ? "text-zinc-300" : "text-zinc-100"}`}>
                         {timeText} - {fullName}
                       </p>
-                      <p className="text-xs text-zinc-500 mt-0.5">{dateText}</p>
+                      <p className="text-xs text-zinc-500 mt-0.5 break-words">{dateText}</p>
                       {isCancelled && (
-                        <p className="text-xs text-zinc-500 mt-0.5">{getCancellationText(booking.cancelled_by)}</p>
+                        <p className="text-xs text-zinc-500 mt-0.5 break-words">{getCancellationText(booking.cancelled_by)}</p>
                       )}
                     </div>
                     {!isCancelled ? (
                       <button
                         type="button"
                         onClick={() => setPendingCancelBooking(booking)}
-                        className="text-sm text-red-300 hover:text-red-200"
+                        className="text-sm text-red-300 hover:text-red-200 shrink-0 ml-3"
                       >
                         Iptal Et
                       </button>
                     ) : (
-                      <span className="text-sm text-zinc-600">Iptal Edildi</span>
+                      <span className="text-sm text-zinc-600 shrink-0 ml-3">Iptal Edildi</span>
                     )}
                   </div>
                 )

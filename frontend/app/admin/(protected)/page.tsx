@@ -596,22 +596,22 @@ export default function AdminDashboardPage() {
                       isCancelled ? "bg-zinc-950 border-zinc-800" : "bg-zinc-900 border-zinc-800"
                     }`}
                   >
-                    <div>
-                      <p className="text-sm font-medium text-zinc-100">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-zinc-100 break-words">
                         {timeStr} — {b.user_first_name} {b.user_last_name}
                       </p>
                       {showPhone && (
-                        <p className="text-xs text-zinc-400">{b.user_phone}</p>
+                        <p className="text-xs text-zinc-400 break-all">{b.user_phone}</p>
                       )}
                       {/* Randevu durum etiketi */}
                       {statusText && (
-                        <p className="text-xs text-zinc-500 mt-0.5">{statusText}</p>
+                        <p className="text-xs text-zinc-500 mt-0.5 break-words">{statusText}</p>
                       )}
                     </div>
                     {!isCancelled && !isNoShow && !isPastBooking && (
                       <button
                         onClick={() => handleCancelBooking(b.id)}
-                        className="text-xs text-red-300 hover:text-red-200"
+                        className="text-xs text-red-300 hover:text-red-200 shrink-0 ml-3"
                       >
                         Iptal Et
                       </button>
@@ -621,7 +621,7 @@ export default function AdminDashboardPage() {
                         type="button"
                         aria-label="Gerceklesmedi olarak isaretle"
                         onClick={() => handleMarkNoShow(b.id)}
-                        className="text-sm font-semibold text-emerald-300 hover:text-emerald-200"
+                        className="text-sm font-semibold text-emerald-300 hover:text-emerald-200 shrink-0 ml-3"
                       >
                         ✓
                       </button>
@@ -631,7 +631,7 @@ export default function AdminDashboardPage() {
                         type="button"
                         aria-label="Gerceklesti olarak isaretle"
                         onClick={() => handleMarkConfirmed(b.id)}
-                        className="text-sm font-semibold text-red-300 hover:text-red-200"
+                        className="text-sm font-semibold text-red-300 hover:text-red-200 shrink-0 ml-3"
                       >
                         ✕
                       </button>
@@ -639,7 +639,7 @@ export default function AdminDashboardPage() {
                     {isCancelled && (
                       <button
                         disabled
-                        className="text-xs text-zinc-600"
+                        className="text-xs text-zinc-600 shrink-0 ml-3"
                       >
                         Iptal Et
                       </button>
@@ -695,7 +695,7 @@ export default function AdminDashboardPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-medium text-zinc-400 mb-1">
                     Ad
                   </label>
@@ -704,10 +704,10 @@ export default function AdminDashboardPage() {
                     value={manualFirstName}
                     onChange={(e) => setManualFirstName(e.target.value)}
                     placeholder="Ad"
-                    className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
+                    className="w-full min-w-0 px-3 py-2.5 border border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-medium text-zinc-400 mb-1">
                     Soyad
                   </label>
@@ -716,7 +716,7 @@ export default function AdminDashboardPage() {
                     value={manualLastName}
                     onChange={(e) => setManualLastName(e.target.value)}
                     placeholder="Soyad"
-                    className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
+                    className="w-full min-w-0 px-3 py-2.5 border border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
                   />
                 </div>
               </div>
@@ -739,7 +739,7 @@ export default function AdminDashboardPage() {
                     <span className="text-xs text-zinc-400">{slotMenuOpen ? "▲" : "▼"}</span>
                   </button>
                   {slotMenuOpen && (
-                    <div className="absolute bottom-full mb-2 w-full max-h-56 overflow-auto rounded-lg border border-zinc-700 bg-zinc-950 text-sm shadow-lg z-10">
+                    <div className="absolute bottom-full mb-2 w-full max-h-48 overflow-auto rounded-lg border border-zinc-700 bg-zinc-950 text-sm shadow-lg z-20 overscroll-contain">
                       {availableManualSlots.length === 0 ? (
                         <div className="px-3 py-2 text-zinc-400">Uygun saat yok</div>
                       ) : (
