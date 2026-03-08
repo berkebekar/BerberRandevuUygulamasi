@@ -73,6 +73,16 @@ def _resolve_slot_duration_minutes(profile: BarberProfile, override: DayOverride
     return profile.slot_duration_minutes
 
 
+def _resolve_day_end_datetime(target_date: date, end_time: time) -> datetime:
+    """
+    00:00 bitis saati gun sonu (24:00) olarak yorumlanir.
+    Diger saatlerde ayni gun icindeki bitis zamani kullanilir.
+    """
+    if end_time == time(0, 0):
+        return datetime.combine(target_date + timedelta(days=1), time.min, tzinfo=TZ)
+    return datetime.combine(target_date, end_time, tzinfo=TZ)
+
+
 # ─── Yardımcı: Tek gün slot üretimi ──────────────────────────────────────────
 
 def _build_day_slots(
@@ -132,7 +142,7 @@ def _build_day_slots(
     # Istanbul timezone'unda aware datetime'lar oluşturuyoruz
     slot_datetimes: list[datetime] = []
     current = datetime.combine(target_date, start_time, tzinfo=TZ)
-    day_end = datetime.combine(target_date, end_time, tzinfo=TZ)
+    day_end = _resolve_day_end_datetime(target_date, end_time)
 
     while current + duration <= day_end:
         # Slot başlangıcı + süre ≤ günün bitiş saati → geçerli slot

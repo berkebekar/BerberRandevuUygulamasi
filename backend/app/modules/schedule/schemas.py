@@ -89,6 +89,8 @@ class BarberSettingsRequest(BaseModel):
     def end_after_start(cls, v: time, info) -> time:
         """BitiÅŸ saati baÅŸlangÄ±Ã§tan bÃ¼yÃ¼k olmalÄ±dÄ±r."""
         start = info.data.get("work_start_time")
+        if start and v == time(0, 0) and start != time(0, 0):
+            return v
         if start and v <= start:
             raise ValueError("BitiÅŸ saati baÅŸlangÄ±Ã§ saatinden bÃ¼yÃ¼k olmalÄ±dÄ±r")
         return v
@@ -136,6 +138,8 @@ class DayOverrideRequest(BaseModel):
                 raise ValueError(
                     "is_closed=False ise work_start_time ve work_end_time zorunludur"
                 )
+            if self.work_end_time == time(0, 0) and self.work_start_time != time(0, 0):
+                return self
             if self.work_end_time <= self.work_start_time:
                 raise ValueError("BitiÅŸ saati baÅŸlangÄ±Ã§ saatinden bÃ¼yÃ¼k olmalÄ±dÄ±r")
         return self

@@ -228,6 +228,60 @@ async def test_day_override_ile_ozel_slot_suresi():
 
 
 @pytest.mark.asyncio
+async def test_genel_ayar_bitis_0000_olunca_son_slot_2330_olur():
+    """
+    Genel ayarda bitis 00:00 ise gun sonu (24:00) kabul edilir.
+    30dk surede 23:00 ve 23:30 slotlari olusmalidir.
+    """
+    profile = _make_profile(slot_duration_minutes=30, work_start=time(23, 0), work_end=time(0, 0))
+    now_22_30 = datetime(2026, 6, 15, 22, 30, tzinfo=TZ)
+
+    session = _make_mock_session(
+        _make_scalar_result(profile),
+        _make_scalar_result(None),
+        _make_scalars_result([]),
+        _make_scalars_result([]),
+    )
+
+    result = await schedule_service.get_slots_for_date(
+        session, TEST_TENANT_ID, TEST_DATE, now=now_22_30
+    )
+
+    assert result.is_closed is False
+    assert [slot.time for slot in result.slots] == ["23:00", "23:30"]
+
+
+@pytest.mark.asyncio
+async def test_ozel_gun_bitis_0000_olunca_son_slot_2330_olur():
+    """
+    Ozel gunde bitis 00:00 ise gun sonu (24:00) kabul edilir.
+    """
+    profile = _make_profile(slot_duration_minutes=30, work_start=time(9, 0), work_end=time(19, 0))
+    override = _make_override(
+        TEST_DATE,
+        is_closed=False,
+        start=time(23, 0),
+        end=time(0, 0),
+        slot_duration_minutes=30,
+    )
+    now_22_30 = datetime(2026, 6, 15, 22, 30, tzinfo=TZ)
+
+    session = _make_mock_session(
+        _make_scalar_result(profile),
+        _make_scalar_result(override),
+        _make_scalars_result([]),
+        _make_scalars_result([]),
+    )
+
+    result = await schedule_service.get_slots_for_date(
+        session, TEST_TENANT_ID, TEST_DATE, now=now_22_30
+    )
+
+    assert result.is_closed is False
+    assert [slot.time for slot in result.slots] == ["23:00", "23:30"]
+
+
+@pytest.mark.asyncio
 async def test_kapali_gunde_bos_liste():
     """
     DayOverride is_closed=True → o gün hiç slot dönmemeli.

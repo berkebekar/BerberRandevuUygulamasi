@@ -60,6 +60,16 @@ def _resolve_max_days_ahead(profile: BarberProfile | None) -> int:
     return BOOKING_MAX_DAYS_AHEAD
 
 
+def _resolve_day_end_datetime(target_date: date, end_time: time) -> datetime:
+    """
+    00:00 bitisi gun sonu (24:00) kabul edilir.
+    Bu sayede 23:30-00:00 gibi son slotlar gecerli olur.
+    """
+    if end_time == time(0, 0):
+        return datetime.combine(target_date + timedelta(days=1), time.min, tzinfo=TZ)
+    return datetime.combine(target_date, end_time, tzinfo=TZ)
+
+
 # â”€â”€â”€ YardÄ±mcÄ±: Slot Takvimde GeÃ§erli mi? â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _validate_slot_in_schedule(
@@ -133,7 +143,7 @@ async def _validate_slot_in_schedule(
 
     # GÃ¼nÃ¼n baÅŸlangÄ±Ã§ ve bitiÅŸ zamanlarÄ±nÄ± Ä°stanbul timezone'unda oluÅŸtur
     day_start = datetime.combine(slot_local.date(), start_time, tzinfo=TZ)
-    day_end = datetime.combine(slot_local.date(), end_time, tzinfo=TZ)
+    day_end = _resolve_day_end_datetime(slot_local.date(), end_time)
 
     # Slot Ã§alÄ±ÅŸma saatleri aralÄ±ÄŸÄ±nda mÄ±?
     if slot_local < day_start or slot_local >= day_end:

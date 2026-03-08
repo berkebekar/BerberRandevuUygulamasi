@@ -42,6 +42,23 @@ def test_schedule_settings_rejects_invalid_max_booking_days_ahead(invalid_days: 
         BarberSettingsRequest(**payload)
 
 
+def test_schedule_settings_accepts_midnight_as_end_of_day():
+    payload = _base_payload(30)
+    payload["work_start_time"] = "09:00"
+    payload["work_end_time"] = "00:00"
+    req = BarberSettingsRequest(**payload)
+    assert req.work_end_time.hour == 0
+    assert req.work_end_time.minute == 0
+
+
+def test_schedule_settings_rejects_same_start_and_end_at_midnight():
+    payload = _base_payload(30)
+    payload["work_start_time"] = "00:00"
+    payload["work_end_time"] = "00:00"
+    with pytest.raises(ValidationError):
+        BarberSettingsRequest(**payload)
+
+
 @pytest.mark.parametrize("valid_duration", [None, 5, 30, 120])
 def test_day_override_accepts_valid_slot_duration(valid_duration: int | None):
     req = DayOverrideRequest(
