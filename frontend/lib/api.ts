@@ -64,6 +64,16 @@ async function parseError(res: Response): Promise<ParsedApiError> {
     const data = (await res.json()) as Record<string, unknown>
 
     if (typeof data?.error === "string") {
+      if (
+        data.error === "too_far_in_future" &&
+        typeof data.max_booking_days_ahead === "number"
+      ) {
+        return {
+          message: `En fazla ${data.max_booking_days_ahead} gun sonrasi icin randevu alabilirsiniz.`,
+          errorCode: data.error,
+          payload: data,
+        }
+      }
       return {
         message: ERROR_CODE_MESSAGES[data.error] ?? STATUS_MESSAGES[res.status] ?? "Bir hata olustu.",
         errorCode: data.error,

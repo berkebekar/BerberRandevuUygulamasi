@@ -15,6 +15,7 @@ type BarberSettings = {
   work_start_time: string // "09:00:00" veya "09:00"
   work_end_time: string
   weekly_closed_days: number[]
+  max_booking_days_ahead: number
 }
 
 const WEEK_DAYS = [
@@ -38,6 +39,7 @@ export default function AdminSettingsPage() {
   const [workStart, setWorkStart] = useState("09:00")
   const [workEnd, setWorkEnd] = useState("19:00")
   const [closedDays, setClosedDays] = useState<number[]>([])
+  const [maxBookingDaysAhead, setMaxBookingDaysAhead] = useState(14)
 
   // UI state
   const [isLoading, setIsLoading] = useState(false)
@@ -65,6 +67,7 @@ export default function AdminSettingsPage() {
           setWorkStart(data.work_start_time.slice(0, 5))
           setWorkEnd(data.work_end_time.slice(0, 5))
           setClosedDays(data.weekly_closed_days ?? [])
+          setMaxBookingDaysAhead(data.max_booking_days_ahead ?? 14)
         }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Ayarlar yuklenemedi.")
@@ -93,6 +96,7 @@ export default function AdminSettingsPage() {
         work_start_time: workStart,
         work_end_time: workEnd,
         weekly_closed_days: closedDays,
+        max_booking_days_ahead: maxBookingDaysAhead,
       })
       setSuccess("Ayarlar kaydedildi.")
     } catch (err: unknown) {
@@ -161,6 +165,24 @@ export default function AdminSettingsPage() {
             {DURATION_OPTIONS.map((value) => (
               <option key={value} value={value}>
                 {value} dk
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+          <h2 className="text-sm font-semibold text-zinc-200">Ileri Tarih Limiti</h2>
+          <label className="block text-xs font-medium text-zinc-400 mb-1">
+            Kac gun sonrasina kadar randevu alinabilir?
+          </label>
+          <select
+            value={maxBookingDaysAhead}
+            onChange={(e) => setMaxBookingDaysAhead(Number(e.target.value))}
+            className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
+          >
+            {Array.from({ length: 60 }, (_, i) => i + 1).map((value) => (
+              <option key={value} value={value}>
+                {value} gun
               </option>
             ))}
           </select>

@@ -37,6 +37,7 @@ type DashboardResponse = {
 type AdminOverviewResponse = {
   date: string
   is_closed: boolean
+  max_booking_days_ahead: number
   bookings: DashboardBookingItem[]
   slots: { datetime: string; end_datetime?: string; status: AdminSlotStatus }[]
   blocks: { id: string; blocked_at: string; reason?: string | null }[]
@@ -119,10 +120,11 @@ function isSlotPastOrNow(slotTime: string): boolean {
 
 export default function AdminDashboardPage() {
   const router = useRouter()
-  const weekDays = buildBookingDays()
+  const [maxBookingDaysAhead, setMaxBookingDaysAhead] = useState(14)
+  const weekDays = useMemo(() => buildBookingDays(maxBookingDaysAhead), [maxBookingDaysAhead])
 
   // Secili tarih (varsayilan bugun)
-  const [selectedDate, setSelectedDate] = useState(weekDays[0].date)
+  const [selectedDate, setSelectedDate] = useState(() => buildBookingDays(14)[0].date)
 
   // Dashboard state
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
@@ -171,6 +173,7 @@ export default function AdminDashboardPage() {
     setError("")
     try {
       const data = await apiFetch<AdminOverviewResponse>(`/api/v1/admin/overview?date=${date}`)
+      setMaxBookingDaysAhead(data.max_booking_days_ahead ?? 14)
       setDashboard({
         date: data.date,
         bookings: data.bookings,
@@ -202,6 +205,13 @@ export default function AdminDashboardPage() {
   /**
    * Tarih degistikce dashboard + slots + blocks cek.
    */
+  useEffect(() => {
+    if (weekDays.some((day) => day.date === selectedDate)) return
+    if (weekDays[0]) {
+      setSelectedDate(weekDays[0].date)
+    }
+  }, [weekDays, selectedDate])
+
   useEffect(() => {
     fetchOverview(selectedDate)
   }, [selectedDate, fetchOverview])

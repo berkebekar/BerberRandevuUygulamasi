@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { ActionConfirmSheet, SlotGrid } from "@/components"
 import type { Slot } from "@/components"
@@ -50,9 +50,10 @@ function getCancellationText(cancelledBy?: "admin" | "user" | null): string {
 
 export default function HomePage() {
   const router = useRouter()
-  const weekDays = buildBookingDays()
+  const [maxBookingDaysAhead, setMaxBookingDaysAhead] = useState(14)
+  const weekDays = useMemo(() => buildBookingDays(maxBookingDaysAhead), [maxBookingDaysAhead])
 
-  const [selectedDate, setSelectedDate] = useState(weekDays[0].date)
+  const [selectedDate, setSelectedDate] = useState(() => buildBookingDays(14)[0].date)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
 
   const [slots, setSlots] = useState<Slot[]>([])
@@ -75,9 +76,13 @@ export default function HomePage() {
     if (resetSelection) setSelectedSlot(null)
 
     try {
-      const data = await apiFetch<{ slots: { datetime: string; end_datetime?: string; status: Slot["status"] }[] }>(
+      const data = await apiFetch<{
+        max_booking_days_ahead?: number
+        slots: { datetime: string; end_datetime?: string; status: Slot["status"] }[]
+      }>(
         `/api/v1/slots?date=${date}`
       )
+      setMaxBookingDaysAhead(data.max_booking_days_ahead ?? 14)
       const normalized = (data.slots ?? []).map((slot) => ({
         slot_time: slot.datetime,
         slot_end_time: slot.end_datetime,
@@ -115,6 +120,13 @@ export default function HomePage() {
       setUpcomingBookings({ status: "error", items: [] })
     }
   }, [])
+
+  useEffect(() => {
+    if (weekDays.some((day) => day.date === selectedDate)) return
+    if (weekDays[0]) {
+      setSelectedDate(weekDays[0].date)
+    }
+  }, [weekDays, selectedDate])
 
   useEffect(() => {
     fetchSlots(selectedDate, { resetSelection: true })

@@ -44,6 +44,7 @@ def _make_profile(
     work_start: time = time(9, 0),
     work_end: time = time(19, 0),
     weekly_closed_days: list[int] | None = None,
+    max_booking_days_ahead: int = 14,
 ) -> SimpleNamespace:
     """Test için BarberProfile benzeri nesne üretir."""
     return SimpleNamespace(
@@ -53,6 +54,7 @@ def _make_profile(
         work_start_time=work_start,
         work_end_time=work_end,
         weekly_closed_days=weekly_closed_days or [],
+        max_booking_days_ahead=max_booking_days_ahead,
     )
 
 
@@ -215,6 +217,27 @@ async def test_14_gun_sinirinda_slot_too_far_hatasi_vermez():
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail["error"] == "invalid_slot"
+
+
+@pytest.mark.asyncio
+async def test_tenant_ileri_tarih_limiti_asildiginda_400():
+    """
+    Tenant ayarindaki max_booking_days_ahead degerinin disindaki slot reddedilmelidir.
+    """
+    uzak_slot = _future_slot(days_ahead=8)
+    profile = _make_profile(max_booking_days_ahead=7)
+
+    session = _make_mock_session(
+        _make_db_result(profile),  # Kural 2 icin profile
+        # _validate_slot_in_schedule cagrilmamali; cunku once too_far bekleniyor
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await booking_service.create_booking(session, TEST_TENANT_ID, TEST_USER_ID, uzak_slot)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["error"] == "too_far_in_future"
+    assert exc_info.value.detail["max_booking_days_ahead"] == 7
 
 
 # ─── Test 3: Geçersiz Slot — Berber Ayarı Yok ────────────────────────────────

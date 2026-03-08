@@ -35,9 +35,6 @@ logger = logging.getLogger(__name__)
 # Projenin tek timezone'u â€” deÄŸiÅŸtirilemez (CLAUDE.md)
 TZ = ZoneInfo("Europe/Istanbul")
 
-# Randevu alınabilecek maksimum ileri tarih.
-MAX_DAYS_AHEAD = BOOKING_MAX_DAYS_AHEAD
-
 # Ayni kullanicinin ayni gun alabilecegi maksimum confirmed randevu sayisi.
 MAX_BOOKINGS_PER_DAY = 3
 USER_CANCELLATION_MINUTES_BEFORE = 15
@@ -53,12 +50,23 @@ def _to_local_tz(dt: datetime) -> datetime:
     return dt.astimezone(TZ)
 
 
+def _resolve_max_days_ahead(profile: BarberProfile | None) -> int:
+    """Ileri tarih limitini profile kaydindan cozer, yoksa varsayilana doner."""
+    if profile is None:
+        return BOOKING_MAX_DAYS_AHEAD
+    value = getattr(profile, "max_booking_days_ahead", BOOKING_MAX_DAYS_AHEAD)
+    if isinstance(value, int) and value > 0:
+        return value
+    return BOOKING_MAX_DAYS_AHEAD
+
+
 # â”€â”€â”€ YardÄ±mcÄ±: Slot Takvimde GeÃ§erli mi? â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _validate_slot_in_schedule(
     db: AsyncSession,
     tenant_id: uuid.UUID,
     slot_local: datetime,
+    profile: BarberProfile | None = None,
 ) -> bool:
     """
     Verilen slot zamanÄ±nÄ±n berber takvimine gÃ¶re geÃ§erli olup olmadÄ±ÄŸÄ±nÄ± kontrol eder.
@@ -77,10 +85,11 @@ async def _validate_slot_in_schedule(
         True: Slot geÃ§erli, False: Slot takvimde yok.
     """
     # BarberProfile: berber ayar girmemiÅŸse slot olamaz
-    profile_result = await db.execute(
-        select(BarberProfile).where(BarberProfile.tenant_id == tenant_id)
-    )
-    profile = profile_result.scalar_one_or_none()
+    if profile is None:
+        profile_result = await db.execute(
+            select(BarberProfile).where(BarberProfile.tenant_id == tenant_id)
+        )
+        profile = profile_result.scalar_one_or_none()
     if profile is None:
         # Berber henÃ¼z Ã§alÄ±ÅŸma ayarlarÄ±nÄ± girmemiÅŸ â€” geÃ§ersiz slot
         return False
@@ -196,12 +205,24 @@ async def create_booking(
         # GeÃ§miÅŸ veya tam ÅŸu anki slota randevu alÄ±namaz (CLAUDE.md)
         raise HTTPException(400, {"error": "slot_in_past"})
 
+    profile_result = await db.execute(
+        select(BarberProfile).where(BarberProfile.tenant_id == tenant_id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    max_days_ahead = _resolve_max_days_ahead(profile)
+
     # Kural 2: İzin verilen günden daha ileri bir tarihe randevu alınamaz
-    if slot_local > now + timedelta(days=MAX_DAYS_AHEAD):
-        raise HTTPException(400, {"error": "too_far_in_future"})
+    if slot_local > now + timedelta(days=max_days_ahead):
+        raise HTTPException(
+            400,
+            {"error": "too_far_in_future", "max_booking_days_ahead": max_days_ahead},
+        )
+
+    if profile is None:
+        raise HTTPException(400, {"error": "invalid_slot"})
 
     # Kural 3: Slot berber takvimine gÃ¶re geÃ§erli mi?
-    if not await _validate_slot_in_schedule(db, tenant_id, slot_local):
+    if not await _validate_slot_in_schedule(db, tenant_id, slot_local, profile=profile):
         # Slot Ã§alÄ±ÅŸma saatlerinde yok veya berber ayarÄ± girilmemiÅŸ
         raise HTTPException(400, {"error": "invalid_slot"})
 

@@ -6,11 +6,14 @@ export type BookingDayItem = {
   shortDate: string
 }
 
-export function buildBookingDays(): BookingDayItem[] {
+export function buildBookingDays(maxDaysAhead: number = BOOKING_MAX_DAYS_AHEAD): BookingDayItem[] {
   const days: BookingDayItem[] = []
   const now = new Date()
+  const safeMaxDaysAhead = Number.isFinite(maxDaysAhead)
+    ? Math.min(60, Math.max(1, Math.floor(maxDaysAhead)))
+    : BOOKING_MAX_DAYS_AHEAD
 
-  for (let i = 0; i < BOOKING_MAX_DAYS_AHEAD; i++) {
+  for (let i = 0; i <= safeMaxDaysAhead; i++) {
     const d = new Date(now)
     d.setDate(now.getDate() + i)
 

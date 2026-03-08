@@ -71,5 +71,6 @@ class AdminOverviewResponse(BaseModel):
     date: date
     bookings: list[DashboardBookingItem]
     is_closed: bool
+    max_booking_days_ahead: int = 14
     slots: list[OverviewSlotItem]
     blocks: list[OverviewBlockedSlotItem]

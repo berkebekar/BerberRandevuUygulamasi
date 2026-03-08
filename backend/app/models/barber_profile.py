@@ -33,6 +33,9 @@ class BarberProfile(Base):
     weekly_closed_days: Mapped[list[int]] = mapped_column(
         ARRAY(Integer), nullable=False, server_default=text("'{}'::integer[]")
     )
+    max_booking_days_ahead: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("14")
+    )
     updated_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

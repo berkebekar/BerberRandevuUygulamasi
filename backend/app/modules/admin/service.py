@@ -73,6 +73,7 @@ async def get_overview(
         "date": target_date,
         "bookings": _serialize_dashboard_rows(booking_rows),
         "is_closed": day_slots.is_closed,
+        "max_booking_days_ahead": getattr(day_slots, "max_booking_days_ahead", 14),
         "slots": [
             {
                 "time": slot.time,

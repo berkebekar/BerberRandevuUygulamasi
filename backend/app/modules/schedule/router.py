@@ -99,6 +99,7 @@ async def get_schedule_settings(
         work_start_time=profile.work_start_time,
         work_end_time=profile.work_end_time,
         weekly_closed_days=profile.weekly_closed_days,
+        max_booking_days_ahead=getattr(profile, "max_booking_days_ahead", 14),
     )
 
 
@@ -120,12 +121,14 @@ async def update_schedule_settings(
         body.work_start_time,
         body.work_end_time,
         body.weekly_closed_days,
+        body.max_booking_days_ahead,
     )
     return BarberSettingsResponse(
         slot_duration_minutes=profile.slot_duration_minutes,
         work_start_time=profile.work_start_time,
         work_end_time=profile.work_end_time,
         weekly_closed_days=profile.weekly_closed_days,
+        max_booking_days_ahead=getattr(profile, "max_booking_days_ahead", 14),
     )
 
 

@@ -45,6 +45,7 @@ class DaySlots(BaseModel):
     """Bir gÃ¼ne ait tÃ¼m slotlar."""
     date: date
     is_closed: bool   # True ise o gÃ¼n tamamen kapalÄ±, slots listesi boÅŸtur
+    max_booking_days_ahead: int = 14
     slots: list[SlotItem]
 
 
@@ -61,6 +62,7 @@ class BarberSettingsResponse(BaseModel):
     work_start_time: time
     work_end_time: time
     weekly_closed_days: list[int]
+    max_booking_days_ahead: int = 14
 
 
 class BarberSettingsRequest(BaseModel):
@@ -72,6 +74,7 @@ class BarberSettingsRequest(BaseModel):
     work_start_time: time
     work_end_time: time
     weekly_closed_days: list[int] = []
+    max_booking_days_ahead: int = 14
 
     @field_validator("slot_duration_minutes")
     @classmethod
@@ -97,6 +100,14 @@ class BarberSettingsRequest(BaseModel):
         if any(day < 0 or day > 6 for day in v):
             raise ValueError("HaftanÄ±n gÃ¼nleri 0 ile 6 arasÄ±nda olmalÄ±dÄ±r")
         return sorted(set(v))
+
+    @field_validator("max_booking_days_ahead")
+    @classmethod
+    def valid_max_booking_days(cls, v: int) -> int:
+        """Ileri tarih limiti 1-60 gun araliginda olmalidir."""
+        if v < 1 or v > 60:
+            raise ValueError("Ileri tarih limiti 1 ile 60 gun arasinda olmalidir")
+        return v
 
 
 # â”€â”€â”€ Admin: GÃ¼nlÃ¼k Override â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

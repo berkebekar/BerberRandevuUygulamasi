@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 # Projenin tek timezone'u — değiştirilemez (CLAUDE.md)
 TZ = ZoneInfo("Europe/Istanbul")
+DEFAULT_MAX_BOOKING_DAYS_AHEAD = 14
 
 
 # ─── Yardımcı: Timezone normalize ────────────────────────────────────────────
@@ -52,6 +53,15 @@ def _to_utc(dt: datetime) -> datetime:
         # asyncpg bazen naive UTC döndürebilir
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+def _resolve_max_booking_days_ahead(profile: BarberProfile | None) -> int:
+    """BarberProfile kaydindan ileri tarih limitini guvenli sekilde cozer."""
+    if profile is None:
+        return DEFAULT_MAX_BOOKING_DAYS_AHEAD
+    raw_value = getattr(profile, "max_booking_days_ahead", DEFAULT_MAX_BOOKING_DAYS_AHEAD)
+    if isinstance(raw_value, int) and raw_value > 0:
+        return raw_value
+    return DEFAULT_MAX_BOOKING_DAYS_AHEAD
 
 
 # ─── Yardımcı: Tek gün slot üretimi ──────────────────────────────────────────
@@ -78,12 +88,23 @@ def _build_day_slots(
     """
     # Haftalık kapalı gün kontrolü
     weekday = target_date.weekday()
+    max_booking_days_ahead = _resolve_max_booking_days_ahead(profile)
     if profile.weekly_closed_days and weekday in profile.weekly_closed_days:
-        return DaySlots(date=target_date, is_closed=True, slots=[])
+        return DaySlots(
+            date=target_date,
+            is_closed=True,
+            max_booking_days_ahead=max_booking_days_ahead,
+            slots=[],
+        )
 
     # DayOverride var ve gün kapalıysa: hiç slot üretme
     if override and override.is_closed:
-        return DaySlots(date=target_date, is_closed=True, slots=[])
+        return DaySlots(
+            date=target_date,
+            is_closed=True,
+            max_booking_days_ahead=max_booking_days_ahead,
+            slots=[],
+        )
 
     # Çalışma saatlerini belirle: override varsa override'ı, yoksa profile'ı kullan
     start_time = (
@@ -136,7 +157,12 @@ def _build_day_slots(
             status=status,
         ))
 
-    return DaySlots(date=target_date, is_closed=False, slots=slots)
+    return DaySlots(
+        date=target_date,
+        is_closed=False,
+        max_booking_days_ahead=max_booking_days_ahead,
+        slots=slots,
+    )
 
 
 # ─── Slot Okuma ───────────────────────────────────────────────────────────────
@@ -166,7 +192,12 @@ async def get_slots_for_date(
     profile = profile_result.scalar_one_or_none()
     if profile is None:
         # Berber henüz çalışma ayarlarını girmemiş — boş liste
-        return DaySlots(date=target_date, is_closed=False, slots=[])
+        return DaySlots(
+            date=target_date,
+            is_closed=False,
+            max_booking_days_ahead=DEFAULT_MAX_BOOKING_DAYS_AHEAD,
+            slots=[],
+        )
 
     # 2. DayOverride: bu gün için özel ayar var mı?
     override_result = await db.execute(
@@ -180,7 +211,12 @@ async def get_slots_for_date(
     # Gün kapalıysa booking ve block sorgusu yapmadan erken dön
     # (is_closed=True → bu gün berber çalışmıyor, listelenecek slot yok)
     if override and override.is_closed:
-        return DaySlots(date=target_date, is_closed=True, slots=[])
+        return DaySlots(
+            date=target_date,
+            is_closed=True,
+            max_booking_days_ahead=_resolve_max_booking_days_ahead(profile),
+            slots=[],
+        )
 
     # 3. Gün için confirmed bookings'i çek
     day_start = datetime.combine(target_date, time.min, tzinfo=TZ)
@@ -233,7 +269,12 @@ async def get_slots_for_week(
     if profile is None:
         # Ayar yok → tüm 7 gün için boş liste
         empty_days = [
-            DaySlots(date=start_date + timedelta(days=i), is_closed=False, slots=[])
+            DaySlots(
+                date=start_date + timedelta(days=i),
+                is_closed=False,
+                max_booking_days_ahead=DEFAULT_MAX_BOOKING_DAYS_AHEAD,
+                slots=[],
+            )
             for i in range(7)
         ]
         return WeekSlots(week=empty_days)
@@ -320,6 +361,7 @@ async def upsert_barber_settings(
     work_start_time: time,
     work_end_time: time,
     weekly_closed_days: list[int],
+    max_booking_days_ahead: int,
 ) -> BarberProfile:
     """
     Berber çalışma ayarlarını oluşturur veya günceller (upsert).
@@ -338,6 +380,7 @@ async def upsert_barber_settings(
         existing.work_start_time = work_start_time
         existing.work_end_time = work_end_time
         existing.weekly_closed_days = weekly_closed_days
+        existing.max_booking_days_ahead = max_booking_days_ahead
         # updated_at modelde onupdate yok; her güncellemede manuel set et
         existing.updated_at = datetime.now(timezone.utc)
     else:
@@ -348,6 +391,7 @@ async def upsert_barber_settings(
             work_start_time=work_start_time,
             work_end_time=work_end_time,
             weekly_closed_days=weekly_closed_days,
+            max_booking_days_ahead=max_booking_days_ahead,
         )
         db.add(existing)
 
@@ -516,3 +560,7 @@ async def get_blocks_for_date(
 
     # DB sonucunu listeye cevir
     return result.scalars().all()
+
+
+
+
