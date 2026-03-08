@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.modules.schedule.schemas import BarberSettingsRequest
+from app.modules.schedule.schemas import BarberSettingsRequest, DayOverrideRequest
 
 
 def _base_payload(slot_duration_minutes: int) -> dict:
@@ -40,3 +40,27 @@ def test_schedule_settings_rejects_invalid_max_booking_days_ahead(invalid_days: 
     payload["max_booking_days_ahead"] = invalid_days
     with pytest.raises(ValidationError):
         BarberSettingsRequest(**payload)
+
+
+@pytest.mark.parametrize("valid_duration", [None, 5, 30, 120])
+def test_day_override_accepts_valid_slot_duration(valid_duration: int | None):
+    req = DayOverrideRequest(
+        date="2026-04-01",
+        is_closed=False,
+        work_start_time="09:00",
+        work_end_time="17:00",
+        slot_duration_minutes=valid_duration,
+    )
+    assert req.slot_duration_minutes == valid_duration
+
+
+@pytest.mark.parametrize("invalid_duration", [0, 3, 121, 122])
+def test_day_override_rejects_invalid_slot_duration(invalid_duration: int):
+    with pytest.raises(ValidationError):
+        DayOverrideRequest(
+            date="2026-04-01",
+            is_closed=False,
+            work_start_time="09:00",
+            work_end_time="17:00",
+            slot_duration_minutes=invalid_duration,
+        )

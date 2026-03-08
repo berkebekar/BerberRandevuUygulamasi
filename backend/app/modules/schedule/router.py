@@ -16,9 +16,9 @@ Business logic schedule/service.py içindedir.
 """
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -33,6 +33,7 @@ from app.modules.schedule.schemas import (
     BlockedSlotItem,
     BlockedSlotsResponse,
     DayOverrideRequest,
+    DayOverrideResponse,
     DaySlots,
     WeekSlots,
 )
@@ -134,7 +135,42 @@ async def update_schedule_settings(
 
 # ─── Admin: Günlük Override ───────────────────────────────────────────────────
 
-@router.post("/admin/schedule/override", status_code=200)
+@router.get("/admin/schedule/override", response_model=DayOverrideResponse | None)
+async def get_day_override(
+    date: date = Query(..., description="Tarih: YYYY-MM-DD"),
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    """
+    Belirli bir gun icin ozel gun kaydini dondurur.
+    Kayit yoksa null doner.
+    """
+    profile = await schedule_service.get_barber_settings(db, admin.tenant_id)
+    if profile is None:
+        raise HTTPException(400, {"error": "invalid_slot"})
+
+    max_days_ahead = getattr(profile, "max_booking_days_ahead", 14)
+    today = datetime.now(schedule_service.TZ).date()
+    if date < today or (date - today).days > max_days_ahead:
+        raise HTTPException(
+            400,
+            {"error": "date_out_of_booking_window", "max_booking_days_ahead": max_days_ahead},
+        )
+
+    override = await schedule_service.get_day_override(db, admin.tenant_id, date)
+    if override is None:
+        return None
+    return DayOverrideResponse(
+        date=override.date,
+        is_closed=override.is_closed,
+        work_start_time=override.work_start_time,
+        work_end_time=override.work_end_time,
+        slot_duration_minutes=getattr(override, "slot_duration_minutes", None),
+    )
+
+
+@router.post("/admin/schedule/override", response_model=DayOverrideResponse, status_code=200)
+@router.put("/admin/schedule/override", response_model=DayOverrideResponse, status_code=200)
 async def set_day_override(
     body: DayOverrideRequest,
     db: AsyncSession = Depends(get_db),
@@ -145,15 +181,59 @@ async def set_day_override(
     Aynı tarihe ikinci kez çağrılırsa mevcut override güncellenir (upsert).
     is_closed=True ise o gün tamamen kapalıdır.
     """
-    await schedule_service.upsert_day_override(
+    profile = await schedule_service.get_barber_settings(db, admin.tenant_id)
+    if profile is None:
+        raise HTTPException(400, {"error": "invalid_slot"})
+
+    max_days_ahead = getattr(profile, "max_booking_days_ahead", 14)
+    today = datetime.now(schedule_service.TZ).date()
+    if body.date < today or (body.date - today).days > max_days_ahead:
+        raise HTTPException(
+            400,
+            {"error": "date_out_of_booking_window", "max_booking_days_ahead": max_days_ahead},
+        )
+
+    override = await schedule_service.upsert_day_override(
         db,
         admin.tenant_id,
         body.date,
         body.is_closed,
         body.work_start_time,
         body.work_end_time,
+        body.slot_duration_minutes,
     )
-    return {"message": "override_set"}
+    return DayOverrideResponse(
+        date=override.date,
+        is_closed=override.is_closed,
+        work_start_time=override.work_start_time,
+        work_end_time=override.work_end_time,
+        slot_duration_minutes=getattr(override, "slot_duration_minutes", None),
+    )
+
+
+@router.delete("/admin/schedule/override", status_code=200)
+async def delete_day_override(
+    date: date = Query(..., description="Tarih: YYYY-MM-DD"),
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    """
+    Belirli bir gunun ozel gun kaydini siler.
+    """
+    profile = await schedule_service.get_barber_settings(db, admin.tenant_id)
+    if profile is None:
+        raise HTTPException(400, {"error": "invalid_slot"})
+
+    max_days_ahead = getattr(profile, "max_booking_days_ahead", 14)
+    today = datetime.now(schedule_service.TZ).date()
+    if date < today or (date - today).days > max_days_ahead:
+        raise HTTPException(
+            400,
+            {"error": "date_out_of_booking_window", "max_booking_days_ahead": max_days_ahead},
+        )
+
+    await schedule_service.delete_day_override(db, admin.tenant_id, date)
+    return {"message": "override_deleted"}
 
 
 # ─── Admin: Slot Bloklama / Açma ─────────────────────────────────────────────

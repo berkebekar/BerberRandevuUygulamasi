@@ -5,7 +5,7 @@ Belirli bir gün için kapalı veya özel çalışma saatleri.
 
 import uuid
 from datetime import date
-from sqlalchemy import Boolean, Date, ForeignKey, Time, UniqueConstraint, text
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, Time, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,6 +32,7 @@ class DayOverride(Base):
     is_closed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     work_start_time: Mapped[Time | None] = mapped_column(Time, nullable=True)
     work_end_time: Mapped[Time | None] = mapped_column(Time, nullable=True)
+    slot_duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     def __repr__(self) -> str:
         return f"<DayOverride id={self.id!r} date={self.date!r}>"

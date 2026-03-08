@@ -123,7 +123,12 @@ async def _validate_slot_in_schedule(
         if override and override.work_end_time
         else profile.work_end_time
     )
-    duration_minutes = profile.slot_duration_minutes
+    override_duration = getattr(override, "slot_duration_minutes", None) if override else None
+    duration_minutes = (
+        override_duration
+        if isinstance(override_duration, int) and override_duration > 0
+        else profile.slot_duration_minutes
+    )
     duration = timedelta(minutes=duration_minutes)
 
     # GÃ¼nÃ¼n baÅŸlangÄ±Ã§ ve bitiÅŸ zamanlarÄ±nÄ± Ä°stanbul timezone'unda oluÅŸtur

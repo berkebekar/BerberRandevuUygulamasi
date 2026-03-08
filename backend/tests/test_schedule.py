@@ -54,6 +54,7 @@ def _make_override(
     is_closed: bool = False,
     start: time | None = None,
     end: time | None = None,
+    slot_duration_minutes: int | None = None,
 ) -> SimpleNamespace:
     """Test için DayOverride benzeri nesne üretir."""
     return SimpleNamespace(
@@ -63,6 +64,7 @@ def _make_override(
         is_closed=is_closed,
         work_start_time=start,
         work_end_time=end,
+        slot_duration_minutes=slot_duration_minutes,
     )
 
 
@@ -191,6 +193,38 @@ async def test_day_override_ile_farkli_saatler():
     assert len(result.slots) == 8
     assert result.slots[0].time == "10:00"
     assert result.slots[-1].time == "13:30"
+
+
+@pytest.mark.asyncio
+async def test_day_override_ile_ozel_slot_suresi():
+    """
+    DayOverride icinde ozel slot suresi verilirse profildeki sureyi ezer.
+    10:00-14:00 + 20dk => 12 slot.
+    """
+    profile = _make_profile(slot_duration_minutes=30, work_start=time(9, 0), work_end=time(19, 0))
+    override = _make_override(
+        TEST_DATE,
+        is_closed=False,
+        start=time(10, 0),
+        end=time(14, 0),
+        slot_duration_minutes=20,
+    )
+
+    session = _make_mock_session(
+        _make_scalar_result(profile),
+        _make_scalar_result(override),
+        _make_scalars_result([]),
+        _make_scalars_result([]),
+    )
+
+    result = await schedule_service.get_slots_for_date(
+        session, TEST_TENANT_ID, TEST_DATE, now=TEST_NOW
+    )
+
+    assert result.is_closed is False
+    assert len(result.slots) == 12
+    assert result.slots[0].time == "10:00"
+    assert result.slots[-1].time == "13:40"
 
 
 @pytest.mark.asyncio

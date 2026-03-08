@@ -297,6 +297,48 @@ async def test_gecersiz_slot_kapali_gun_400():
 
 
 @pytest.mark.asyncio
+async def test_ozel_gun_slot_suresi_booking_validasyonunda_kullanilir():
+    """
+    Ozel gunde verilen slot suresi, profildeki sureyi ezmelidir.
+    Profil 30dk iken override 20dk ise 09:20 slotu gecerli olmalidir.
+    """
+    now = datetime.now(TZ)
+    target = datetime(now.year, now.month, now.day, 9, 20, tzinfo=TZ) + timedelta(days=1)
+
+    profile = _make_profile(slot_duration_minutes=30)
+    override = SimpleNamespace(
+        id=uuid.uuid4(),
+        tenant_id=TEST_TENANT_ID,
+        date=target.date(),
+        is_closed=False,
+        work_start_time=time(9, 0),
+        work_end_time=time(19, 0),
+        slot_duration_minutes=20,
+    )
+
+    session = _make_mock_session(
+        _make_db_result(profile),  # profile
+        _make_db_result(override),  # day override
+        _make_db_result(None),  # booking lock
+        _make_db_result(None),  # block lock
+        _make_db_scalars_result([]),  # user same day bookings
+    )
+
+    async def mock_refresh(obj):
+        obj.id = uuid.uuid4()
+        obj.created_at = datetime.now(TZ)
+        obj.updated_at = datetime.now(TZ)
+        obj.cancelled_by = None
+
+    session.refresh = mock_refresh
+
+    booking = await booking_service.create_booking(session, TEST_TENANT_ID, TEST_USER_ID, target)
+
+    assert booking.status == BookingStatus.confirmed
+    session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_gecersiz_slot_haftalik_kapali_gun_400():
     """
     Profilde haftalik kapali gun olarak tanimli bir gunde slot alinamaz.

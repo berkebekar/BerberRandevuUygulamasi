@@ -122,6 +122,7 @@ class DayOverrideRequest(BaseModel):
     is_closed: bool
     work_start_time: time | None = None
     work_end_time: time | None   = None
+    slot_duration_minutes: int | None = None
 
     @model_validator(mode="after")
     def times_required_when_open(self) -> "DayOverrideRequest":
@@ -138,6 +139,28 @@ class DayOverrideRequest(BaseModel):
             if self.work_end_time <= self.work_start_time:
                 raise ValueError("BitiÅŸ saati baÅŸlangÄ±Ã§ saatinden bÃ¼yÃ¼k olmalÄ±dÄ±r")
         return self
+
+    @field_validator("slot_duration_minutes")
+    @classmethod
+    def valid_override_duration(cls, v: int | None) -> int | None:
+        """Ozel gun slot suresi verilirse 5-120 arasinda ve 5'in kati olmalidir."""
+        if v is None:
+            return None
+        if v < 5 or v > 120 or v % 5 != 0:
+            raise ValueError("Ozel gun slot suresi 5 ile 120 dakika arasinda ve 5'in kati olmalidir")
+        return v
+
+
+class DayOverrideResponse(BaseModel):
+    """
+    Belirli bir gun icin ozel ayar kaydi.
+    Kayit yoksa endpoint null doner.
+    """
+    date: date
+    is_closed: bool
+    work_start_time: time | None = None
+    work_end_time: time | None = None
+    slot_duration_minutes: int | None = None
 
 
 # â”€â”€â”€ Admin: Slot Bloklama â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

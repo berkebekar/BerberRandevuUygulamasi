@@ -64,6 +64,15 @@ def _resolve_max_booking_days_ahead(profile: BarberProfile | None) -> int:
     return DEFAULT_MAX_BOOKING_DAYS_AHEAD
 
 
+def _resolve_slot_duration_minutes(profile: BarberProfile, override: DayOverride | None) -> int:
+    """Gunluk slot suresini cozer: override varsa onu, yoksa profil degerini kullanir."""
+    if override is not None:
+        raw_value = getattr(override, "slot_duration_minutes", None)
+        if isinstance(raw_value, int) and raw_value > 0:
+            return raw_value
+    return profile.slot_duration_minutes
+
+
 # ─── Yardımcı: Tek gün slot üretimi ──────────────────────────────────────────
 
 def _build_day_slots(
@@ -117,7 +126,7 @@ def _build_day_slots(
         if override and override.work_end_time
         else profile.work_end_time
     )
-    duration = timedelta(minutes=profile.slot_duration_minutes)
+    duration = timedelta(minutes=_resolve_slot_duration_minutes(profile, override))
 
     # Tüm slot zamanlarını üret: start, start+dur, start+2*dur, ...
     # Istanbul timezone'unda aware datetime'lar oluşturuyoruz
@@ -409,6 +418,7 @@ async def upsert_day_override(
     is_closed: bool,
     work_start_time: time | None,
     work_end_time: time | None,
+    slot_duration_minutes: int | None = None,
 ) -> DayOverride:
     """
     Belirtilen gün için DayOverride oluşturur veya günceller (upsert).
@@ -427,19 +437,42 @@ async def upsert_day_override(
     )
     override = result.scalar_one_or_none()
 
+    if is_closed:
+        day_start = datetime.combine(target_date, time.min, tzinfo=TZ)
+        day_end = datetime.combine(target_date, time.max, tzinfo=TZ)
+        booking_result = await db.execute(
+            select(Booking).where(
+                Booking.tenant_id == tenant_id,
+                Booking.status == BookingStatus.confirmed,
+                Booking.slot_time >= day_start,
+                Booking.slot_time <= day_end,
+            ).limit(1)
+        )
+        existing_booking = booking_result.scalar_one_or_none()
+        if existing_booking is not None:
+            raise HTTPException(
+                409,
+                {
+                    "error": "override_has_confirmed_bookings",
+                    "booking_id": str(existing_booking.id),
+                },
+            )
+
     if override:
         # Mevcut override'ı güncelle
         override.is_closed = is_closed
-        override.work_start_time = work_start_time
-        override.work_end_time = work_end_time
+        override.work_start_time = None if is_closed else work_start_time
+        override.work_end_time = None if is_closed else work_end_time
+        override.slot_duration_minutes = None if is_closed else slot_duration_minutes
     else:
         # Yeni override oluştur
         override = DayOverride(
             tenant_id=tenant_id,
             date=target_date,
             is_closed=is_closed,
-            work_start_time=work_start_time,
-            work_end_time=work_end_time,
+            work_start_time=None if is_closed else work_start_time,
+            work_end_time=None if is_closed else work_end_time,
+            slot_duration_minutes=None if is_closed else slot_duration_minutes,
         )
         db.add(override)
 
@@ -449,6 +482,34 @@ async def upsert_day_override(
 
 
 # ─── Admin: Slot Bloklama / Açma ─────────────────────────────────────────────
+
+async def get_day_override(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    target_date: date,
+) -> DayOverride | None:
+    """Belirli bir gun icin override kaydini doner; yoksa None."""
+    result = await db.execute(
+        select(DayOverride).where(
+            DayOverride.tenant_id == tenant_id,
+            DayOverride.date == target_date,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def delete_day_override(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    target_date: date,
+) -> None:
+    """Belirli bir gunun override kaydini siler."""
+    override = await get_day_override(db, tenant_id, target_date)
+    if override is None:
+        raise HTTPException(404, {"error": "override_not_found"})
+    await db.delete(override)
+    await db.commit()
+
 
 async def block_slot(
     db: AsyncSession,
