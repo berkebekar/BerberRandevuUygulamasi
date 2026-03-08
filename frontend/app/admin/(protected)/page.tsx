@@ -578,7 +578,11 @@ export default function AdminDashboardPage() {
                 })
                 const showPhone = TR_PHONE_REGEX.test(b.user_phone)
                 const statusText = isCancelled
-                  ? "Iptal edildi"
+                  ? b.cancelled_by === "admin"
+                    ? "Berber tarafindan iptal edildi"
+                    : b.cancelled_by === "user"
+                      ? "Musteri tarafindan iptal edildi"
+                      : "Iptal edildi"
                   : isNoShow
                     ? "Randevu gerceklesmedi"
                     : isPastBooking
