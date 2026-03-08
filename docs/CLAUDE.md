@@ -1,116 +1,116 @@
-# CLAUDE.md — Single Barber Appointment System
-# Cursor'un Ana Referans Dosyası
+# CLAUDE.md ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Single Barber Appointment System
+# Cursor'un Ana Referans DosyasÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±
 
-> Bu dosyayı her prompt'ta oku. Buradaki kararlar değiştirilemez.
-> Eğer bir şey bu dosyayla çelişiyorsa, DUR ve kullanıcıya sor.
+> Bu dosyayÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± her prompt'ta oku. Buradaki kararlar deÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸tirilemez.
+> EÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸er bir ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ey bu dosyayla ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§eliÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸iyorsa, DUR ve kullanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±cÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ya sor.
 
 ---
 
-## NASIL DAVRANACAKSIN — TEMEL KURALLAR
+## NASIL DAVRANACAKSIN ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â TEMEL KURALLAR
 
-Bu bir **production uygulamasıdır.** Demo değil, tutorial değil, oyuncak proje değil.
+Bu bir **production uygulamasÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±dÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±r.** Demo deÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸il, tutorial deÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸il, oyuncak proje deÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸il.
 
-### Öncelik sırası (her zaman bu sırayla düşün)
-1. Doğruluk — yanlış çalışan kod yoktur
-2. Veri tutarlılığı — sessiz veri bozulması kabul edilemez
-3. Race condition güvenliği — özellikle booking işlemlerinde
-4. Sadelik — akıllı görünen ama riskli çözüm yerine sıkıcı ama kanıtlanmış çözüm
-5. Sıfır sessiz hata — her hata loglanır veya kullanıcıya döner
+### ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ncelik sÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rasÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± (her zaman bu sÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rayla dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼n)
+1. DoÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸ruluk ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â yanlÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§alÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸an kod yoktur
+2. Veri tutarlÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±lÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â sessiz veri bozulmasÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± kabul edilemez
+3. Race condition gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼venliÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸i ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶zellikle booking iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸lemlerinde
+4. Sadelik ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â akÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±llÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶rÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼nen ama riskli ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶zÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼m yerine sÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±kÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±cÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± ama kanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±tlanmÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶zÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼m
+5. SÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±fÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±r sessiz hata ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â her hata loglanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±r veya kullanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±cÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ya dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶ner
 
-### Kod yazmadan önce
-- Belirsiz bir şey varsa → **DUR, sor**
-- Bir karar ileride sistemi bozabilecekse → **uyar, sonra uygula**
-- Bu dosyayla çelişen bir istek gelirse → **reddet, açıkla**
+### Kod yazmadan ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶nce
+- Belirsiz bir ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ey varsa ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ **DUR, sor**
+- Bir karar ileride sistemi bozabilecekse ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ **uyar, sonra uygula**
+- Bu dosyayla ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§eliÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸en bir istek gelirse ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ **reddet, aÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±kla**
 
 ### Her zaman yap
-- Her modülü kendi klasöründe tut (router / service / schema ayrı dosyalar)
-- Her DB sorgusuna tenant_id filtresi ekle — istisnasız
-- Business rule'ları API (service) katmanında kontrol et, frontend'e güvenme
-- Hata mesajları anlamlı olsun — "something went wrong" kabul edilmez
-- Her kritik işlemi logla
+- Her modÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ kendi klasÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶rÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼nde tut (router / service / schema ayrÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± dosyalar)
+- Her DB sorgusuna tenant_id filtresi ekle ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â istisnasÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±z
+- Business rule'larÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± API (service) katmanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±nda kontrol et, frontend'e gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼venme
+- Hata mesajlarÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± anlamlÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± olsun ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â "something went wrong" kabul edilmez
+- Her kritik iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸lemi logla
 
 ### Asla yapma
-- Frontend validation'a güvenme
-- Plain text şifre veya OTP saklama
-- Tenant filtresi olmadan DB sorgusu çalıştırma
-- Booking işlemini transaction dışında yapma
-- MVP dışı özellik kodlama — sadece yorum olarak belirt
+- Frontend validation'a gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼venme
+- Plain text ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ifre veya OTP saklama
+- Tenant filtresi olmadan DB sorgusu ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§alÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸tÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rma
+- Booking iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸lemini transaction dÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±nda yapma
+- MVP dÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶zellik kodlama ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â sadece yorum olarak belirt
 
-### Kod üretim sırası (her adımda bu sırayı izle)
-1. Veri modelini/schema'yı yaz
-2. Service katmanını yaz (business logic)
-3. Router'ı yaz (HTTP katmanı)
+### Kod ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼retim sÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rasÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± (her adÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±mda bu sÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rayÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± izle)
+1. Veri modelini/schema'yÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± yaz
+2. Service katmanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±nÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± yaz (business logic)
+3. Router'ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± yaz (HTTP katmanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±)
 4. Test yaz
-5. Çalıştır, geç
+5. ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡alÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸tÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±r, geÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§
 
 ---
 
-## YORUM SATIRI KURALLARI — KESİNLİKLE UYULACAK
+## YORUM SATIRI KURALLARI ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â KESÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°NLÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°KLE UYULACAK
 
-Bu proje aynı zamanda bir öğrenme sürecidir.
-Yazdığın her kodun yanına Türkçe yorum satırı ekle.
+Bu proje aynÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± zamanda bir ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶ÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸renme sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼recidir.
+YazdÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±n her kodun yanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±na TÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼rkÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§e yorum satÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± ekle.
 
-### Ne zaman yorum yazacaksın
-- Her dosyanın en üstüne: bu dosya ne işe yarar, sistemdeki rolü nedir
-- Her class/fonksiyon tanımının üstüne: ne yapar, neden var, ne döner
-- Her önemli satırın yanına veya üstüne: bu satır ne yapıyor, neden bu şekilde yazıldı
-- Her if/else bloğuna: bu koşul neden kontrol ediliyor
-- Her DB sorgusuna: ne arıyor, neden bu şekilde yazıldı
-- Her hata fırlatılan yere: bu hata neden fırlatılıyor, ne anlama geliyor
-- Her config veya sabit değere: bu değer ne anlama geliyor, neden bu seçildi
+### Ne zaman yorum yazacaksÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±n
+- Her dosyanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±n en ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼stÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ne: bu dosya ne iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸e yarar, sistemdeki rolÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ nedir
+- Her class/fonksiyon tanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±mÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±nÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±n ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼stÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ne: ne yapar, neden var, ne dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶ner
+- Her ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶nemli satÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±n yanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±na veya ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼stÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ne: bu satÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±r ne yapÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±yor, neden bu ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ekilde yazÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ldÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±
+- Her if/else bloÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸una: bu koÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ul neden kontrol ediliyor
+- Her DB sorgusuna: ne arÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±yor, neden bu ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ekilde yazÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ldÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±
+- Her hata fÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rlatÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±lan yere: bu hata neden fÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rlatÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±lÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±yor, ne anlama geliyor
+- Her config veya sabit deÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸ere: bu deÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸er ne anlama geliyor, neden bu seÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ildi
 
 ### Yorum tonu
-- Sade ve anlaşılır Türkçe
-- Sadece "ne yapıyor" değil, "neden böyle yapıyor" da açıkla
-- Teknik terim kullanmak zorundaysan yanına parantez içinde açıkla
-  Örnek: # transaction başlatıyoruz (transaction: ya hepsi olur ya hiçbiri)
+- Sade ve anlaÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±lÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±r TÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼rkÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§e
+- Sadece "ne yapÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±yor" deÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸il, "neden bÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶yle yapÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±yor" da aÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±kla
+- Teknik terim kullanmak zorundaysan yanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±na parantez iÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§inde aÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±kla
+  ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“rnek: # transaction baÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸latÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±yoruz (transaction: ya hepsi olur ya hiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§biri)
 
-### Doğru yorum örneği — böyle yaz
+### DoÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸ru yorum ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶rneÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸i ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â bÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶yle yaz
 
 ```python
 # =============================================
 # booking/service.py
-# Randevu oluşturma ve yönetim işlemleri.
-# Bu dosya sistemin en kritik parçasıdır —
-# çift randevu oluşmasını buradaki kurallar engeller.
+# Randevu oluÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸turma ve yÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶netim iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸lemleri.
+# Bu dosya sistemin en kritik parÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§asÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±dÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±r ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+# ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ift randevu oluÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸masÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±nÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± buradaki kurallar engeller.
 # =============================================
 
 async def create_booking(db, tenant_id, user_id, slot_time):
-    # Bu fonksiyon bir randevu oluşturur.
-    # 'async' kullanıyoruz çünkü veritabanı işlemi bitene kadar
-    # sunucunun başka isteklere de bakabilmesi gerekiyor.
+    # Bu fonksiyon bir randevu oluÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸turur.
+    # 'async' kullanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±yoruz ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼nkÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ veritabanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸lemi bitene kadar
+    # sunucunun baÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ka isteklere de bakabilmesi gerekiyor.
 
     async with db.begin() as transaction:
-        # transaction başlatıyoruz.
-        # transaction = ya hepsi başarılı olur, ya hiçbiri olmaz.
-        # Örnek: randevu yazılırken elektrik giderse yarım kayıt oluşmaz.
+        # transaction baÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸latÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±yoruz.
+        # transaction = ya hepsi baÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸arÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±lÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± olur, ya hiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§biri olmaz.
+        # ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“rnek: randevu yazÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±lÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rken elektrik giderse yarÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±m kayÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±t oluÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸maz.
 
         existing = await db.execute(
             select(Booking)
             .where(Booking.slot_time == slot_time)
-            .with_for_update()  # bu satır o kaydı kilitler —
-                                # aynı anda başka biri de aynı slotu almaya
-                                # çalışırsa sırada bekletilir, çift randevu olmaz
+            .with_for_update()  # bu satÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±r o kaydÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± kilitler ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+                                # aynÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± anda baÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ka biri de aynÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± slotu almaya
+                                # ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§alÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rsa sÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rada bekletilir, ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ift randevu olmaz
         )
 
         if existing.scalar():
             raise HTTPException(409)
-            # 409 = "Conflict" (çakışma) HTTP kodu.
-            # Slot dolu olduğu için işlemi durduruyoruz.
+            # 409 = "Conflict" (ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§akÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ma) HTTP kodu.
+            # Slot dolu olduÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸u iÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§in iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸lemi durduruyoruz.
 ```
 
-### Yanlış yorum örneği — böyle yazma
+### YanlÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ yorum ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶rneÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸i ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â bÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶yle yazma
 
 ```python
 async def create_booking(db, tenant_id, user_id, slot_time):
-    # randevu oluştur
+    # randevu oluÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸tur
     async with db.begin():
         existing = await db.execute(...)
         if existing.scalar():
             raise HTTPException(409)  # hata
 ```
 
-Bu kurala her dosyada, her fonksiyonda istisnasız uy.
+Bu kurala her dosyada, her fonksiyonda istisnasÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±z uy.
 
 ---
 
@@ -118,27 +118,27 @@ Bu kurala her dosyada, her fonksiyonda istisnasız uy.
 
 ## PROJE NE?
 
-Tek bir berber için mobil uyumlu web tabanlı randevu sistemi.
-Gelecekte SaaS'a dönüşebilecek şekilde tasarlanmış.
+Tek bir berber iÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§in mobil uyumlu web tabanlÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± randevu sistemi.
+Gelecekte SaaS'a dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ebilecek ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ekilde tasarlanmÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸.
 
 ---
 
 ## TEK SATIR KURAL
 
-Bir özellik MVP olarak bu dosyada açıkça belirtilmemişse → KODLAMA **YOK**. Sadece yorum satırı olarak dokümante et.
+Bir ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶zellik MVP olarak bu dosyada aÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±kÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§a belirtilmemiÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸se ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ KODLAMA **YOK**. Sadece yorum satÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± olarak dokÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼mante et.
 
 ---
 
-## ASLA İHLAL EDİLMEYECEK KISITLAR
+## ASLA ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°HLAL EDÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°LMEYECEK KISITLAR
 
 ```
-- Berber sayısı      : TAM OLARAK 1
-- Aynı anda müşteri  : TAM OLARAK 1
-- Slot başına randevu: TAM OLARAK 1
-- Günlük müşteri     : 1 müşteri = max 3 randevu/gün
-- Ödeme              : YOK
-- Çoklu berber       : YOK
-- Otomatik slot kaydırma : YOK
+- Berber sayÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±sÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±      : TAM OLARAK 1
+- AynÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± anda mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸teri  : TAM OLARAK 1
+- Slot baÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±na randevu: TAM OLARAK 1
+- GÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼nlÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼k mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸teri     : 1 mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸teri = max 3 randevu/gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼n
+- ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“deme              : YOK
+- ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡oklu berber       : YOK
+- Otomatik slot kaydÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rma : YOK
 - Timezone           : SADECE Europe/Istanbul (UTC+3, sabit)
 - Native mobil app   : YOK
 ```
@@ -152,64 +152,64 @@ Backend  : FastAPI (Python 3.12+)
 Database : PostgreSQL 15+
 ORM      : SQLAlchemy (async) + Alembic (migrations)
 Frontend : Next.js 14 (App Router)
-SMS      : Twilio (MVP) — config'den değiştirilebilir
-Deploy   : Railway (backend + DB) + Vercel (frontend)
+SMS      : Twilio (MVP) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â config'den deÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸tirilebilir
+Deploy   : Platformdan bagimsiz (ornek: Vercel + Neon)
 ```
 
 ---
 
-## PROJE KLASÖR YAPISI
+## PROJE KLASÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“R YAPISI
 
 ```
 /
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── core/          # config, security, db bağlantısı
-│   │   ├── middleware/    # tenant resolver
-│   │   ├── modules/
-│   │   │   ├── auth/
-│   │   │   ├── user/
-│   │   │   ├── admin/
-│   │   │   ├── tenant/
-│   │   │   ├── schedule/
-│   │   │   ├── booking/
-│   │   │   └── notification/
-│   │   └── models/        # SQLAlchemy modelleri
-│   ├── alembic/
-│   ├── tests/
-│   └── requirements.txt
-├── frontend/
-│   ├── app/
-│   │   ├── (customer)/    # Müşteri akışı
-│   │   └── admin/         # Admin paneli
-│   └── components/
-├── docs/
-│   ├── CLAUDE.md          # Bu dosya
-│   ├── TASKS.md           # İlerleme takibi
-│   └── ARCHITECTURE.md    # Mimari kararlar
-└── docker-compose.yml     # Local geliştirme
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ backend/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ app/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ main.py
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ core/          # config, security, db baÃƒÆ’Ã¢â‚¬ÂÃƒâ€¦Ã‚Â¸lantÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±sÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ middleware/    # tenant resolver
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ modules/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ auth/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ user/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ admin/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ tenant/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ schedule/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ booking/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ notification/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ models/        # SQLAlchemy modelleri
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ alembic/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ tests/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ requirements.txt
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ frontend/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ app/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ (customer)/    # MÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸teri akÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ admin/         # Admin paneli
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ components/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ docs/
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ CLAUDE.md          # Bu dosya
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ TASKS.md           # ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°lerleme takibi
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡   ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ARCHITECTURE.md    # Mimari kararlar
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ docker-compose.yml     # Local geliÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸tirme
 ```
 
 ---
 
-## KULLANICI ROLLERİ
+## KULLANICI ROLLERÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°
 
 ### Admin (Berber)
-- Sistemde TAM OLARAK 1 admin vardır
-- **Kayıt:** email + telefon + şifre (tek seferlik)
-- **Giriş Yol 1:** telefon → SMS OTP
-- **Giriş Yol 2:** email + şifre
+- Sistemde TAM OLARAK 1 admin vardÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±r
+- **KayÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±t:** email + telefon + ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ifre (tek seferlik)
+- **GiriÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ Yol 1:** telefon ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ SMS OTP
+- **GiriÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ Yol 2:** email + ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ifre
 - Session: HTTP-only cookie
 
-### User (Müşteri)
-- **Giriş/Kayıt:** telefon → SMS OTP (tek akış)
+### User (MÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸teri)
+- **GiriÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸/KayÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±t:** telefon ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ SMS OTP (tek akÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸)
 - Session: HTTP-only cookie
-- Cookie geçerliyse OTP istenmez
+- Cookie geÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§erliyse OTP istenmez
 
 ---
 
-## VERİTABANI MODELLERİ
+## VERÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°TABANI MODELLERÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°
 
 ### Tenant
 ```
@@ -223,7 +223,7 @@ created_at    TIMESTAMPTZ NOT NULL
 ### Admin
 ```
 id            UUID PK
-tenant_id     UUID FK→Tenant  [UNIQUE — tenant başına 1 admin]
+tenant_id     UUID FKÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢Tenant  [UNIQUE ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â tenant baÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±na 1 admin]
 email         VARCHAR UNIQUE NOT NULL
 phone         VARCHAR UNIQUE NOT NULL
 password_hash VARCHAR NOT NULL
@@ -233,7 +233,7 @@ created_at    TIMESTAMPTZ NOT NULL
 ### User
 ```
 id            UUID PK
-tenant_id     UUID FK→Tenant
+tenant_id     UUID FKÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢Tenant
 phone         VARCHAR NOT NULL
 first_name    VARCHAR NOT NULL
 last_name     VARCHAR NOT NULL
@@ -244,17 +244,19 @@ created_at    TIMESTAMPTZ NOT NULL
 ### BarberProfile
 ```
 id                    UUID PK
-tenant_id             UUID FK→Tenant  [UNIQUE]
+tenant_id             UUID FKÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢Tenant  [UNIQUE]
 slot_duration_minutes INTEGER NOT NULL  -- 30 | 40 | 60
-work_start_time       TIME NOT NULL     -- örn: 09:00
-work_end_time         TIME NOT NULL     -- örn: 19:00
+work_start_time       TIME NOT NULL     -- ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶rn: 09:00
+work_end_time         TIME NOT NULL     -- ornek: 19:00
+weekly_closed_days    INTEGER[] NOT NULL DEFAULT {}
+max_booking_days_ahead INTEGER NOT NULL DEFAULT 14  -- 1..60 (bugun + N. gun dahil)
 updated_at            TIMESTAMPTZ NOT NULL
 ```
 
 ### DayOverride
 ```
 id               UUID PK
-tenant_id        UUID FK→Tenant
+tenant_id        UUID FKÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢Tenant
 date             DATE NOT NULL
 is_closed        BOOLEAN DEFAULT false
 work_start_time  TIME NULLABLE
@@ -265,7 +267,7 @@ work_end_time    TIME NULLABLE
 ### SlotBlock
 ```
 id          UUID PK
-tenant_id   UUID FK→Tenant
+tenant_id   UUID FKÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢Tenant
 blocked_at  TIMESTAMPTZ NOT NULL  -- TR timezone
 reason      VARCHAR NULLABLE
 created_at  TIMESTAMPTZ NOT NULL
@@ -275,8 +277,8 @@ created_at  TIMESTAMPTZ NOT NULL
 ### Booking
 ```
 id           UUID PK
-tenant_id    UUID FK→Tenant
-user_id      UUID FK→User
+tenant_id    UUID FKÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢Tenant
+user_id      UUID FKÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢User
 slot_time    TIMESTAMPTZ NOT NULL  -- TR timezone
 status       ENUM: confirmed | cancelled
 cancelled_by ENUM NULLABLE: admin | user
@@ -302,7 +304,7 @@ created_at    TIMESTAMPTZ NOT NULL
 ### NotificationLog
 ```
 id                UUID PK
-tenant_id         UUID FK→Tenant
+tenant_id         UUID FKÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢Tenant
 recipient_phone   VARCHAR NOT NULL
 message_type      ENUM: otp | booking_created | booking_cancelled
 status            ENUM: sent | failed | pending
@@ -312,9 +314,9 @@ created_at        TIMESTAMPTZ NOT NULL
 
 ---
 
-## API ENDPOINT LİSTESİ
+## API ENDPOINT LÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°STESÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°
 
-Tüm endpoint'ler: `GET|POST|PUT|DELETE /api/v1/...`
+TÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼m endpoint'ler: `GET|POST|PUT|DELETE /api/v1/...`
 Tenant her request'te subdomain'den resolve edilir.
 
 ### Auth
@@ -335,10 +337,10 @@ GET /slots/week?start=YYYY-MM-DD  # User | Admin
 
 ### Booking
 ```
-POST   /bookings                  # User — atomik işlem
+POST   /bookings                  # User ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â atomik iÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸lem
 GET    /bookings/my               # User
 GET    /bookings?date=YYYY-MM-DD  # Admin
-DELETE /bookings/{id}             # Admin — iptal
+DELETE /bookings/{id}             # Admin ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â iptal
 ```
 
 ### Admin Panel
@@ -349,98 +351,107 @@ PUT  /admin/schedule/settings           # Admin
 POST /admin/schedule/override           # Admin
 POST /admin/slots/block                 # Admin
 DEL  /admin/slots/block/{id}            # Admin
-POST /admin/bookings                    # Admin — manuel randevu
+POST /admin/bookings                    # Admin ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â manuel randevu
 ```
 
 ---
 
-## KRİTİK BUSINESS RULES
+## KRÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°TÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°K BUSINESS RULES
 
-### Randevu Oluşturma — ATOMIK
+### Randevu OluÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸turma ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ATOMIK
 ```sql
 BEGIN
   SELECT ... FROM bookings
     WHERE tenant_id=? AND slot_time=? AND status='confirmed'
     FOR UPDATE              -- kilitle
-  → Varsa: ROLLBACK → 409
+  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ Varsa: ROLLBACK ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ 409
 
   SELECT ... FROM slot_blocks
     WHERE tenant_id=? AND blocked_at=?
     FOR UPDATE
-  → Varsa: ROLLBACK → 409
+  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ Varsa: ROLLBACK ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ 409
 
   INSERT INTO bookings (...)
 COMMIT
 ```
 
-### OTP Kuralları
-- Süre: 5 dakika
-- Max deneme: 3 (sonra is_used=true, geçersiz)
-- Rate limit: aynı numaraya 60sn'de 1 kod
-- Hash: bcrypt — plain text asla saklanmaz
+### OTP KurallarÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±
+- SÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼re: 5 dakika
+- Max deneme: 3 (sonra is_used=true, geÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ersiz)
+- Rate limit: aynÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± numaraya 60sn'de 1 kod
+- Hash: bcrypt ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â plain text asla saklanmaz
 
 ### Slot Hesaplama
-- Slotlar DB'de saklanmaz, her seferinde hesaplanır
-- Kaynak: BarberProfile → DayOverride (varsa) → SlotBlock → Booking
-- Geçmiş slotlar listelenmez
+- Slotlar DB'de saklanmaz, her seferinde hesaplanir
+- Kaynak: BarberProfile -> DayOverride (varsa) -> SlotBlock -> Booking
+- Gecmis slotlar listelenmez
+- Ileri tarih limiti tenant bazlidir: `max_booking_days_ahead`
+- Varsayilan/Fallback limit: 14
+- Kural: bugun + N. gun DAHIL (ornek: N=14 ise bugun + 14 dahil)
+
+### Ileri Tarih Limiti Kurali
+- Admin ayarindan secilir: `max_booking_days_ahead` (1-60)
+- Ayar kaydi yoksa 14 kabul edilir
+- Hem admin hem user "Tarih Secin" listesi bu degerle uretilir
+- `too_far_in_future` hatasi dinamik limite gore doner
 
 ---
 
 ## TENANT MIDDLEWARE
 
-Her request şu sırayı izler:
+Her request ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸u sÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rayÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± izler:
 ```
-1. Host header → subdomain parse
+1. Host header ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ subdomain parse
 2. DB'de tenant ara
-3. Bulunamazsa → 404
-4. Bulunursa → request.state.tenant_id set et
+3. Bulunamazsa ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ 404
+4. Bulunursa ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ request.state.tenant_id set et
 5. Devam et
 ```
 
-**Hiçbir DB sorgusu tenant_id filtresi olmadan çalışmaz.**
+**HiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§bir DB sorgusu tenant_id filtresi olmadan ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§alÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸maz.**
 
 ---
 
-## BİLDİRİMLER (MVP)
+## BÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°LDÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°RÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°MLER (MVP)
 
-MVP'de SMS sadece OTP içindir.
+MVP'de SMS sadece OTP iÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§indir.
 
-SMS gönderimi her zaman:
-- async olmalı (background task)
-- non-blocking olmalı
-- hata toleranslı olmalı (uygulama çökmemeli)
-- NotificationLog'a yazılmalı (başarı veya hata)
-
----
-
-## GÜVENLİK KURALLARI
-
-```
-✓ HTTP-only cookie — JS erişimi yok
-✓ OTP: 3 hatalı denemede iptal
-✓ OTP rate limit: 60sn/numara
-✓ Cookie domain: spesifik subdomain (wildcard .app.com YASAK)
-✓ Tüm validation API'de — frontend'e güvenilmez
-✓ bcrypt: şifre ve OTP hash için
-✓ Parameterized queries — SQL injection yok
-✓ Tenant izolasyonu: her sorguda tenant_id zorunlu
-```
+SMS gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶nderimi her zaman:
+- async olmalÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± (background task)
+- non-blocking olmalÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±
+- hata toleranslÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± olmalÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± (uygulama ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶kmemeli)
+- NotificationLog'a yazÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±lmalÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± (baÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸arÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± veya hata)
 
 ---
 
-## MVP DIŞI — KODLAMA (Sadece Dokümante Et)
+## GÃƒÆ’Ã†â€™Ãƒâ€¦Ã¢â‚¬Å“VENLÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°K KURALLARI
 
 ```
-- Randevu oluşturuldu SMS'i (müşteriye)
-- Kullanıcı randevu iptali
-- İptal edildi SMS'i (admin'e)
+ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ HTTP-only cookie ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â JS eriÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸imi yok
+ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ OTP: 3 hatalÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± denemede iptal
+ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ OTP rate limit: 60sn/numara
+ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Cookie domain: spesifik subdomain (wildcard .app.com YASAK)
+ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ TÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼m validation API'de ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â frontend'e gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼venilmez
+ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ bcrypt: ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸ifre ve OTP hash iÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§in
+ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Parameterized queries ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â SQL injection yok
+ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Tenant izolasyonu: her sorguda tenant_id zorunlu
+```
+
+---
+
+## MVP DIÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚ÂI ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â KODLAMA (Sadece DokÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼mante Et)
+
+```
+- Randevu oluÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸turuldu SMS'i (mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸teriye)
+- KullanÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±cÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â± randevu iptali
+- ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°ptal edildi SMS'i (admin'e)
 - Ciro takibi (para)
-- İstatistik dashboard
-- Tema özelleştirme
-- SaaS ödeme modeli
+- ÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â°statistik dashboard
+- Tema ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶zelleÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸tirme
+- SaaS ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¶deme modeli
 - Gecikme bildirimi
-- Otomatik slot kaydırma
-- CRM müşteri profilleri
+- Otomatik slot kaydÃƒÆ’Ã¢â‚¬ÂÃƒâ€šÃ‚Â±rma
+- CRM mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¸teri profilleri
 ```
 
 ---
@@ -449,16 +460,17 @@ SMS gönderimi her zaman:
 
 ```env
 DATABASE_URL=
+DATABASE_URL_SYNC=     # Alembic migration icin sync URL (opsiyonel; yoksa DATABASE_URL kullanilir)
 SECRET_KEY=          # min 32 char random string
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_PHONE_NUMBER=
-APP_DOMAIN=          # örn: app.com
-ALLOWED_SUBDOMAINS=  # virgülle ayrılmış liste
+APP_DOMAIN=          # ornek: app.com
+ALLOWED_SUBDOMAINS=  # virgulle ayrilmis liste
 ENV=                 # development | production
 ```
 
 ---
 
-*Son güncelleme: v1.0 — MVP*
+*Son gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¼ncelleme: v1.0 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â MVP*
 
