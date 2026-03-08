@@ -28,6 +28,8 @@ const WEEK_DAYS = [
   { label: "Paz", value: 6 },
 ]
 
+const DURATION_OPTIONS = Array.from({ length: 24 }, (_, i) => (i + 1) * 5)
+
 export default function AdminSettingsPage() {
   const router = useRouter()
 
@@ -145,24 +147,23 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* Slot suresi */}
+        {/* Randevu suresi */}
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-200">Slot Suresi</h2>
-          <div className="space-y-2">
-            {[30, 40, 60].map((value) => (
-              <label key={value} className="flex items-center gap-2 text-sm text-zinc-300">
-                <input
-                  type="radio"
-                  name="slot_duration"
-                  value={value}
-                  checked={slotDuration === value}
-                  onChange={() => setSlotDuration(value)}
-                  className="accent-zinc-100"
-                />
+          <h2 className="text-sm font-semibold text-zinc-200">Randevu Suresi</h2>
+          <label className="block text-xs font-medium text-zinc-400 mb-1">
+            Sure secin
+          </label>
+          <select
+            value={slotDuration}
+            onChange={(e) => setSlotDuration(Number(e.target.value))}
+            className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
+          >
+            {DURATION_OPTIONS.map((value) => (
+              <option key={value} value={value}>
                 {value} dk
-              </label>
+              </option>
             ))}
-          </div>
+          </select>
         </div>
 
         {/* İzin günleri */}

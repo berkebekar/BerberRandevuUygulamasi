@@ -111,7 +111,7 @@ async def update_schedule_settings(
     """
     Berberin çalışma saatlerini ve slot süresini oluşturur veya günceller.
     Kayıt yoksa oluşturur, varsa günceller (upsert).
-    slot_duration_minutes: 30, 40 veya 60 dakika olabilir.
+    slot_duration_minutes: 5-120 dakika araliginda ve 5'in kati olabilir.
     """
     profile = await schedule_service.upsert_barber_settings(
         db,

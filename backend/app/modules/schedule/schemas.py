@@ -66,7 +66,7 @@ class BarberSettingsResponse(BaseModel):
 class BarberSettingsRequest(BaseModel):
     """
     Berber Ã§alÄ±ÅŸma ayarlarÄ± gÃ¼ncelleme isteÄŸi.
-    slot_duration_minutes: 30, 40 veya 60 dakika olabilir (CLAUDE.md).
+    slot_duration_minutes: 5-120 dakika araliginda ve 5'in kati olabilir.
     """
     slot_duration_minutes: int
     work_start_time: time
@@ -76,9 +76,9 @@ class BarberSettingsRequest(BaseModel):
     @field_validator("slot_duration_minutes")
     @classmethod
     def valid_duration(cls, v: int) -> int:
-        """Slot sÃ¼resi yalnÄ±zca 30, 40 veya 60 dakika olabilir (CLAUDE.md kÄ±sÄ±tÄ±)."""
-        if v not in (30, 40, 60):
-            raise ValueError("Slot sÃ¼resi 30, 40 veya 60 dakika olmalÄ±dÄ±r")
+        """Randevu suresi 5-120 dakika araliginda ve 5'in kati olmalidir."""
+        if v < 5 or v > 120 or v % 5 != 0:
+            raise ValueError("Randevu suresi 5 ile 120 dakika arasinda ve 5'in kati olmalidir")
         return v
 
     @field_validator("work_end_time")
