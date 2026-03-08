@@ -2,6 +2,8 @@
  * lib/api.ts - Backend API ile iletisim icin merkezi fetch wrapper.
  */
 
+import { BOOKING_MAX_DAYS_AHEAD } from "@/lib/bookingWindow"
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ""
 
 const STATUS_MESSAGES: Record<number, string> = {
@@ -32,7 +34,7 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   missing_user_info: "Yeni musteri icin ad ve soyad bilgisi zorunludur.",
   user_creation_failed: "Musteri kaydi olusturulamadi. Lutfen tekrar deneyin.",
   slot_in_past: "Gecmis bir saat icin randevu olusturulamaz.",
-  too_far_in_future: "En fazla 7 gun sonrasi icin randevu alabilirsiniz.",
+  too_far_in_future: `En fazla ${BOOKING_MAX_DAYS_AHEAD} gun sonrasi icin randevu alabilirsiniz.`,
   invalid_slot: "Secilen saat gecerli degil.",
   slot_taken: "Sectiginiz saat dolu.",
   slot_blocked: "Sectiginiz saat isletme tarafindan kapatildi.",

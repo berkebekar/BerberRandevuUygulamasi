@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation"
 import { ActionConfirmSheet, AdminSlotGrid, PhoneInput } from "@/components"
 import type { AdminSlotItem, AdminSlotStatus } from "@/components"
 import { apiDelete, apiFetch, apiPost } from "@/lib/api"
+import { buildBookingDays } from "@/lib/bookingWindow"
 
 // Dashboard endpoint tipi
 type DashboardBookingItem = {
@@ -77,40 +78,6 @@ type ConfirmAction =
 const TR_PHONE_REGEX = /^\+90\d{10}$/
 
 /**
- * Bugunden itibaren 14 gunluk tarih listesi olusturur.
- */
-function getWeekDays(): { date: string; label: string; shortDate: string }[] {
-  const days = []
-  const now = new Date()
-
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(now)
-    d.setDate(now.getDate() + i)
-
-    // YYYY-MM-DD formatinda tarih string'i
-    const dateStr = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" })
-
-    // Kullanicinin gorecegi etiket
-    let label: string
-    // Ilk iki gun icin sabit etiket, digerleri icin gun ismi kullan
-    if (i === 0) label = "Bugun"
-    else if (i === 1) label = "Yarin"
-    else label = d.toLocaleDateString("tr-TR", { weekday: "short", timeZone: "Europe/Istanbul" })
-
-    // Kisa tarih (25 Sub)
-    const shortDate = d.toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "short",
-      timeZone: "Europe/Istanbul",
-    })
-
-    days.push({ date: dateStr, label, shortDate })
-  }
-
-  return days
-}
-
-/**
  * Admin hata kodlarini Turkce aciklamaya cevirir.
  */
 function mapAdminError(err: unknown): string {
@@ -152,7 +119,7 @@ function isSlotPastOrNow(slotTime: string): boolean {
 
 export default function AdminDashboardPage() {
   const router = useRouter()
-  const weekDays = getWeekDays()
+  const weekDays = buildBookingDays()
 
   // Secili tarih (varsayilan bugun)
   const [selectedDate, setSelectedDate] = useState(weekDays[0].date)

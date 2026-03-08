@@ -22,6 +22,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import BOOKING_MAX_DAYS_AHEAD
 from app.models.barber_profile import BarberProfile
 from app.models.booking import Booking
 from app.models.day_override import DayOverride
@@ -34,8 +35,8 @@ logger = logging.getLogger(__name__)
 # Projenin tek timezone'u â€” deÄŸiÅŸtirilemez (CLAUDE.md)
 TZ = ZoneInfo("Europe/Istanbul")
 
-# Randevu alÄ±nabilecek maksimum ileri tarih (CLAUDE.md: 7 gÃ¼n kuralÄ±)
-MAX_DAYS_AHEAD = 7
+# Randevu alınabilecek maksimum ileri tarih.
+MAX_DAYS_AHEAD = BOOKING_MAX_DAYS_AHEAD
 
 # Ayni kullanicinin ayni gun alabilecegi maksimum confirmed randevu sayisi.
 MAX_BOOKINGS_PER_DAY = 3
@@ -158,7 +159,7 @@ async def create_booking(
     Bu fonksiyonun Ã§alÄ±ÅŸma sÄ±rasÄ±:
     1. Ä°ÅŸ kurallarÄ± kontrolÃ¼ (transaction dÄ±ÅŸÄ± â€” kilit gerekmez):
        - GeÃ§miÅŸ slot mu? â†’ 400
-       - 7 gÃ¼nden uzakta mÄ±? â†’ 400
+       - İzin verilen pencerenin dışında mı? â†’ 400
        - Slot takvimde geÃ§erli mi? â†’ 400
     2. Atomik transaction (SELECT FOR UPDATE ile kilitli kontroller):
        - Bu slota confirmed randevu var mÄ±? â†’ 409 slot_taken
@@ -178,7 +179,7 @@ async def create_booking(
 
     Raises:
         400 slot_in_past: Slot zamanÄ± geÃ§miÅŸte
-        400 too_far_in_future: Slot 7 gÃ¼nden daha ileri
+        400 too_far_in_future: Slot izin verilen pencereden daha ileri
         400 invalid_slot: Slot berber takvimine gÃ¶re geÃ§ersiz
         409 slot_taken: Bu slotta zaten confirmed randevu var
         409 slot_blocked: Bu slot admin tarafÄ±ndan bloklanmÄ±ÅŸ
@@ -195,7 +196,7 @@ async def create_booking(
         # GeÃ§miÅŸ veya tam ÅŸu anki slota randevu alÄ±namaz (CLAUDE.md)
         raise HTTPException(400, {"error": "slot_in_past"})
 
-    # Kural 2: 7 gÃ¼nden daha ileri bir tarihe randevu alÄ±namaz
+    # Kural 2: İzin verilen günden daha ileri bir tarihe randevu alınamaz
     if slot_local > now + timedelta(days=MAX_DAYS_AHEAD):
         raise HTTPException(400, {"error": "too_far_in_future"})
 

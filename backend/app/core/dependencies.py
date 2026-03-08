@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.cookies import resolve_cookie_domain
 from app.core.database import get_db
 from app.core.security import create_token, decode_token
 from app.models.admin import Admin
@@ -27,19 +28,6 @@ logger = logging.getLogger(__name__)
 # Sliding session süresi: 40 gün.
 _SESSION_MAX_AGE = 60 * 60 * 24 * 40
 _SESSION_EXPIRES_MINUTES = 60 * 24 * 40
-
-
-def _get_cookie_domain(request: Request) -> str | None:
-    """
-    Cookie domain'ini auth/router ile aynı kuralla belirler.
-    """
-    settings = get_settings()
-    if settings.env != "production":
-        return None
-    app_domain = (settings.app_domain or "").strip().lower()
-    if not app_domain:
-        return None
-    return "." + app_domain
 
 
 def _renew_user_cookie(request: Request, user: User) -> None:
@@ -57,7 +45,7 @@ def _renew_user_cookie(request: Request, user: User) -> None:
         "secure": (settings.env == "production"),
         "samesite": "lax",
         "max_age": _SESSION_MAX_AGE,
-        "domain": _get_cookie_domain(request),
+        "domain": resolve_cookie_domain(request),
     }
 
 
@@ -76,7 +64,7 @@ def _renew_admin_cookie(request: Request, admin: Admin) -> None:
         "secure": (settings.env == "production"),
         "samesite": "lax",
         "max_age": _SESSION_MAX_AGE,
-        "domain": _get_cookie_domain(request),
+        "domain": resolve_cookie_domain(request),
     }
 
 

@@ -26,6 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.cookies import resolve_cookie_domain
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.phone import phone_variants
 from app.core.security import create_token, decode_token
@@ -72,27 +73,6 @@ def _get_provider():
     """
     return get_sms_provider()
 
-def _get_cookie_domain(request: Request) -> str | None:
-    """
-    Cookie domain'ini belirler.
-
-    Production:
-      - Subdomain'ler arası auth için .bbsoft.com.tr gibi parent domain kullanılır.
-    Dev:
-      - None (domain set edilmez)
-    """
-    settings = get_settings()
-
-    if settings.env != "production":
-        return None
-
-    app_domain = (settings.app_domain or "").strip().lower()
-    if not app_domain:
-        return None
-
-    # Parent domain'e cookie yaz (subdomain'ler arası paylaşım için)
-    return "." + app_domain
-
 def _set_session_cookie(request: Request, response: Response, user_id, session_version: str) -> None:
     """
     Kullanıcı (customer) için HTTP-only session cookie set eder.
@@ -100,7 +80,7 @@ def _set_session_cookie(request: Request, response: Response, user_id, session_v
     Production'da secure=True (HTTPS zorunlu).
     """
     settings = get_settings()
-    cookie_domain = _get_cookie_domain(request)
+    cookie_domain = resolve_cookie_domain(request)
     token = create_token(
         {"sub": str(user_id), "role": "user", "sv": session_version},
         expires_minutes=_SESSION_EXPIRES_MINUTES,
@@ -123,7 +103,7 @@ def _set_admin_session_cookie(request: Request, response: Response, admin_id, se
     Admin cookie ile user endpoint'lerine erişim mümkün değildir (rol farkı).
     """
     settings = get_settings()
-    cookie_domain = _get_cookie_domain(request)
+    cookie_domain = resolve_cookie_domain(request)
     token = create_token(
         {"sub": str(admin_id), "role": "admin", "sv": session_version},  # role=admin: user cookie'sinden ayrışır
         expires_minutes=_SESSION_EXPIRES_MINUTES,
@@ -427,7 +407,7 @@ async def logout(
             pass
 
     # Her iki cookie'yi de sil; sadece biri set edilmişse diğerini silmek sorun değil
-    cookie_domain = _get_cookie_domain(request)
+    cookie_domain = resolve_cookie_domain(request)
     response.delete_cookie("user_session", domain=cookie_domain)
     response.delete_cookie("admin_session", domain=cookie_domain)
     return {"message": "logged_out"}

@@ -3,7 +3,7 @@ test_booking.py — Booking modülü için otomatik testler.
 
 Test senaryoları (CURSOR_PROMPTS.md ADIM 7):
   1. Geçmiş slot → 400 slot_in_past
-  2. 7 günden uzak slot → 400 too_far_in_future
+  2. 14 günden uzak slot → 400 too_far_in_future
   3. Geçersiz slot (berber ayarı yok) → 400 invalid_slot
   4. Kapalı günde slot → 400 invalid_slot
   5. Dolu slot → 409 slot_taken
@@ -181,13 +181,13 @@ async def test_gecmis_slot_400():
 # ─── Test 2: 7 Günden Uzak Slot ──────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_7_gun_otesi_400():
+async def test_14_gun_otesi_400():
     """
-    7 günden daha ileri bir slota randevu alınamaz → 400 too_far_in_future.
+    14 günden daha ileri bir slota randevu alınamaz → 400 too_far_in_future.
     DB sorgusu yapılmadan hata fırlatılır.
     """
-    # 8 gün sonrası — izin verilen sınırın dışında
-    uzak_slot = _future_slot(days_ahead=8)
+    # 15 gün sonrası — izin verilen sınırın dışında
+    uzak_slot = _future_slot(days_ahead=15)
 
     session = _make_mock_session()
 
@@ -196,6 +196,25 @@ async def test_7_gun_otesi_400():
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail["error"] == "too_far_in_future"
+
+
+@pytest.mark.asyncio
+async def test_14_gun_sinirinda_slot_too_far_hatasi_vermez():
+    """
+    14 gun sonrasindaki slot pencere icindedir; too_far_in_future donmemeli.
+    Berber ayari olmadigi icin sonraki kuraldan invalid_slot hatasi beklenir.
+    """
+    sinirdaki_slot = _future_slot(days_ahead=14)
+
+    session = _make_mock_session(
+        _make_db_result(None),  # BarberProfile yok -> invalid_slot
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await booking_service.create_booking(session, TEST_TENANT_ID, TEST_USER_ID, sinirdaki_slot)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["error"] == "invalid_slot"
 
 
 # ─── Test 3: Geçersiz Slot — Berber Ayarı Yok ────────────────────────────────

@@ -79,7 +79,7 @@ async def create_booking(
 
     TÃ¼m kontroller transaction iÃ§inde yapÄ±lÄ±r:
     - slot_in_past: GeÃ§miÅŸ slota randevu alÄ±namaz
-    - too_far_in_future: 7 gÃ¼nden uzaÄŸa randevu alÄ±namaz
+    - too_far_in_future: izin verilen gÃ¼n penceresinden ileriye randevu alÄ±namaz
     - invalid_slot: Slot berber takvimine gÃ¶re geÃ§ersiz
     - slot_taken: Bu slotta zaten confirmed randevu var
     - slot_blocked: Bu slot admin tarafÄ±ndan kapatÄ±lmÄ±ÅŸ

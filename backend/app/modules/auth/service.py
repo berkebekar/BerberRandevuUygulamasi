@@ -114,6 +114,7 @@ async def verify_otp(
         )
         .order_by(OTPRecord.created_at.desc())
         .limit(1)
+        .with_for_update()
     )
     record = result.scalar_one_or_none()
 
@@ -289,6 +290,7 @@ async def verify_admin_otp(
         )
         .order_by(OTPRecord.created_at.desc())
         .limit(1)
+        .with_for_update()
     )
     record = result.scalar_one_or_none()
 

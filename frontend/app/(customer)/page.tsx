@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { ActionConfirmSheet, SlotGrid } from "@/components"
 import type { Slot } from "@/components"
 import { apiDelete, apiFetch } from "@/lib/api"
+import { buildBookingDays } from "@/lib/bookingWindow"
 
 type UserMe = {
   id: string
@@ -23,33 +24,6 @@ type MyBooking = {
 type UpcomingBookingState = {
   status: "loading" | "loaded" | "error"
   items: MyBooking[]
-}
-
-function getWeekDays(): { date: string; label: string; shortDate: string }[] {
-  const days = []
-  const now = new Date()
-
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(now)
-    d.setDate(now.getDate() + i)
-
-    const dateStr = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" })
-
-    let label: string
-    if (i === 0) label = "Bugun"
-    else if (i === 1) label = "Yarin"
-    else label = d.toLocaleDateString("tr-TR", { weekday: "short", timeZone: "Europe/Istanbul" })
-
-    const shortDate = d.toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "short",
-      timeZone: "Europe/Istanbul",
-    })
-
-    days.push({ date: dateStr, label, shortDate })
-  }
-
-  return days
 }
 
 function formatBookingRow(slotTime: string): { timeText: string; dateText: string } {
@@ -76,7 +50,7 @@ function getCancellationText(cancelledBy?: "admin" | "user" | null): string {
 
 export default function HomePage() {
   const router = useRouter()
-  const weekDays = getWeekDays()
+  const weekDays = buildBookingDays()
 
   const [selectedDate, setSelectedDate] = useState(weekDays[0].date)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
