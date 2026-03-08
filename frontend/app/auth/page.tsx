@@ -147,8 +147,8 @@ export default function AuthPage() {
   }
 
   return (
-    // Mobilde klavye acildiginda ziplamayi azaltmak icin dikey ortalama yerine ustten hizala.
-    <div className="min-h-[100dvh] bg-zinc-950 px-4 py-6 sm:py-10">
+    // Mobile-first: icerigi ortala; dar ekranlarda taskinligi scroll ile yonet.
+    <div className="min-h-[100dvh] bg-zinc-950 px-4 py-6 sm:py-10 flex items-center justify-center overflow-y-auto">
       <div className="w-full max-w-sm mx-auto">
 
         {/* Logo / Başlık */}
