@@ -40,12 +40,6 @@ function formatTime(slotTime: string): string {
   })
 }
 
-function formatSlotRange(slotStartTime: string, slotEndTime?: string): string {
-  const start = formatTime(slotStartTime)
-  if (!slotEndTime) return start
-  return `${start}-${formatTime(slotEndTime)}`
-}
-
 /**
  * Slot durumuna göre Tailwind CSS sınıflarını döner.
  */
@@ -122,7 +116,7 @@ export default function SlotGrid({ slots, selectedSlot, onSelect, isLoading }: S
             className={slotClasses(slot.status, isSelected)}
           >
             {/* Saat gösterimi */}
-            <div>{formatSlotRange(slot.slot_time, slot.slot_end_time)}</div>
+            <div>{formatTime(slot.slot_time)}</div>
             {/* Durum etiketi (Dolu, Kapalı, Geçti) */}
             {label && (
               <div className="text-xs mt-0.5 opacity-70">{label}</div>

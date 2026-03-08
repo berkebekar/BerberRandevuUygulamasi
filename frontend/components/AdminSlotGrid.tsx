@@ -71,12 +71,6 @@ function formatTime(dt: string): string {
   })
 }
 
-function formatSlotRange(start: string, end?: string): string {
-  const startText = formatTime(start)
-  if (!end) return startText
-  return `${startText}-${formatTime(end)}`
-}
-
 export default function AdminSlotGrid({
   slots,
   isLoading,
@@ -125,7 +119,7 @@ export default function AdminSlotGrid({
             className={slotClasses(slot.status)}
           >
             {/* Saat gosterimi */}
-            <div>{formatSlotRange(slot.datetime, slot.end_datetime)}</div>
+            <div>{formatTime(slot.datetime)}</div>
             {/* Durum etiketi */}
             {label && (
               <div className="text-xs mt-0.5 opacity-70">{label}</div>
