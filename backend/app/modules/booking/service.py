@@ -211,8 +211,11 @@ async def create_booking(
     profile = profile_result.scalar_one_or_none()
     max_days_ahead = _resolve_max_days_ahead(profile)
 
-    # Kural 2: İzin verilen günden daha ileri bir tarihe randevu alınamaz
-    if slot_local > now + timedelta(days=max_days_ahead):
+    # Kural 2: İzin verilen günden daha ileri bir tarihe randevu alınamaz.
+    # Kontrolu saat farkiyla degil takvim gunu farkiyla yapariz; boylece
+    # "bugun + N gun" penceresi gun icindeki saate bagli olarak dalgalanmaz.
+    days_ahead = (slot_local.date() - now.date()).days
+    if days_ahead > max_days_ahead:
         raise HTTPException(
             400,
             {"error": "too_far_in_future", "max_booking_days_ahead": max_days_ahead},
