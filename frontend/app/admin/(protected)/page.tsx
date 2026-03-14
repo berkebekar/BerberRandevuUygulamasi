@@ -10,113 +10,22 @@
 
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ActionConfirmSheet, AdminSlotGrid, PhoneInput } from "@/components"
-import type { AdminSlotItem, AdminSlotStatus } from "@/components"
-import { apiDelete, apiFetch, apiPost } from "@/lib/api"
+import { apiDelete, apiPost } from "@/lib/api"
 import { buildBookingDays } from "@/lib/bookingWindow"
-
-// Dashboard endpoint tipi
-type DashboardBookingItem = {
-  id: string
-  user_first_name: string
-  user_last_name: string
-  user_phone: string
-  slot_time: string
-  status: "confirmed" | "cancelled" | "no_show"
-  cancelled_by?: "admin" | "user" | null
-}
-
-type DashboardResponse = {
-  date: string
-  bookings: DashboardBookingItem[]
-}
-
-// Birlesik admin endpoint tipi
-type AdminOverviewResponse = {
-  date: string
-  is_closed: boolean
-  max_booking_days_ahead: number
-  bookings: DashboardBookingItem[]
-  slots: { datetime: string; end_datetime?: string; status: AdminSlotStatus }[]
-  blocks: { id: string; blocked_at: string; reason?: string | null }[]
-}
-
-// Onay sheet'inde tutulacak aksiyon tipi
-type ConfirmAction =
-  | {
-      kind: "block_slot"
-      title: string
-      description: string
-      payload: { slotDatetime: string }
-    }
-  | {
-      kind: "unblock_slot"
-      title: string
-      description: string
-      payload: { blockId: string }
-    }
-  | {
-      kind: "cancel_booking"
-      title: string
-      description: string
-      payload: { bookingId: string }
-    }
-  | {
-      kind: "mark_no_show"
-      title: string
-      description: string
-      payload: { bookingId: string }
-    }
-  | {
-      kind: "mark_confirmed"
-      title: string
-      description: string
-      payload: { bookingId: string }
-    }
-
-const TR_PHONE_REGEX = /^\+90\d{10}$/
-
-/**
- * Admin hata kodlarini Turkce aciklamaya cevirir.
- */
-function mapAdminError(err: unknown): string {
-  // Error tipini dogrulamadan mesaj kullanma
-  if (!(err instanceof Error)) return "Beklenmeyen bir hata olustu."
-  switch (err.message) {
-    case "slot_has_booking":
-      return "Bu slotta randevu var. Once randevuyu iptal edin."
-    case "slot_already_blocked":
-      return "Bu slot zaten kapali."
-    case "block_not_found":
-      return "Blok kaydi bulunamadi."
-    case "missing_user_info":
-      return "Bu telefon numarasi kayitli degil. Ad ve soyad gerekli."
-    default:
-      return err.message
-  }
-}
-
-/**
- * Datetime string'i normalize edip map key uretir.
- * toISOString kullanarak timezone farklarini esliyoruz.
- */
-function normalizeKey(datetime: string): string {
-  return new Date(datetime).toISOString()
-}
-
-function formatManualSlotTime(datetime: string) {
-  return new Date(datetime).toLocaleTimeString("tr-TR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Istanbul",
-  })
-}
-
-function isSlotPastOrNow(slotTime: string): boolean {
-  return new Date(slotTime).getTime() <= Date.now()
-}
+import type {
+  ConfirmAction,
+} from "./types"
+import {
+  formatManualSlotTime,
+  isSlotPastOrNow,
+  mapAdminError,
+  normalizeKey,
+  TR_PHONE_REGEX,
+} from "./utils"
+import { useAdminOverview } from "./useAdminOverview"
 
 export default function AdminDashboardPage() {
   const router = useRouter()
@@ -125,17 +34,6 @@ export default function AdminDashboardPage() {
 
   // Secili tarih (varsayilan bugun)
   const [selectedDate, setSelectedDate] = useState(() => buildBookingDays(14)[0].date)
-
-  // Dashboard state
-  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
-  const [dashboardLoading, setDashboardLoading] = useState(false)
-
-  // Slot state
-  const [slots, setSlots] = useState<AdminSlotItem[]>([])
-  const [slotLoading, setSlotLoading] = useState(false)
-
-  // Block listesi (block_id map icin)
-  const [blockMap, setBlockMap] = useState<Record<string, string>>({})
 
   // Global hata mesaji
   const [error, setError] = useState("")
@@ -156,51 +54,20 @@ export default function AdminDashboardPage() {
   const successTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [slotMenuOpen, setSlotMenuOpen] = useState(false)
   const slotMenuRef = useRef<HTMLDivElement | null>(null)
+
+  const {
+    maxBookingDaysAhead: hookMaxDays,
+    dashboard,
+    dashboardLoading,
+    slots,
+    slotLoading,
+    blockMap,
+    fetchOverview,
+  } = useAdminOverview(selectedDate, setError)
   const availableManualSlots = useMemo(
     () => slots.filter((slot) => slot.status === "available"),
     [slots]
   )
-
-  /**
-   * Dashboard + slot + block verisini tek endpoint'ten cek.
-   */
-  const fetchOverview = useCallback(async (date: string, options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false
-    if (!silent) {
-      setDashboardLoading(true)
-      setSlotLoading(true)
-    }
-    setError("")
-    try {
-      const data = await apiFetch<AdminOverviewResponse>(`/api/v1/admin/overview?date=${date}`)
-      setMaxBookingDaysAhead(data.max_booking_days_ahead ?? 14)
-      setDashboard({
-        date: data.date,
-        bookings: data.bookings,
-      })
-      const normalized: AdminSlotItem[] = (data.slots ?? []).map((slot) => ({
-        datetime: slot.datetime,
-        end_datetime: slot.end_datetime,
-        status: slot.status,
-      }))
-      setSlots(normalized)
-      const map: Record<string, string> = {}
-      for (const block of data.blocks ?? []) {
-        map[normalizeKey(block.blocked_at)] = block.id
-      }
-      setBlockMap(map)
-    } catch (err: unknown) {
-      setDashboard(null)
-      setSlots([])
-      setBlockMap({})
-      setError(mapAdminError(err))
-    } finally {
-      if (!silent) {
-        setDashboardLoading(false)
-        setSlotLoading(false)
-      }
-    }
-  }, [])
 
   /**
    * Tarih degistikce dashboard + slots + blocks cek.
@@ -213,28 +80,8 @@ export default function AdminDashboardPage() {
   }, [weekDays, selectedDate])
 
   useEffect(() => {
-    fetchOverview(selectedDate)
-  }, [selectedDate, fetchOverview])
-
-  useEffect(() => {
-    const refreshOverview = () => {
-      if (document.hidden) return
-      fetchOverview(selectedDate, { silent: true })
-    }
-
-    const intervalId = window.setInterval(refreshOverview, 15000)
-    const onVisibilityChange = () => {
-      if (!document.hidden) {
-        fetchOverview(selectedDate, { silent: true })
-      }
-    }
-
-    document.addEventListener("visibilitychange", onVisibilityChange)
-    return () => {
-      window.clearInterval(intervalId)
-      document.removeEventListener("visibilitychange", onVisibilityChange)
-    }
-  }, [selectedDate, fetchOverview])
+    setMaxBookingDaysAhead(hookMaxDays)
+  }, [hookMaxDays])
 
   useEffect(() => {
     if (!success) return
@@ -482,6 +329,12 @@ export default function AdminDashboardPage() {
             <p className="text-xs text-zinc-400">Gunluk ozet ve randevular</p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push("/admin/statistics")}
+              className="text-sm text-zinc-400 hover:text-zinc-300"
+            >
+              Istatistiklerim
+            </button>
             <button
               onClick={() => router.push("/admin/settings")}
               className="text-sm text-zinc-400 hover:text-zinc-300"

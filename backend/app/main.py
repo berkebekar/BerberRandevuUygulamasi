@@ -6,6 +6,8 @@ Business logic yoktur; sadece baslangic noktasidir.
 """
 
 import logging
+import time
+import uuid
 
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
@@ -20,6 +22,10 @@ from app.modules.auth.router import router as auth_router
 from app.modules.booking.router import router as booking_router
 from app.modules.notification.router import router as notification_router
 from app.modules.schedule.router import router as schedule_router
+from app.modules.superadmin.impersonation import router as superadmin_impersonation_router
+from app.modules.superadmin.router import router as superadmin_auth_router
+from app.modules.superadmin.stats import router as superadmin_stats_router
+from app.modules.superadmin.tenants import router as superadmin_tenants_router
 from app.modules.user.router import router as user_router
 
 logger = logging.getLogger(__name__)
@@ -110,6 +116,30 @@ def create_app() -> FastAPI:
         return JSONResponse({"error": "server_error"}, status_code=500)
 
     @app.middleware("http")
+    async def request_observability_middleware(request: Request, call_next):
+        """
+        Basit gozlmlenebilirlik:
+        - request_id header'i
+        - method/path/status
+        - sure (ms)
+        """
+        started_at = time.perf_counter()
+        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - started_at) * 1000
+        response.headers["x-request-id"] = request_id
+        logger.info(
+            "request completed | request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
+            request_id,
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+        return response
+
+    @app.middleware("http")
     async def sliding_session_cookie_middleware(request: Request, call_next):
         """
         Dependency katmaninda request.state'e yazilan yenileme bilgisini
@@ -141,6 +171,18 @@ def create_app() -> FastAPI:
                 domain=admin_cookie["domain"],
             )
 
+        super_admin_cookie = getattr(request.state, "_renew_super_admin_session_cookie", None)
+        if super_admin_cookie:
+            response.set_cookie(
+                key=super_admin_cookie["key"],
+                value=super_admin_cookie["value"],
+                httponly=super_admin_cookie["httponly"],
+                secure=super_admin_cookie["secure"],
+                samesite=super_admin_cookie["samesite"],
+                max_age=super_admin_cookie["max_age"],
+                domain=super_admin_cookie["domain"],
+            )
+
         return response
 
     @app.get("/health")
@@ -170,6 +212,10 @@ def create_app() -> FastAPI:
     app.include_router(schedule_router, prefix=api_prefix)
     app.include_router(booking_router, prefix=api_prefix)
     app.include_router(notification_router, prefix=api_prefix)
+    app.include_router(superadmin_auth_router, prefix=api_prefix)
+    app.include_router(superadmin_stats_router, prefix=api_prefix)
+    app.include_router(superadmin_tenants_router, prefix=api_prefix)
+    app.include_router(superadmin_impersonation_router, prefix=api_prefix)
 
     return app
 

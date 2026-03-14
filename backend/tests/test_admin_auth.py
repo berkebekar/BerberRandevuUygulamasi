@@ -322,11 +322,43 @@ async def test_logout_admin_token_sunucu_tarafinda_iptal_edilir():
     app.dependency_overrides[get_tenant_id] = _override_tenant_id
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
-        r = await client.post(
-            "/api/v1/auth/logout",
-            cookies={"admin_session": token},
-        )
+        client.cookies.set("admin_session", token)
+        r = await client.post("/api/v1/auth/logout")
 
     assert r.status_code == 200
     assert r.json() == {"message": "logged_out"}
     session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_logout_impersonation_token_gercek_admin_sessionini_rotate_etmez():
+    """
+    impersonation admin_session ile auth/logout cagrilirsa gercek admin session_version rotate edilmemeli.
+    """
+    token = create_token(
+        {
+            "sub": str(uuid.uuid4()),
+            "role": "admin",
+            "sv": str(uuid.uuid4()),
+            "imp": True,
+            "imp_by": str(uuid.uuid4()),
+            "imp_tenant": str(TEST_TENANT_ID),
+            "imp_exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+        },
+        expires_minutes=60,
+    )
+    session = _make_mock_session(_make_db_result(None))
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_tenant_id] = _override_tenant_id
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        client.cookies.set("admin_session", token)
+        r = await client.post("/api/v1/auth/logout")
+
+    assert r.status_code == 200
+    assert r.json() == {"message": "logged_out"}
+    session.commit.assert_not_called()

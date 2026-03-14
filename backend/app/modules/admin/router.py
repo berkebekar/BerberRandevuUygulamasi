@@ -18,7 +18,11 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_admin
 from app.models.admin import Admin
 from app.modules.admin import service as admin_service
-from app.modules.admin.schemas import AdminOverviewResponse, DashboardResponse
+from app.modules.admin.schemas import (
+    AdminOverviewResponse,
+    AdminStatisticsResponse,
+    DashboardResponse,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -62,3 +66,20 @@ async def get_overview(
         target_date=date,
     )
     return AdminOverviewResponse(**data)
+
+
+@router.get("/statistics", response_model=AdminStatisticsResponse)
+async def get_statistics(
+    date: date = Query(..., description="Tarih: YYYY-MM-DD formatinda - orn: 2026-02-25"),
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    """
+    Admin icin gunluk, haftalik ve aylik istatistik verileri.
+    """
+    data = await admin_service.get_statistics(
+        db,
+        tenant_id=admin.tenant_id,
+        target_date=date,
+    )
+    return AdminStatisticsResponse(**data)

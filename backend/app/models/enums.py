@@ -37,3 +37,10 @@ class NotificationStatus(str, enum.Enum):
     sent = "sent"
     failed = "failed"
     pending = "pending"
+
+
+class TenantStatus(str, enum.Enum):
+    """Tenant status: active, inactive, deleted."""
+    active = "active"
+    inactive = "inactive"
+    deleted = "deleted"

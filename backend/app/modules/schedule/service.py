@@ -1,14 +1,14 @@
-"""
-schedule/service.py — Slot hesaplama motoru ve çizelge yönetimi.
+﻿"""
+schedule/service.py â€” Slot hesaplama motoru ve Ã§izelge yÃ¶netimi.
 
-Bu dosyanın kalbi get_slots_for_date() fonksiyonudur.
-Slotlar veritabanında saklanmaz; her istekte şu 4 kaynaktan hesaplanır:
-  1. BarberProfile  → varsayılan çalışma saatleri ve slot süresi
-  2. DayOverride   → o gün için özel saat veya tatil
-  3. SlotBlock     → admin'in kapattığı tekil slotlar
-  4. Booking       → müşterilerin aldığı randevular
+Bu dosyanÄ±n kalbi get_slots_for_date() fonksiyonudur.
+Slotlar veritabanÄ±nda saklanmaz; her istekte ÅŸu 4 kaynaktan hesaplanÄ±r:
+  1. BarberProfile  â†’ varsayÄ±lan Ã§alÄ±ÅŸma saatleri ve slot sÃ¼resi
+  2. DayOverride   â†’ o gÃ¼n iÃ§in Ã¶zel saat veya tatil
+  3. SlotBlock     â†’ admin'in kapattÄ±ÄŸÄ± tekil slotlar
+  4. Booking       â†’ mÃ¼ÅŸterilerin aldÄ±ÄŸÄ± randevular
 
-Timezone: tüm işlemler Europe/Istanbul (UTC+3) üzerinden yürür.
+Timezone: tÃ¼m iÅŸlemler Europe/Istanbul (UTC+3) Ã¼zerinden yÃ¼rÃ¼r.
 """
 
 import logging
@@ -29,61 +29,36 @@ from app.modules.schedule.schemas import (
     BarberSettingsResponse,
     BlockSlotResponse,
     DaySlots,
-    SlotItem,
-    SlotStatus,
     WeekSlots,
+)
+from app.modules.schedule.slot_engine import (
+    build_day_slots,
+    resolve_max_booking_days_ahead,
+    to_utc,
 )
 
 logger = logging.getLogger(__name__)
 
-# Projenin tek timezone'u — değiştirilemez (CLAUDE.md)
+# Projenin tek timezone'u â€” deÄŸiÅŸtirilemez (CLAUDE.md)
 TZ = ZoneInfo("Europe/Istanbul")
 DEFAULT_MAX_BOOKING_DAYS_AHEAD = 14
 
 
-# ─── Yardımcı: Timezone normalize ────────────────────────────────────────────
+# â”€â”€â”€ YardÄ±mcÄ±: Timezone normalize â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _to_utc(dt: datetime) -> datetime:
     """
-    Herhangi bir datetime'ı UTC'ye çevirir.
-    DB'den gelen naive datetime → UTC olarak kabul edilir.
-    Timezone-aware datetime → direkt UTC'ye çevrilir.
+    Herhangi bir datetime'Ä± UTC'ye Ã§evirir.
+    DB'den gelen naive datetime â†’ UTC olarak kabul edilir.
+    Timezone-aware datetime â†’ direkt UTC'ye Ã§evrilir.
     """
-    if dt.tzinfo is None:
-        # asyncpg bazen naive UTC döndürebilir
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+    return to_utc(dt)
 
 def _resolve_max_booking_days_ahead(profile: BarberProfile | None) -> int:
     """BarberProfile kaydindan ileri tarih limitini guvenli sekilde cozer."""
-    if profile is None:
-        return DEFAULT_MAX_BOOKING_DAYS_AHEAD
-    raw_value = getattr(profile, "max_booking_days_ahead", DEFAULT_MAX_BOOKING_DAYS_AHEAD)
-    if isinstance(raw_value, int) and raw_value > 0:
-        return raw_value
-    return DEFAULT_MAX_BOOKING_DAYS_AHEAD
+    return resolve_max_booking_days_ahead(profile)
 
-
-def _resolve_slot_duration_minutes(profile: BarberProfile, override: DayOverride | None) -> int:
-    """Gunluk slot suresini cozer: override varsa onu, yoksa profil degerini kullanir."""
-    if override is not None:
-        raw_value = getattr(override, "slot_duration_minutes", None)
-        if isinstance(raw_value, int) and raw_value > 0:
-            return raw_value
-    return profile.slot_duration_minutes
-
-
-def _resolve_day_end_datetime(target_date: date, end_time: time) -> datetime:
-    """
-    00:00 bitis saati gun sonu (24:00) olarak yorumlanir.
-    Diger saatlerde ayni gun icindeki bitis zamani kullanilir.
-    """
-    if end_time == time(0, 0):
-        return datetime.combine(target_date + timedelta(days=1), time.min, tzinfo=TZ)
-    return datetime.combine(target_date, end_time, tzinfo=TZ)
-
-
-# ─── Yardımcı: Tek gün slot üretimi ──────────────────────────────────────────
+# â”€â”€â”€ YardÄ±mcÄ±: Tek gÃ¼n slot Ã¼retimi â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _build_day_slots(
     profile: BarberProfile,
@@ -93,98 +68,17 @@ def _build_day_slots(
     target_date: date,
     now: datetime,
 ) -> DaySlots:
-    """
-    Bir güne ait tüm slotları hesaplayıp döndürür.
-
-    Bu fonksiyon saf hesaplama yapar — DB çağrısı yapmaz.
-    Veriler dışarıdan (service fonksiyonlarından) geçirilir.
-
-    Öncelik sırası:
-      1. past    — slot zamanı now'dan önce
-      2. booked  — confirmed randevu var
-      3. blocked — admin kapattı
-      4. available — serbest
-    """
-    # Haftalık kapalı gün kontrolü
-    weekday = target_date.weekday()
-    max_booking_days_ahead = _resolve_max_booking_days_ahead(profile)
-    if profile.weekly_closed_days and weekday in profile.weekly_closed_days:
-        return DaySlots(
-            date=target_date,
-            is_closed=True,
-            max_booking_days_ahead=max_booking_days_ahead,
-            slots=[],
-        )
-
-    # DayOverride var ve gün kapalıysa: hiç slot üretme
-    if override and override.is_closed:
-        return DaySlots(
-            date=target_date,
-            is_closed=True,
-            max_booking_days_ahead=max_booking_days_ahead,
-            slots=[],
-        )
-
-    # Çalışma saatlerini belirle: override varsa override'ı, yoksa profile'ı kullan
-    start_time = (
-        override.work_start_time
-        if override and override.work_start_time
-        else profile.work_start_time
-    )
-    end_time = (
-        override.work_end_time
-        if override and override.work_end_time
-        else profile.work_end_time
-    )
-    duration = timedelta(minutes=_resolve_slot_duration_minutes(profile, override))
-
-    # Tüm slot zamanlarını üret: start, start+dur, start+2*dur, ...
-    # Istanbul timezone'unda aware datetime'lar oluşturuyoruz
-    slot_datetimes: list[datetime] = []
-    current = datetime.combine(target_date, start_time, tzinfo=TZ)
-    day_end = _resolve_day_end_datetime(target_date, end_time)
-
-    while current + duration <= day_end:
-        # Slot başlangıcı + süre ≤ günün bitiş saati → geçerli slot
-        slot_datetimes.append(current)
-        current += duration
-
-    # Booked ve blocked zamanları UTC set'e dönüştür — hızlı arama için
-    booked_utc: set[datetime] = {_to_utc(b.slot_time) for b in bookings}
-    blocked_utc: set[datetime] = {_to_utc(b.blocked_at) for b in blocks}
-
-    slots: list[SlotItem] = []
-    for slot_dt in slot_datetimes:
-        slot_utc = _to_utc(slot_dt)  # Karşılaştırma için UTC'ye çevir
-
-        if slot_dt <= now:
-            # Zaman geçmiş veya tam şu an — artık rezerve edilemez
-            status = SlotStatus.past
-        elif slot_utc in booked_utc:
-            # Confirmed randevu mevcut
-            status = SlotStatus.booked
-        elif slot_utc in blocked_utc:
-            # Admin bu slotu kapattı
-            status = SlotStatus.blocked
-        else:
-            status = SlotStatus.available
-
-        slots.append(SlotItem(
-            time=slot_dt.strftime("%H:%M"),   # "09:00" formatı — gösterim için
-            datetime=slot_dt,
-            end_datetime=slot_dt + duration,
-            status=status,
-        ))
-
-    return DaySlots(
-        date=target_date,
-        is_closed=False,
-        max_booking_days_ahead=max_booking_days_ahead,
-        slots=slots,
+    return build_day_slots(
+        profile=profile,
+        override=override,
+        bookings=bookings,
+        blocks=blocks,
+        target_date=target_date,
+        now=now,
     )
 
 
-# ─── Slot Okuma ───────────────────────────────────────────────────────────────
+# â”€â”€â”€ Slot Okuma â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def get_slots_for_date(
     db: AsyncSession,
@@ -193,24 +87,24 @@ async def get_slots_for_date(
     now: datetime | None = None,
 ) -> DaySlots:
     """
-    Belirli bir gün için slot listesini hesaplar ve döndürür.
+    Belirli bir gÃ¼n iÃ§in slot listesini hesaplar ve dÃ¶ndÃ¼rÃ¼r.
 
-    'now' parametresi test ortamında zaman kontrolü için geçilebilir;
-    prod'da None bırakılırsa gerçek saat kullanılır.
+    'now' parametresi test ortamÄ±nda zaman kontrolÃ¼ iÃ§in geÃ§ilebilir;
+    prod'da None bÄ±rakÄ±lÄ±rsa gerÃ§ek saat kullanÄ±lÄ±r.
 
     Returns:
-        DaySlots: Günün slot listesi (is_closed=True ise slots boş).
+        DaySlots: GÃ¼nÃ¼n slot listesi (is_closed=True ise slots boÅŸ).
     """
     if now is None:
-        now = datetime.now(TZ)  # Gerçek Istanbul saatini kullan
+        now = datetime.now(TZ)  # GerÃ§ek Istanbul saatini kullan
 
-    # 1. BarberProfile: berber kayıt yapmamışsa boş liste döndür
+    # 1. BarberProfile: berber kayÄ±t yapmamÄ±ÅŸsa boÅŸ liste dÃ¶ndÃ¼r
     profile_result = await db.execute(
         select(BarberProfile).where(BarberProfile.tenant_id == tenant_id)
     )
     profile = profile_result.scalar_one_or_none()
     if profile is None:
-        # Berber henüz çalışma ayarlarını girmemiş — boş liste
+        # Berber henÃ¼z Ã§alÄ±ÅŸma ayarlarÄ±nÄ± girmemiÅŸ â€” boÅŸ liste
         return DaySlots(
             date=target_date,
             is_closed=False,
@@ -218,7 +112,7 @@ async def get_slots_for_date(
             slots=[],
         )
 
-    # 2. DayOverride: bu gün için özel ayar var mı?
+    # 2. DayOverride: bu gÃ¼n iÃ§in Ã¶zel ayar var mÄ±?
     override_result = await db.execute(
         select(DayOverride).where(
             DayOverride.tenant_id == tenant_id,
@@ -227,8 +121,8 @@ async def get_slots_for_date(
     )
     override = override_result.scalar_one_or_none()
 
-    # Gün kapalıysa booking ve block sorgusu yapmadan erken dön
-    # (is_closed=True → bu gün berber çalışmıyor, listelenecek slot yok)
+    # GÃ¼n kapalÄ±ysa booking ve block sorgusu yapmadan erken dÃ¶n
+    # (is_closed=True â†’ bu gÃ¼n berber Ã§alÄ±ÅŸmÄ±yor, listelenecek slot yok)
     if override and override.is_closed:
         return DaySlots(
             date=target_date,
@@ -237,7 +131,7 @@ async def get_slots_for_date(
             slots=[],
         )
 
-    # 3. Gün için confirmed bookings'i çek
+    # 3. GÃ¼n iÃ§in confirmed bookings'i Ã§ek
     day_start = datetime.combine(target_date, time.min, tzinfo=TZ)
     day_end   = datetime.combine(target_date, time.max, tzinfo=TZ)
 
@@ -251,7 +145,7 @@ async def get_slots_for_date(
     )
     bookings = bookings_result.scalars().all()
 
-    # 4. Gün için slot_blocks'ları çek
+    # 4. GÃ¼n iÃ§in slot_blocks'larÄ± Ã§ek
     blocks_result = await db.execute(
         select(SlotBlock).where(
             SlotBlock.tenant_id == tenant_id,
@@ -271,11 +165,11 @@ async def get_slots_for_week(
     now: datetime | None = None,
 ) -> WeekSlots:
     """
-    start_date'den başlayarak 7 günlük slot listesini döndürür.
+    start_date'den baÅŸlayarak 7 gÃ¼nlÃ¼k slot listesini dÃ¶ndÃ¼rÃ¼r.
 
-    Performans optimizasyonu: bookings ve blocks tek sorguda çekilir,
-    ardından her gün için Python tarafında filtrelenir.
-    Böylece 14 ayrı DB sorgusu yerine 4 sorgu yapılır.
+    Performans optimizasyonu: bookings ve blocks tek sorguda Ã§ekilir,
+    ardÄ±ndan her gÃ¼n iÃ§in Python tarafÄ±nda filtrelenir.
+    BÃ¶ylece 14 ayrÄ± DB sorgusu yerine 4 sorgu yapÄ±lÄ±r.
     """
     if now is None:
         now = datetime.now(TZ)
@@ -286,7 +180,7 @@ async def get_slots_for_week(
     )
     profile = profile_result.scalar_one_or_none()
     if profile is None:
-        # Ayar yok → tüm 7 gün için boş liste
+        # Ayar yok â†’ tÃ¼m 7 gÃ¼n iÃ§in boÅŸ liste
         empty_days = [
             DaySlots(
                 date=start_date + timedelta(days=i),
@@ -298,7 +192,7 @@ async def get_slots_for_week(
         ]
         return WeekSlots(week=empty_days)
 
-    # 2. Haftalık DayOverride'ları tek sorguda çek
+    # 2. HaftalÄ±k DayOverride'larÄ± tek sorguda Ã§ek
     week_end_date = start_date + timedelta(days=6)
     overrides_result = await db.execute(
         select(DayOverride).where(
@@ -308,10 +202,10 @@ async def get_slots_for_week(
         )
     )
     overrides = overrides_result.scalars().all()
-    # Tarihe göre dict yap — O(1) erişim için
+    # Tarihe gÃ¶re dict yap â€” O(1) eriÅŸim iÃ§in
     overrides_by_date: dict[date, DayOverride] = {o.date: o for o in overrides}
 
-    # 3. Haftalık confirmed bookings'i tek sorguda çek
+    # 3. HaftalÄ±k confirmed bookings'i tek sorguda Ã§ek
     week_start_dt = datetime.combine(start_date, time.min, tzinfo=TZ)
     week_end_dt   = datetime.combine(week_end_date, time.max, tzinfo=TZ)
 
@@ -325,7 +219,7 @@ async def get_slots_for_week(
     )
     all_bookings = bookings_result.scalars().all()
 
-    # 4. Haftalık slot_blocks'ları tek sorguda çek
+    # 4. HaftalÄ±k slot_blocks'larÄ± tek sorguda Ã§ek
     blocks_result = await db.execute(
         select(SlotBlock).where(
             SlotBlock.tenant_id == tenant_id,
@@ -335,12 +229,12 @@ async def get_slots_for_week(
     )
     all_blocks = blocks_result.scalars().all()
 
-    # Her gün için hesapla — booking ve block'ları gün bazında filtrele
+    # Her gÃ¼n iÃ§in hesapla â€” booking ve block'larÄ± gÃ¼n bazÄ±nda filtrele
     week_days: list[DaySlots] = []
     for i in range(7):
         d = start_date + timedelta(days=i)
 
-        # Bu güne ait booking ve block'ları filtrele
+        # Bu gÃ¼ne ait booking ve block'larÄ± filtrele
         day_bookings = [
             b for b in all_bookings
             if _to_utc(b.slot_time).astimezone(TZ).date() == d
@@ -357,15 +251,15 @@ async def get_slots_for_week(
     return WeekSlots(week=week_days)
 
 
-# ─── Admin: Berber Ayarları ───────────────────────────────────────────────────
+# â”€â”€â”€ Admin: Berber AyarlarÄ± â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def get_barber_settings(
     db: AsyncSession,
     tenant_id: uuid.UUID,
 ) -> BarberProfile | None:
     """
-    Berberin çalışma ayarlarını döndürür.
-    Kayıt yoksa None döner (henüz ayar girilmemiş demektir).
+    Berberin Ã§alÄ±ÅŸma ayarlarÄ±nÄ± dÃ¶ndÃ¼rÃ¼r.
+    KayÄ±t yoksa None dÃ¶ner (henÃ¼z ayar girilmemiÅŸ demektir).
     """
     result = await db.execute(
         select(BarberProfile).where(BarberProfile.tenant_id == tenant_id)
@@ -383,27 +277,27 @@ async def upsert_barber_settings(
     max_booking_days_ahead: int,
 ) -> BarberProfile:
     """
-    Berber çalışma ayarlarını oluşturur veya günceller (upsert).
+    Berber Ã§alÄ±ÅŸma ayarlarÄ±nÄ± oluÅŸturur veya gÃ¼nceller (upsert).
 
-    Kayıt yoksa → yeni BarberProfile oluşturur.
-    Kayıt varsa → mevcut kaydı günceller.
+    KayÄ±t yoksa â†’ yeni BarberProfile oluÅŸturur.
+    KayÄ±t varsa â†’ mevcut kaydÄ± gÃ¼nceller.
 
     Returns:
-        BarberProfile: Güncellenmiş veya yeni oluşturulmuş kayıt.
+        BarberProfile: GÃ¼ncellenmiÅŸ veya yeni oluÅŸturulmuÅŸ kayÄ±t.
     """
     existing = await get_barber_settings(db, tenant_id)
 
     if existing:
-        # Mevcut kaydı güncelle
+        # Mevcut kaydÄ± gÃ¼ncelle
         existing.slot_duration_minutes = slot_duration_minutes
         existing.work_start_time = work_start_time
         existing.work_end_time = work_end_time
         existing.weekly_closed_days = weekly_closed_days
         existing.max_booking_days_ahead = max_booking_days_ahead
-        # updated_at modelde onupdate yok; her güncellemede manuel set et
+        # updated_at modelde onupdate yok; her gÃ¼ncellemede manuel set et
         existing.updated_at = datetime.now(timezone.utc)
     else:
-        # İlk kez ayar giriliyor
+        # Ä°lk kez ayar giriliyor
         existing = BarberProfile(
             tenant_id=tenant_id,
             slot_duration_minutes=slot_duration_minutes,
@@ -419,7 +313,7 @@ async def upsert_barber_settings(
     return existing
 
 
-# ─── Admin: Günlük Override ───────────────────────────────────────────────────
+# â”€â”€â”€ Admin: GÃ¼nlÃ¼k Override â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def upsert_day_override(
     db: AsyncSession,
@@ -431,13 +325,13 @@ async def upsert_day_override(
     slot_duration_minutes: int | None = None,
 ) -> DayOverride:
     """
-    Belirtilen gün için DayOverride oluşturur veya günceller (upsert).
+    Belirtilen gÃ¼n iÃ§in DayOverride oluÅŸturur veya gÃ¼nceller (upsert).
 
-    is_closed=True ise o gün berber çalışmıyor;
-    is_closed=False ise work_start/end_time override olarak uygulanır.
+    is_closed=True ise o gÃ¼n berber Ã§alÄ±ÅŸmÄ±yor;
+    is_closed=False ise work_start/end_time override olarak uygulanÄ±r.
 
     Returns:
-        DayOverride: Güncellenmiş veya yeni oluşturulmuş override.
+        DayOverride: GÃ¼ncellenmiÅŸ veya yeni oluÅŸturulmuÅŸ override.
     """
     result = await db.execute(
         select(DayOverride).where(
@@ -469,13 +363,13 @@ async def upsert_day_override(
             )
 
     if override:
-        # Mevcut override'ı güncelle
+        # Mevcut override'Ä± gÃ¼ncelle
         override.is_closed = is_closed
         override.work_start_time = None if is_closed else work_start_time
         override.work_end_time = None if is_closed else work_end_time
         override.slot_duration_minutes = None if is_closed else slot_duration_minutes
     else:
-        # Yeni override oluştur
+        # Yeni override oluÅŸtur
         override = DayOverride(
             tenant_id=tenant_id,
             date=target_date,
@@ -491,7 +385,7 @@ async def upsert_day_override(
     return override
 
 
-# ─── Admin: Slot Bloklama / Açma ─────────────────────────────────────────────
+# â”€â”€â”€ Admin: Slot Bloklama / AÃ§ma â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def get_day_override(
     db: AsyncSession,
@@ -528,16 +422,16 @@ async def block_slot(
     reason: str | None = None,
 ) -> SlotBlock:
     """
-    Belirtilen slot zamanını kapatır (SlotBlock kaydı oluşturur).
+    Belirtilen slot zamanÄ±nÄ± kapatÄ±r (SlotBlock kaydÄ± oluÅŸturur).
 
-    Eğer o slotta confirmed randevu varsa 409 fırlatır:
-    admin önce randevuyu iptal etmeli, ardından slotu kapatabilir.
-    (CURSOR_PROMPTS ADIM 6 kuralı)
+    EÄŸer o slotta confirmed randevu varsa 409 fÄ±rlatÄ±r:
+    admin Ã¶nce randevuyu iptal etmeli, ardÄ±ndan slotu kapatabilir.
+    (CURSOR_PROMPTS ADIM 6 kuralÄ±)
 
     Returns:
-        SlotBlock: Yeni oluşturulan blok kaydı.
+        SlotBlock: Yeni oluÅŸturulan blok kaydÄ±.
     """
-    # O slotta confirmed randevu var mı?
+    # O slotta confirmed randevu var mÄ±?
     booking_result = await db.execute(
         select(Booking).where(
             Booking.tenant_id == tenant_id,
@@ -548,7 +442,7 @@ async def block_slot(
     existing_booking = booking_result.scalar_one_or_none()
 
     if existing_booking:
-        # Randevu iptal edilmeden slot kapatılamaz (CURSOR_PROMPTS kuralı)
+        # Randevu iptal edilmeden slot kapatÄ±lamaz (CURSOR_PROMPTS kuralÄ±)
         raise HTTPException(
             409,
             {"error": "slot_has_booking", "booking_id": str(existing_booking.id)},
@@ -562,7 +456,7 @@ async def block_slot(
         )
     )
     if block_result.scalar_one_or_none():
-        # Aynı slotu iki kez kapatmaya çalışmak anlamsız — idempotent değil, 409
+        # AynÄ± slotu iki kez kapatmaya Ã§alÄ±ÅŸmak anlamsÄ±z â€” idempotent deÄŸil, 409
         raise HTTPException(409, {"error": "slot_already_blocked"})
 
     block = SlotBlock(
@@ -582,10 +476,10 @@ async def unblock_slot(
     block_id: uuid.UUID,
 ) -> None:
     """
-    Belirtilen blok kaydını siler (slotu tekrar açar).
+    Belirtilen blok kaydÄ±nÄ± siler (slotu tekrar aÃ§ar).
 
-    Kayıt bulunamazsa veya farklı tenant'a aitse 404 fırlatır.
-    Tenant filtresi zorunlu — başka tenant'ın bloğu silinemez (CLAUDE.md).
+    KayÄ±t bulunamazsa veya farklÄ± tenant'a aitse 404 fÄ±rlatÄ±r.
+    Tenant filtresi zorunlu â€” baÅŸka tenant'Ä±n bloÄŸu silinemez (CLAUDE.md).
     """
     result = await db.execute(
         select(SlotBlock).where(
@@ -631,6 +525,7 @@ async def get_blocks_for_date(
 
     # DB sonucunu listeye cevir
     return result.scalars().all()
+
 
 
 

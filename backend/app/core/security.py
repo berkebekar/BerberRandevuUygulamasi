@@ -45,3 +45,18 @@ def decode_token(token: str) -> dict:
 
     # algorithms listesi zorunlu — jose kütüphanesi alg confusion saldırısına karşı bunu ister
     return jwt.decode(token, get_settings().secret_key, algorithms=["HS256"])
+
+
+def create_token_with_secret(data: dict, expires_minutes: int, secret_key: str) -> str:
+    """
+    Verilen secret ile JWT oluşturur.
+    Super admin gibi ayrık auth akışlarında kullanılır.
+    """
+    payload = data.copy()
+    payload["exp"] = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+    return jwt.encode(payload, secret_key, algorithm="HS256")
+
+
+def decode_token_with_secret(token: str, secret_key: str) -> dict:
+    """Verilen secret ile JWT çözer."""
+    return jwt.decode(token, secret_key, algorithms=["HS256"])

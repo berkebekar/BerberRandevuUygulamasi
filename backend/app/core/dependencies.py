@@ -10,6 +10,8 @@ Bu dosya route'ların ortak ihtiyaçlarını (kimlik doğrulama, yetkilendirme) 
 """
 
 import logging
+import uuid
+from datetime import datetime, timezone
 
 from fastapi import Cookie, Depends, HTTPException, Request
 from jose import JWTError
@@ -19,8 +21,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.cookies import resolve_cookie_domain
 from app.core.database import get_db
-from app.core.security import create_token, decode_token
+from app.core.security import (
+    create_token,
+    create_token_with_secret,
+    decode_token,
+    decode_token_with_secret,
+)
+from app.core.superadmin_auth import get_superadmin_secret
 from app.models.admin import Admin
+from app.models.super_admin import SuperAdmin
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -59,6 +68,27 @@ def _renew_admin_cookie(request: Request, admin: Admin) -> None:
         expires_minutes=_SESSION_EXPIRES_MINUTES,
     )
     request.state._renew_admin_session_cookie = {
+        "value": token,
+        "httponly": True,
+        "secure": (settings.env == "production"),
+        "samesite": "lax",
+        "max_age": _SESSION_MAX_AGE,
+        "domain": resolve_cookie_domain(request),
+    }
+
+
+def _renew_super_admin_cookie(request: Request, super_admin: SuperAdmin) -> None:
+    """
+    Her yetkili super admin isteginde cookie'yi yenileyerek sliding session saglar.
+    """
+    settings = get_settings()
+    token = create_token_with_secret(
+        {"sub": str(super_admin.id), "role": "superadmin", "sv": super_admin.session_version},
+        expires_minutes=_SESSION_EXPIRES_MINUTES,
+        secret_key=get_superadmin_secret(),
+    )
+    request.state._renew_super_admin_session_cookie = {
+        "key": settings.super_admin_cookie_name,
         "value": token,
         "httponly": True,
         "secure": (settings.env == "production"),
@@ -131,6 +161,31 @@ async def get_current_admin(
         # Token var ama admin cookie'si değil — user cookie ile admin route'a erişim denemesi
         raise HTTPException(403, {"error": "forbidden"})
 
+    is_impersonated = payload.get("imp") is True
+    if is_impersonated:
+        imp_by = payload.get("imp_by")
+        imp_tenant = payload.get("imp_tenant")
+        imp_exp = payload.get("imp_exp")
+        if not imp_by or not imp_tenant or imp_exp is None:
+            raise HTTPException(401, {"error": "invalid_token"})
+
+        tenant_id = get_tenant_id_from_request(request)
+        if str(imp_tenant) != str(tenant_id):
+            raise HTTPException(403, {"error": "forbidden"})
+
+        try:
+            exp_ts = int(imp_exp)
+        except (TypeError, ValueError):
+            raise HTTPException(401, {"error": "invalid_token"})
+        if int(datetime.now(timezone.utc).timestamp()) > exp_ts:
+            raise HTTPException(401, {"error": "invalid_token"})
+
+        request.state.is_impersonated = True
+        request.state.impersonated_by_super_admin_id = str(imp_by)
+    else:
+        request.state.is_impersonated = False
+        request.state.impersonated_by_super_admin_id = None
+
     admin_id = payload.get("sub")
     if not admin_id:
         # Token'da sub alanı yok — hatalı token
@@ -160,8 +215,9 @@ async def get_current_admin(
     if admin.session_version != token_session_version:
         raise HTTPException(401, {"error": "session_revoked"})
 
-    # Sliding session için cookie yenilemesini response middleware'e bırak.
-    _renew_admin_cookie(request, admin)
+    # Impersonation tokenlarinda sabit TTL korunur; sliding cookie yenilenmez.
+    if not is_impersonated:
+        _renew_admin_cookie(request, admin)
 
     return admin
 
@@ -237,3 +293,47 @@ async def get_current_user(
     _renew_user_cookie(request, user)
 
     return user
+
+
+async def get_current_super_admin(
+    request: Request,
+    superadmin_session: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> SuperAdmin:
+    """
+    Super admin gerektiren route'lar icin auth dependency.
+    """
+    if superadmin_session is None:
+        raise HTTPException(401, {"error": "not_authenticated"})
+
+    try:
+        payload = decode_token_with_secret(superadmin_session, get_superadmin_secret())
+    except JWTError:
+        raise HTTPException(401, {"error": "invalid_token"})
+
+    if payload.get("role") != "superadmin":
+        raise HTTPException(403, {"error": "forbidden"})
+
+    super_admin_id = payload.get("sub")
+    token_session_version = payload.get("sv")
+    if not super_admin_id or not token_session_version:
+        raise HTTPException(401, {"error": "invalid_token"})
+
+    try:
+        parsed_super_admin_id = uuid.UUID(str(super_admin_id))
+    except (TypeError, ValueError):
+        raise HTTPException(401, {"error": "invalid_token"})
+
+    result = await db.execute(select(SuperAdmin).where(SuperAdmin.id == parsed_super_admin_id))
+    super_admin = result.scalar_one_or_none()
+    if super_admin is None:
+        raise HTTPException(401, {"error": "super_admin_not_found"})
+
+    if not super_admin.is_active:
+        raise HTTPException(403, {"error": "super_admin_inactive"})
+
+    if super_admin.session_version != token_session_version:
+        raise HTTPException(401, {"error": "session_revoked"})
+
+    _renew_super_admin_cookie(request, super_admin)
+    return super_admin

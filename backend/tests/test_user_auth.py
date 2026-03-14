@@ -362,10 +362,8 @@ async def test_logout_user_token_sunucu_tarafinda_iptal_edilir():
     app.dependency_overrides[get_tenant_id] = _override_tenant_id
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
-        r = await client.post(
-            "/api/v1/auth/logout",
-            cookies={"user_session": token},
-        )
+        client.cookies.set("user_session", token)
+        r = await client.post("/api/v1/auth/logout")
 
     assert r.status_code == 200
     assert r.json() == {"message": "logged_out"}
