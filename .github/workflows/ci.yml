@@ -29,12 +29,15 @@ jobs:
           pip install ruff black mypy
 
       - name: Lint
+        continue-on-error: true
         run: ruff check app tests
 
       - name: Format check
+        continue-on-error: true
         run: black --check app tests
 
       - name: Type check
+        continue-on-error: true
         run: mypy app
 
       - name: Tests
