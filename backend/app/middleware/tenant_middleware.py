@@ -1,15 +1,11 @@
-"""
-tenant_middleware.py — Her request'te Host header'dan subdomain parse edip tenant_id çözer.
+﻿"""
+tenant_middleware.py - Resolve tenant from host/subdomain for /api/v1 routes.
 
-Akış (CLAUDE.md TENANT MIDDLEWARE bölümü):
-  1. Host header → subdomain parse et
-  2. Subdomain yoksa (örn: düz "localhost") → dev modda geç, prod'da 404
-  3. DB'de tenant ara (subdomain ile)
-  4. Bulunamazsa → 404
-  5. is_active=False ise → 403
-  6. Bulunursa → request.state.tenant_id ve request.state.tenant set et
-
-Muaf yollar: /health ve /api/v1/ dışındaki her path.
+Rules:
+- /health is exempt.
+- /api/v1/superadmin/* is exempt from tenant resolution.
+- In development, missing subdomain is allowed.
+- In production, missing subdomain returns tenant_not_found.
 """
 
 from sqlalchemy import select
@@ -19,84 +15,71 @@ from starlette.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
+from app.models.enums import TenantStatus
 from app.models.tenant import Tenant
 
-# Bu yollar için tenant çözümlemesi yapılmaz
 _EXEMPT_PATHS = {"/health"}
 
 
 def parse_subdomain(host: str) -> str | None:
     """
-    Host header'dan subdomain çıkarır.
+    Extract subdomain from Host header.
 
-    Örnekler:
-      "berber.localhost:8000" → "berber"
-      "berber.app.com"        → "berber"
-      "localhost:8000"        → None  (subdomain yok)
-      "127.0.0.1:8000"        → None  (IP adresi, subdomain yok)
+    Examples:
+    - berber.localhost:8000 -> berber
+    - berber.app.com -> berber
+    - localhost:8000 -> None
+    - 127.0.0.1:8000 -> None
     """
-    # Port numarasını temizle: "berber.localhost:8000" → "berber.localhost"
     host_clean = host.split(":")[0]
     parts = host_clean.split(".")
 
-    # En az 2 parça olmalı ve ilk parça sayı olmamalı
-    # (IP adreslerini elemek için: "127" isdigit() → True → None döner)
     if len(parts) >= 2 and not parts[0].isdigit():
         return parts[0]
-
     return None
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
-    """
-    Subdomain → Tenant çözümlemesi yapar.
-    Başarılı resolve'da request.state.tenant_id ve request.state.tenant set edilir.
-    """
+    """Resolve tenant and write it into request.state."""
 
     async def dispatch(self, request: Request, call_next):
-        # Muaf yollar: /health gibi endpoint'lerde tenant gerekmez
         if request.url.path in _EXEMPT_PATHS:
             return await call_next(request)
 
-        # Sadece /api/v1/ altındaki yollar için tenant zorunlu;
-        # diğer yollar (örn: OpenAPI /docs) doğrudan geçer
         if not request.url.path.startswith("/api/v1/"):
             return await call_next(request)
 
-        # Next.js rewrite/proxy arkasında gerçek host bilgisi çoğunlukla
-        # x-forwarded-host'ta taşınır (örn: berber.localhost:3000).
+        if request.url.path.startswith("/api/v1/superadmin/"):
+            return await call_next(request)
+
         forwarded_host = request.headers.get("x-forwarded-host", "")
         host = forwarded_host.split(",")[0].strip() if forwarded_host else request.headers.get("host", "")
         subdomain = parse_subdomain(host)
 
         if subdomain is None:
-            # Subdomain bulunamadı (örn: düz "localhost")
-            # Development modda bypass et — local test için kullanışlı
             settings = get_settings()
             if settings.env == "development":
                 return await call_next(request)
-            # Production'da subdomain zorunlu
             return JSONResponse({"error": "tenant_not_found"}, status_code=404)
 
-        # DB'de subdomain'e göre tenant ara
         async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                # Tenant.subdomain benzersiz (UNIQUE index var), scalar_one_or_none yeterli
-                select(Tenant).where(Tenant.subdomain == subdomain)
-            )
+            result = await session.execute(select(Tenant).where(Tenant.subdomain == subdomain))
             tenant = result.scalar_one_or_none()
 
         if tenant is None:
-            # DB'de böyle bir subdomain yok → 404
             return JSONResponse({"error": "tenant_not_found"}, status_code=404)
 
-        if not tenant.is_active:
-            # Tenant pasif edilmiş → 403
+        # Source of truth: tenant.status
+        tenant_status = getattr(tenant, "status", None)
+        if tenant_status == TenantStatus.deleted:
+            return JSONResponse({"error": "tenant_deleted"}, status_code=404)
+        if tenant_status == TenantStatus.inactive:
             return JSONResponse({"error": "tenant_inactive"}, status_code=403)
 
-        # Başarılı: tenant bilgisini request'e ekle
-        # Bundan sonraki tüm endpoint'ler request.state.tenant_id ile tenant'ı bilir
+        # Compatibility fallback for older rows without status.
+        if tenant_status is None and not tenant.is_active:
+            return JSONResponse({"error": "tenant_inactive"}, status_code=403)
+
         request.state.tenant_id = tenant.id
         request.state.tenant = tenant
-
         return await call_next(request)

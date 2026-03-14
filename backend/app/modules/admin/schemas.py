@@ -74,3 +74,72 @@ class AdminOverviewResponse(BaseModel):
     max_booking_days_ahead: int = 14
     slots: list[OverviewSlotItem]
     blocks: list[OverviewBlockedSlotItem]
+
+
+class StatsSummary(BaseModel):
+    """Bir donem icin temel booking ozet metrikleri."""
+
+    start_date: date
+    end_date: date
+    total_bookings: int
+    completed_count: int
+    no_show_count: int
+    cancelled_count: int
+    completion_rate: float
+    no_show_rate: float
+    cancellation_rate: float
+
+
+class PeriodCustomerStats(BaseModel):
+    """Bir donem icin yeni ve tekrar gelen musteri metrikleri."""
+
+    start_date: date
+    end_date: date
+    new_customers: int
+    returning_customers: int
+
+
+class NamedStatItem(BaseModel):
+    """En yogun gun/saat gibi etiket + deger tipleri icin ortak model."""
+
+    label: str | None
+    value: int
+
+
+class PeriodCapacityStats(BaseModel):
+    """Bir donem icin kapasite ve yogunluk metrikleri."""
+
+    start_date: date
+    end_date: date
+    occupancy_rate: float
+    total_capacity_slots: int
+    occupied_slots: int
+    busiest_day: NamedStatItem
+    busiest_hour: NamedStatItem
+
+
+class CustomerStatsGroup(BaseModel):
+    """Gunluk, haftalik ve aylik musteri istatistikleri."""
+
+    daily: PeriodCustomerStats
+    weekly: PeriodCustomerStats
+    monthly: PeriodCustomerStats
+
+
+class CapacityStatsGroup(BaseModel):
+    """Gunluk, haftalik ve aylik kapasite istatistikleri."""
+
+    daily: PeriodCapacityStats
+    weekly: PeriodCapacityStats
+    monthly: PeriodCapacityStats
+
+
+class AdminStatisticsResponse(BaseModel):
+    """Admin istatistik ekrani icin tum veri bloklari."""
+
+    selected_date: date
+    daily_summary: StatsSummary
+    weekly_summary: StatsSummary
+    monthly_summary: StatsSummary
+    customer_stats: CustomerStatsGroup
+    capacity_stats: CapacityStatsGroup

@@ -4,7 +4,7 @@
 
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { apiDelete, apiFetch, apiPut } from "@/lib/api"
 
@@ -82,7 +82,7 @@ export default function AdminSettingsPage() {
     )
   }
 
-  const fillSpecialWithGeneralSettings = (settings?: BarberSettings | null) => {
+  const fillSpecialWithGeneralSettings = useCallback((settings?: BarberSettings | null) => {
     const duration = settings?.slot_duration_minutes ?? slotDuration
     const start = (settings?.work_start_time ?? workStart).slice(0, 5)
     const end = (settings?.work_end_time ?? workEnd).slice(0, 5)
@@ -90,7 +90,7 @@ export default function AdminSettingsPage() {
     setSpecialWorkStart(start)
     setSpecialWorkEnd(end)
     setSpecialSlotDuration(duration)
-  }
+  }, [slotDuration, workStart, workEnd])
 
   useEffect(() => {
     async function loadSettings() {
@@ -113,8 +113,7 @@ export default function AdminSettingsPage() {
     }
 
     loadSettings()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [fillSpecialWithGeneralSettings])
 
   useEffect(() => {
     async function loadSpecialDay() {
@@ -144,7 +143,7 @@ export default function AdminSettingsPage() {
     }
 
     loadSpecialDay()
-  }, [specialDate, slotDuration, workStart, workEnd])
+  }, [fillSpecialWithGeneralSettings, specialDate, slotDuration, workEnd, workStart])
 
   async function handleSaveSettings() {
     if (!workStart || !workEnd) {

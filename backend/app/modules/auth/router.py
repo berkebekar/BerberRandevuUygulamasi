@@ -398,11 +398,13 @@ async def logout(
         try:
             payload = decode_token(admin_token)
             if payload.get("role") == "admin" and payload.get("sub"):
-                await auth_service.rotate_admin_session_version_by_id(
-                    db,
-                    tenant_id,
-                    payload["sub"],
-                )
+                # Super admin impersonation token'lari gercek admin oturumunu invalid etmemeli.
+                if payload.get("imp") is not True:
+                    await auth_service.rotate_admin_session_version_by_id(
+                        db,
+                        tenant_id,
+                        payload["sub"],
+                    )
         except JWTError:
             pass
 

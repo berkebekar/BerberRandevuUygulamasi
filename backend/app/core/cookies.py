@@ -13,23 +13,27 @@ def _extract_host(request: Request) -> str:
 
 def resolve_cookie_domain(request: Request) -> str | None:
     """
-    Resolve cookie domain for production.
+    Resolve cookie domain for production and localhost-based development.
 
     Returns parent domain only when request host belongs to APP_DOMAIN.
     Falls back to host-only cookie when host does not match APP_DOMAIN.
     """
     settings = get_settings()
-    if settings.env != "production":
-        return None
-
-    app_domain = (settings.app_domain or "").strip().lower()
-    if not app_domain:
-        return None
-
     request_host = _extract_host(request)
     if not request_host:
         return None
 
-    if request_host == app_domain or request_host.endswith(f".{app_domain}"):
+    app_domain = (settings.app_domain or "").strip().lower()
+    if app_domain and (request_host == app_domain or request_host.endswith(f".{app_domain}")):
         return f".{app_domain}"
+
+    if settings.env == "production":
+        return None
+
+    # Local development support: api.berber.localhost + berber.localhost -> .berber.localhost
+    if request_host.endswith(".localhost"):
+        labels = request_host.split(".")
+        if len(labels) >= 3:
+            return f".{'.'.join(labels[-2:])}"
+
     return None

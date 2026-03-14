@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     app_domain: str = ""
     allowed_subdomains: str = ""
     env: str = "development"
+    super_admin_session_secret: str = ""
+    super_admin_cookie_name: str = "superadmin_session"
 
 
 @lru_cache

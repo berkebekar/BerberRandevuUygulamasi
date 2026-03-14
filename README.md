@@ -1,37 +1,68 @@
-# Berber Randevu Uygulaması (Iskelet)
+# Berber Randevu Uygulaması
 
-CLAUDE.md'deki klasör yapısına uygun iskelet; business logic yok.
+Multi-tenant (subdomain bazlı) randevu sistemi.
 
-## Çalıştırma
+- Backend: FastAPI + SQLAlchemy (async) + Alembic + PostgreSQL
+- Frontend: Next.js 14 (App Router, TypeScript)
+- Zaman dilimi: `Europe/Istanbul`
+- Kimlik doğrulama: HTTP-only cookie (`user_session`, `admin_session`, `superadmin_session`)
 
-1. **Docker Desktop'ı açın** (Windows) ve tamamen başlamasını bekleyin. "Sistem belirtilen dosyayı bulamıyor" / `dockerDesktopLinuxEngine` hatası, Docker daemon kapalı olduğunda oluşur.
-2. Proje kökünde:
+## Hızlı Başlangıç
+
+1. Docker Desktop'ı başlatın.
+2. Proje kökünde çalıştırın:
    ```bash
    docker compose up --build
    ```
-2. **Backend:** http://localhost:8000/health → `{"status":"ok"}` (200)
-3. **Frontend:** http://localhost:3000 → ana sayfada "ok" yazar
+3. Sağlık kontrolü:
+   - Backend: `http://localhost:8000/health`
+   - Frontend: `http://localhost:3000`
 
-## Servis sırası (depends_on)
+## Temel API
 
-- `db` (PostgreSQL 15) → `backend` bağlanır
-- `backend` (FastAPI) → `frontend` başlamadan önce hazır olur
+- Sistem: `/health`, `/api/v1/ping`
+- Auth: `/api/v1/auth/*`
+- User: `/api/v1/users/*`
+- Admin: `/api/v1/admin/*`
+- Schedule/Booking: `/api/v1/slots*`, `/api/v1/bookings*`
+- Super Admin: `/api/v1/superadmin/*`
 
-## Ortam değişkenleri
+Detaylı envanter ve iş kuralları için `.private-docs/CLAUDE.md` dosyasına bakın.
 
-`.env.example` dosyasını kopyalayıp `.env` yapın; gerçek değerleri doldurun. Docker Compose ile başlatırken backend için `DATABASE_URL` ve `SECRET_KEY` compose içinde tanımlı (geliştirme için yeterli).
+## Lokal Test ve Kontroller
 
-## Backend test
-
+### Backend
 ```bash
 cd backend
 pip install -r requirements.txt
+ruff check app tests
+black --check app tests
+mypy app
 pytest
 ```
 
-## Klasör yapısı
+### Frontend
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run typecheck
+npm run build
+```
 
-- `backend/app`: main, core, middleware, modules (auth, user, admin, tenant, schedule, booking, notification), models
-- `backend/alembic`: migration iskeleti
-- `frontend/app`: layout, ana sayfa (ok), (customer), admin
-- `frontend/components`: index.ts
+## Ortam Değişkenleri
+
+Örnek değerler için `.env.example` dosyasını kullanın.
+
+Öne çıkan backend değişkenleri:
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `ENV` (`development` / `production`)
+- `APP_DOMAIN`
+- `ALLOWED_SUBDOMAINS`
+- `SUPER_ADMIN_SESSION_SECRET` (opsiyonel)
+- `SUPER_ADMIN_COOKIE_NAME` (opsiyonel)
+
+Öne çıkan frontend değişkenleri:
+- `NEXT_PUBLIC_API_URL` (opsiyonel)
+- `BACKEND_URL` (rewrite hedefi)

@@ -4,11 +4,12 @@ Tek berber işletmesi; subdomain ile çözümlenir.
 """
 
 import uuid
-from sqlalchemy import Boolean, DateTime, String, text
+from sqlalchemy import Boolean, DateTime, Enum, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
+from app.models.enums import TenantStatus
 
 
 class Tenant(Base):
@@ -24,6 +25,11 @@ class Tenant(Base):
     subdomain: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    status: Mapped[TenantStatus] = mapped_column(
+        Enum(TenantStatus, name="tenantstatus", create_constraint=True),
+        nullable=False,
+        server_default=TenantStatus.active.value,
+    )
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

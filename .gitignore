@@ -1,5 +1,23 @@
 .env
+.env.local
+.env.*.local
+
+# Python
+backend/.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+
+# Node/Next
 node_modules/
 frontend/node_modules/
-backend/.venv/
 frontend/.next/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Private local docs
+.private-docs/

@@ -3,7 +3,6 @@ fastapi
 uvicorn[standard]
 sqlalchemy[asyncio]
 alembic
-asyncpg
 passlib[bcrypt]
 bcrypt<4
 python-jose[cryptography]

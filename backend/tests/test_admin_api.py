@@ -297,3 +297,113 @@ async def test_overview_birlesik_veri_doner(monkeypatch):
     assert len(result["blocks"]) == 1
     assert result["blocks"][0]["id"] == block.id
 
+
+def test_statistics_month_range_handles_real_calendar_month():
+    """
+    Aylik ozet secilen tarihin gercek takvim ayina gore hesaplanmalidir.
+    """
+    start_date, end_date = admin_service._range_start_end(date(2026, 2, 15), "monthly")
+
+    assert start_date == date(2026, 2, 1)
+    assert end_date == date(2026, 2, 28)
+
+
+@pytest.mark.asyncio
+async def test_statistics_returns_expected_summaries(monkeypatch):
+    """
+    Istatistikler gunluk/haftalik/aylik summary, musteri ve kapasite alanlarini dogru hesaplar.
+    """
+    now = datetime.now(TZ)
+    target = now.date() - timedelta(days=1)
+    week_start = target - timedelta(days=target.weekday())
+    month_start = target.replace(day=1)
+
+    user_new = _make_user(user_id=uuid.uuid4(), first_name="Yeni", last_name="Musteri")
+    user_old = _make_user(user_id=uuid.uuid4(), first_name="Sadik", last_name="Musteri")
+    user_cancelled = _make_user(user_id=uuid.uuid4(), first_name="Iptal", last_name="Musteri")
+
+    daily_rows = [
+        (_make_booking(datetime.combine(target, time(9, 0), tzinfo=TZ), user_id=user_new.id), user_new),
+        (
+            _make_booking(
+                datetime.combine(target, time(10, 0), tzinfo=TZ),
+                user_id=user_old.id,
+                status=BookingStatus.no_show,
+            ),
+            user_old,
+        ),
+        (
+            _make_booking(
+                datetime.combine(target, time(11, 0), tzinfo=TZ),
+                user_id=user_cancelled.id,
+                status=BookingStatus.cancelled,
+                cancelled_by=CancelledBy.admin,
+            ),
+            user_cancelled,
+        ),
+    ]
+    weekly_rows = [
+        *daily_rows,
+        (
+            _make_booking(datetime.combine(week_start, time(9, 0), tzinfo=TZ), user_id=user_old.id),
+            user_old,
+        ),
+    ]
+    monthly_rows = [
+        *weekly_rows,
+        (
+            _make_booking(datetime.combine(month_start, time(12, 0), tzinfo=TZ), user_id=user_old.id),
+            user_old,
+        ),
+    ]
+
+    async def fake_get_booking_rows_in_range(db, tenant_id, start_date, end_date):
+        if start_date == target and end_date == target:
+            return daily_rows
+        if start_date == week_start and end_date == week_start + timedelta(days=6):
+            return weekly_rows
+        if start_date == month_start:
+            return monthly_rows
+        return []
+
+    async def fake_get_first_booking_map(db, tenant_id, user_ids):
+        return {
+            user_new.id: datetime.combine(target, time(9, 0), tzinfo=TZ),
+            user_old.id: datetime.combine(month_start - timedelta(days=5), time(14, 0), tzinfo=TZ),
+            user_cancelled.id: datetime.combine(target, time(11, 0), tzinfo=TZ),
+        }
+
+    async def fake_get_slots_for_date(db, tenant_id, current_date, now=None):
+        slot_count = 4
+        return SimpleNamespace(
+            slots=[SimpleNamespace(time=f"{9 + i:02d}:00") for i in range(slot_count)]
+        )
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    monkeypatch.setattr("app.modules.admin.service._get_booking_rows_in_range", fake_get_booking_rows_in_range)
+    monkeypatch.setattr("app.modules.admin.service._get_first_booking_map", fake_get_first_booking_map)
+    monkeypatch.setattr("app.modules.admin.service.schedule_service.get_slots_for_date", fake_get_slots_for_date)
+    monkeypatch.setattr("app.modules.admin.service.datetime", FixedDateTime)
+
+    result = await admin_service.get_statistics(AsyncMock(), TEST_TENANT_ID, target)
+
+    assert result["daily_summary"]["total_bookings"] == 3
+    assert result["daily_summary"]["completed_count"] == 1
+    assert result["daily_summary"]["no_show_count"] == 1
+    assert result["daily_summary"]["cancelled_count"] == 1
+    assert result["daily_summary"]["completion_rate"] == 33.3
+    assert result["customer_stats"]["daily"]["new_customers"] == 2
+    assert result["customer_stats"]["daily"]["returning_customers"] == 1
+    assert result["capacity_stats"]["daily"]["total_capacity_slots"] == 4
+    assert result["capacity_stats"]["daily"]["occupied_slots"] == 2
+    assert result["capacity_stats"]["daily"]["occupancy_rate"] == 50.0
+    assert result["capacity_stats"]["daily"]["busiest_day"]["label"] == target.isoformat()
+    assert result["capacity_stats"]["daily"]["busiest_hour"]["label"] == "09:00"
+
+    assert result["weekly_summary"]["total_bookings"] == 4
+    assert result["monthly_summary"]["total_bookings"] == 5
+

@@ -14,7 +14,7 @@ Timezone: TÃ¼m iÅŸlemler Europe/Istanbul (UTC+3) Ã¼zerinden yÃ¼rÃ¼r.
 
 import logging
 import uuid
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
@@ -22,13 +22,17 @@ from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.constants import BOOKING_MAX_DAYS_AHEAD
 from app.models.barber_profile import BarberProfile
 from app.models.booking import Booking
-from app.models.day_override import DayOverride
 from app.models.enums import BookingStatus, CancelledBy
 from app.models.slot_block import SlotBlock
 from app.models.user import User
+from app.modules.booking.rules import (
+    resolve_day_end_datetime,
+    resolve_max_days_ahead,
+    to_local_tz,
+    validate_slot_in_schedule,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,19 +49,12 @@ def _to_local_tz(dt: datetime) -> datetime:
     DB'den gelen datetime'i guvenli sekilde Istanbul timezone'una cevirir.
     Naive deger gelirse UTC kabul edilip Istanbul'a donusturulur.
     """
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc).astimezone(TZ)
-    return dt.astimezone(TZ)
+    return to_local_tz(dt)
 
 
 def _resolve_max_days_ahead(profile: BarberProfile | None) -> int:
     """Ileri tarih limitini profile kaydindan cozer, yoksa varsayilana doner."""
-    if profile is None:
-        return BOOKING_MAX_DAYS_AHEAD
-    value = getattr(profile, "max_booking_days_ahead", BOOKING_MAX_DAYS_AHEAD)
-    if isinstance(value, int) and value > 0:
-        return value
-    return BOOKING_MAX_DAYS_AHEAD
+    return resolve_max_days_ahead(profile)
 
 
 def _resolve_day_end_datetime(target_date: date, end_time: time) -> datetime:
@@ -65,9 +62,7 @@ def _resolve_day_end_datetime(target_date: date, end_time: time) -> datetime:
     00:00 bitisi gun sonu (24:00) kabul edilir.
     Bu sayede 23:30-00:00 gibi son slotlar gecerli olur.
     """
-    if end_time == time(0, 0):
-        return datetime.combine(target_date + timedelta(days=1), time.min, tzinfo=TZ)
-    return datetime.combine(target_date, end_time, tzinfo=TZ)
+    return resolve_day_end_datetime(target_date, end_time)
 
 
 # â”€â”€â”€ YardÄ±mcÄ±: Slot Takvimde GeÃ§erli mi? â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -78,94 +73,12 @@ async def _validate_slot_in_schedule(
     slot_local: datetime,
     profile: BarberProfile | None = None,
 ) -> bool:
-    """
-    Verilen slot zamanÄ±nÄ±n berber takvimine gÃ¶re geÃ§erli olup olmadÄ±ÄŸÄ±nÄ± kontrol eder.
-
-    Kontrol sÄ±rasÄ±:
-    1. BarberProfile mevcut mu? (berber Ã§alÄ±ÅŸma ayarlarÄ± girilmiÅŸ mi?)
-    2. GÃ¼n kapalÄ± mÄ±? (DayOverride.is_closed=True)
-    3. Slot Ã§alÄ±ÅŸma saatleri iÃ§inde mi?
-    4. Slot, slot sÃ¼resiyle hizalÄ± mÄ±? (Ã¶rn: 30dk slotlar iÃ§in 09:15 geÃ§ersizdir)
-    5. Son slot + sÃ¼re â‰¤ gÃ¼n sonu mu?
-
-    Bu fonksiyon booking/block durumunu KONTROL ETMEZ â€”
-    bu kontroller transaction iÃ§inde SELECT FOR UPDATE ile yapÄ±lÄ±r.
-
-    Returns:
-        True: Slot geÃ§erli, False: Slot takvimde yok.
-    """
-    # BarberProfile: berber ayar girmemiÅŸse slot olamaz
-    if profile is None:
-        profile_result = await db.execute(
-            select(BarberProfile).where(BarberProfile.tenant_id == tenant_id)
-        )
-        profile = profile_result.scalar_one_or_none()
-    if profile is None:
-        # Berber henÃ¼z Ã§alÄ±ÅŸma ayarlarÄ±nÄ± girmemiÅŸ â€” geÃ§ersiz slot
-        return False
-
-    # Haftalik kapali gunlerde slot gecersizdir.
-    weekly_closed_days = getattr(profile, "weekly_closed_days", []) or []
-    if slot_local.weekday() in weekly_closed_days:
-        return False
-
-    # DayOverride: o gÃ¼n iÃ§in Ã¶zel ayar var mÄ±?
-    override_result = await db.execute(
-        select(DayOverride).where(
-            DayOverride.tenant_id == tenant_id,
-            DayOverride.date == slot_local.date(),
-        )
+    return await validate_slot_in_schedule(
+        db=db,
+        tenant_id=tenant_id,
+        slot_local=slot_local,
+        profile=profile,
     )
-    override = override_result.scalar_one_or_none()
-
-    # GÃ¼n tamamen kapalÄ±ysa slot olamaz
-    if override and override.is_closed:
-        return False
-
-    # Ã‡alÄ±ÅŸma saatlerini belirle: override varsa onu, yoksa profile'Ä± kullan
-    start_time = (
-        override.work_start_time
-        if override and override.work_start_time
-        else profile.work_start_time
-    )
-    end_time = (
-        override.work_end_time
-        if override and override.work_end_time
-        else profile.work_end_time
-    )
-    override_duration = getattr(override, "slot_duration_minutes", None) if override else None
-    duration_minutes = (
-        override_duration
-        if isinstance(override_duration, int) and override_duration > 0
-        else profile.slot_duration_minutes
-    )
-    duration = timedelta(minutes=duration_minutes)
-
-    # GÃ¼nÃ¼n baÅŸlangÄ±Ã§ ve bitiÅŸ zamanlarÄ±nÄ± Ä°stanbul timezone'unda oluÅŸtur
-    day_start = datetime.combine(slot_local.date(), start_time, tzinfo=TZ)
-    day_end = _resolve_day_end_datetime(slot_local.date(), end_time)
-
-    # Slot Ã§alÄ±ÅŸma saatleri aralÄ±ÄŸÄ±nda mÄ±?
-    if slot_local < day_start or slot_local >= day_end:
-        # Slot Ã§alÄ±ÅŸma saatlerinin dÄ±ÅŸÄ±nda
-        return False
-
-    # Slot + sÃ¼re, gÃ¼n sonunu geÃ§iyor mu?
-    if slot_local + duration > day_end:
-        # Bu slotu aÃ§tÄ±ÄŸÄ±mÄ±zda gÃ¼n biter â€” geÃ§ersiz
-        return False
-
-    # Slot, slot sÃ¼resiyle hizalÄ± mÄ±?
-    # Ã–rnek: 30dk slotlar iÃ§in 09:15 hizalÄ± deÄŸil, 09:00 ve 09:30 hizalÄ±dÄ±r
-    elapsed = slot_local - day_start
-    elapsed_seconds = int(elapsed.total_seconds())
-    duration_seconds = int(duration.total_seconds())
-
-    if elapsed_seconds % duration_seconds != 0:
-        # Slot zamanÄ± slot sÃ¼resiyle hizalÄ± deÄŸil
-        return False
-
-    return True
 
 
 # â”€â”€â”€ Randevu OluÅŸturma â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
