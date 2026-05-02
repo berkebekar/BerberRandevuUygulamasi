@@ -21,6 +21,7 @@ STATE_TTL = 1800  # 30 dakika (saniye)
 
 # Konuşma adımları
 STEP_IDLE = "idle"               # Ana menü bekleniyor
+STEP_NAME_COLLECT = "name_collect" # Yeni kullanıcı: isim/soyisim bekleniyor
 STEP_DATE_SELECT = "date_select" # Tarih seçimi
 STEP_TIME_SELECT = "time_select" # Saat seçimi
 STEP_CONFIRM = "confirm"         # Randevu onayı

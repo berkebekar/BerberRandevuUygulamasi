@@ -2,10 +2,11 @@
 whatsapp/handlers.py — WhatsApp bot konuşma akışı.
 
 Konuşma adımları (state machine):
-  idle        → Ana menü gösterilir, buton beklenir
-  date_select → Müsait günler listesi, tarih seçimi beklenir
-  time_select → Seçilen günün saatleri, saat seçimi beklenir
-  confirm     → Randevu özeti, onay/iptal beklenir
+  idle         → Ana menü gösterilir, buton beklenir
+  name_collect → Yeni kullanıcı: isim ve soyisim beklenir
+  date_select  → Müsait günler listesi, tarih seçimi beklenir
+  time_select  → Seçilen günün saatleri, saat seçimi beklenir
+  confirm      → Randevu özeti, onay/iptal beklenir
 
 Her step'te beklenmedik input gelirse, mevcut adım tekrar gösterilir.
 """
@@ -29,6 +30,7 @@ from app.modules.whatsapp.state import (
     STEP_CONFIRM,
     STEP_DATE_SELECT,
     STEP_IDLE,
+    STEP_NAME_COLLECT,
     STEP_TIME_SELECT,
     ConversationState,
     clear_state,
@@ -335,6 +337,17 @@ async def handle_incoming(
             await _send_main_menu(pid, tok, wa_phone, tenant.name)
         return
 
+    # ── NAME_COLLECT: Yeni kullanıcı isim/soyisim toplama ────────────────────
+    if state.step == STEP_NAME_COLLECT:
+        if content:
+            await _handle_name_received(pid, tok, wa_phone, content, state, tenant, db)
+        else:
+            await wa.send_text(
+                pid, tok, wa_phone,
+                "Lutfen adinizi ve soyadinizi yazin:\n(Ornek: Ahmet Yilmaz)",
+            )
+        return
+
     # ── DATE_SELECT: Tarih seçimi ─────────────────────────────────────────────
     if state.step == STEP_DATE_SELECT:
         if content and content.startswith("date_"):
@@ -411,11 +424,92 @@ async def _handle_booking_start(
     state: ConversationState,
     db: AsyncSession,
 ) -> None:
-    """Randevu al butonuna basıldı → müsait günleri göster."""
+    """Randevu al butonuna basıldı → kullanıcı kayıtlıysa tarihleri göster, değilse isim sor."""
+    phone_with_plus = "+" + wa_phone
+    try:
+        normalized = normalize_tr_phone(phone_with_plus)
+    except Exception:
+        normalized = phone_with_plus
+
+    result = await db.execute(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.phone.in_(phone_variants(normalized)),
+        )
+    )
+    existing_user = result.scalar_one_or_none()
+
+    if existing_user is None:
+        state.step = STEP_NAME_COLLECT
+        await save_state(pid, wa_phone, state)
+        await wa.send_text(
+            pid, tok, wa_phone,
+            "Sistemde kaydiniz bulunmuyor.\n\n"
+            "Randevu almak icin lutfen *adinizi ve soyadinizi* yazin:\n"
+            "(Ornek: Ahmet Yilmaz)",
+        )
+        return
+
     state.step = STEP_DATE_SELECT
+    state.user_id = str(existing_user.id)
     await save_state(pid, wa_phone, state)
 
     has_dates = await _send_available_dates(pid, tok, wa_phone, tenant_id, db)
+    if not has_dates:
+        await wa.send_text(
+            pid, tok, wa_phone,
+            "Simdilik onumuzdeki 7 gun icin musait randevu bulunmuyor.\n"
+            "Lutfen daha sonra tekrar deneyin.",
+        )
+        await clear_state(pid, wa_phone)
+
+
+async def _handle_name_received(
+    pid: str,
+    tok: str,
+    wa_phone: str,
+    text: str,
+    state: ConversationState,
+    tenant: Tenant,
+    db: AsyncSession,
+) -> None:
+    """Yeni kullanıcıdan gelen isim/soyisim metnini işler, kullanıcı oluşturur."""
+    clean = text.strip()
+    if len(clean) < 2 or any(c.isdigit() for c in clean):
+        await wa.send_text(
+            pid, tok, wa_phone,
+            "Gecersiz isim. Lutfen adinizi ve soyadinizi yazin:\n(Ornek: Ahmet Yilmaz)",
+        )
+        return
+
+    parts = clean.split(maxsplit=1)
+    first_name = parts[0]
+    last_name = parts[1] if len(parts) > 1 else ""
+
+    phone_with_plus = "+" + wa_phone
+    try:
+        normalized = normalize_tr_phone(phone_with_plus)
+    except Exception:
+        normalized = phone_with_plus
+
+    user = User(
+        tenant_id=tenant.id,
+        phone=normalized,
+        first_name=first_name,
+        last_name=last_name,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    logger.info("WA yeni kullanıcı kayıt | tenant=%s phone=%s", tenant.id, normalized)
+
+    state.user_id = str(user.id)
+    state.step = STEP_DATE_SELECT
+    await save_state(pid, wa_phone, state)
+
+    await wa.send_text(pid, tok, wa_phone, f"Kaydınız oluşturuldu, merhaba {first_name}!")
+
+    has_dates = await _send_available_dates(pid, tok, wa_phone, tenant.id, db)
     if not has_dates:
         await wa.send_text(
             pid, tok, wa_phone,
