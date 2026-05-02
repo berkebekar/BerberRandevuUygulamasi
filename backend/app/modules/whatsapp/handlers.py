@@ -12,6 +12,7 @@ Her step'te beklenmedik input gelirse, mevcut adım tekrar gösterilir.
 """
 
 import logging
+import re
 import uuid
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -474,17 +475,25 @@ async def _handle_name_received(
     db: AsyncSession,
 ) -> None:
     """Yeni kullanıcıdan gelen isim/soyisim metnini işler, kullanıcı oluşturur."""
-    clean = text.strip()
-    if len(clean) < 2 or any(c.isdigit() for c in clean):
+    clean = " ".join(text.strip().split())  # Çoklu boşlukları tekleştir
+
+    _VALID_NAME_RE = re.compile(r"^[a-zA-ZçğışöüÇĞIİÖŞÜ ]+$")
+    words = clean.split()
+
+    if not _VALID_NAME_RE.match(clean) or len(words) < 2 or len(words) > 3:
         await wa.send_text(
             pid, tok, wa_phone,
-            "Gecersiz isim. Lutfen adinizi ve soyadinizi yazin:\n(Ornek: Ahmet Yilmaz)",
+            "Gecersiz format.\n\n"
+            "- En az 2, en fazla 3 kelime girin\n"
+            "- Sadece harf kullanin\n\n"
+            "Ornek: *Ahmet Yilmaz* veya *Ahmet Mehmet Yilmaz*",
         )
         return
 
-    parts = clean.split(maxsplit=1)
-    first_name = parts[0]
-    last_name = parts[1] if len(parts) > 1 else ""
+    if len(words) == 2:
+        first_name, last_name = words[0], words[1]
+    else:  # 3 kelime: ilk 2'si isim, son'u soyisim
+        first_name, last_name = f"{words[0]} {words[1]}", words[2]
 
     phone_with_plus = "+" + wa_phone
     try:
