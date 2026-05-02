@@ -21,3 +21,10 @@ Thumbs.db
 
 # Private local docs
 .private-docs/
+
+# Claude Code internal
+.claude/
+
+# Test artifacts
+frontend/test-results/
+frontend/tsconfig.typecheck.tsbuildinfo

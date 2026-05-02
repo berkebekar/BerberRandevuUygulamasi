@@ -52,6 +52,9 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/api/v1/superadmin/"):
             return await call_next(request)
 
+        if request.url.path.startswith("/api/v1/whatsapp/"):
+            return await call_next(request)
+
         forwarded_host = request.headers.get("x-forwarded-host", "")
         host = forwarded_host.split(",")[0].strip() if forwarded_host else request.headers.get("host", "")
         subdomain = parse_subdomain(host)

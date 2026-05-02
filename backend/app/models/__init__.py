@@ -13,7 +13,6 @@ from app.models.day_override import DayOverride
 from app.models.slot_block import SlotBlock
 from app.models.booking import Booking
 from app.models.otp_record import OTPRecord
-from app.models.notification_log import NotificationLog
 from app.models.activity_log import ActivityLog
 from app.models.error_log import ErrorLog
 from app.models.uptime_check import UptimeCheck
@@ -29,7 +28,6 @@ __all__ = [
     "SlotBlock",
     "Booking",
     "OTPRecord",
-    "NotificationLog",
     "ActivityLog",
     "ErrorLog",
     "UptimeCheck",

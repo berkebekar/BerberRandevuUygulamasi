@@ -3,11 +3,13 @@ superadmin/stats_service.py - Platform geneli dashboard istatistik servisleri.
 """
 
 from datetime import datetime, timedelta, timezone
+from time import monotonic
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models.activity_log import ActivityLog
 from app.models.booking import Booking
 from app.models.enums import BookingStatus, TenantStatus
@@ -27,6 +29,26 @@ from app.modules.superadmin.stats_schemas import (
 )
 
 TZ = ZoneInfo("Europe/Istanbul")
+_CACHE: dict[str, tuple[float, object]] = {}
+
+
+def _cache_get(key: str):
+    cached = _CACHE.get(key)
+    if not cached:
+        return None
+    expires_at, value = cached
+    if monotonic() >= expires_at:
+        _CACHE.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(key: str, value: object) -> None:
+    ttl = max(0, int(get_settings().superadmin_stats_cache_ttl_seconds))
+    if ttl <= 0:
+        _CACHE.pop(key, None)
+        return
+    _CACHE[key] = (monotonic() + ttl, value)
 
 
 def _month_start_local(dt: datetime) -> datetime:
@@ -49,6 +71,10 @@ def _month_key(dt: datetime) -> str:
 
 
 async def get_overview_stats(db: AsyncSession) -> SuperAdminOverviewResponse:
+    cached = _cache_get("overview")
+    if cached is not None:
+        return cached
+
     now_local = datetime.now(TZ)
     month_start_local = _month_start_local(now_local)
     next_month_start_local = _next_month_start_local(now_local)
@@ -79,7 +105,7 @@ async def get_overview_stats(db: AsyncSession) -> SuperAdminOverviewResponse:
     cancelled_bookings = int(booking_counts_row.cancelled_bookings or 0)
     cancel_rate = round((cancelled_bookings / total_bookings) * 100, 1) if total_bookings else 0.0
 
-    return SuperAdminOverviewResponse(
+    response = SuperAdminOverviewResponse(
         tenants=OverviewTenantStats(
             total=int(sum(tenant_counts.values())),
             active=int(tenant_counts.get(TenantStatus.active, 0)),
@@ -93,6 +119,8 @@ async def get_overview_stats(db: AsyncSession) -> SuperAdminOverviewResponse:
             this_month_cancel_rate=cancel_rate,
         ),
     )
+    _cache_set("overview", response)
+    return response
 
 
 async def _get_month_series(
@@ -122,6 +150,10 @@ async def _get_month_series(
 
 
 async def get_trends_stats(db: AsyncSession) -> SuperAdminTrendsResponse:
+    cached = _cache_get("trends")
+    if cached is not None:
+        return cached
+
     now_local = datetime.now(TZ)
     current_month_start = _month_start_local(now_local)
     start_year, start_month = _add_months(current_month_start.year, current_month_start.month, -5)
@@ -158,11 +190,13 @@ async def get_trends_stats(db: AsyncSession) -> SuperAdminTrendsResponse:
         year, month = _add_months(range_start_local.year, range_start_local.month, i)
         months.append(f"{year:04d}-{month:02d}")
 
-    return SuperAdminTrendsResponse(
+    response = SuperAdminTrendsResponse(
         bookings_per_month=[TrendPoint(month=month, count=int(booking_map.get(month, 0))) for month in months],
         new_tenants_per_month=[TrendPoint(month=month, count=int(tenant_map.get(month, 0))) for month in months],
         new_users_per_month=[TrendPoint(month=month, count=int(user_map.get(month, 0))) for month in months],
     )
+    _cache_set("trends", response)
+    return response
 
 
 def _activity_to_recent_item(activity: ActivityLog) -> RecentActivityItem:
@@ -197,6 +231,11 @@ def _error_to_recent_item(error_log: ErrorLog) -> RecentActivityItem:
 
 async def get_recent_activities(db: AsyncSession, limit: int = 20) -> SuperAdminRecentActivitiesResponse:
     safe_limit = max(1, min(int(limit), 100))
+    cache_key = f"recent:{safe_limit}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     now_utc = datetime.now(timezone.utc)
     since_24h = now_utc - timedelta(hours=24)
 
@@ -218,4 +257,6 @@ async def get_recent_activities(db: AsyncSession, limit: int = 20) -> SuperAdmin
     ]
     recent_items.sort(key=lambda item: item.created_at, reverse=True)
 
-    return SuperAdminRecentActivitiesResponse(items=recent_items[:safe_limit])
+    response = SuperAdminRecentActivitiesResponse(items=recent_items[:safe_limit])
+    _cache_set(cache_key, response)
+    return response

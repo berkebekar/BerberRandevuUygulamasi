@@ -7,6 +7,7 @@ Business logic yoktur; sadece baslangic noktasidir.
 
 import logging
 import time
+import traceback
 import uuid
 
 from fastapi import FastAPI
@@ -16,17 +17,20 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
 from app.core.config import get_settings
+from app.core.error_logging import log_error_best_effort
 from app.middleware.tenant_middleware import TenantMiddleware
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
 from app.modules.booking.router import router as booking_router
-from app.modules.notification.router import router as notification_router
 from app.modules.schedule.router import router as schedule_router
 from app.modules.superadmin.impersonation import router as superadmin_impersonation_router
 from app.modules.superadmin.router import router as superadmin_auth_router
 from app.modules.superadmin.stats import router as superadmin_stats_router
 from app.modules.superadmin.tenants import router as superadmin_tenants_router
+from app.modules.superadmin.monitoring import router as superadmin_monitoring_router
+from app.modules.superadmin.users import router as superadmin_users_router
 from app.modules.user.router import router as user_router
+from app.modules.whatsapp.router import router as whatsapp_router
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +105,25 @@ def create_app() -> FastAPI:
         String ise {"error": "..."} formatina sarar.
         Bu sayede tum endpoint'ler tutarli hata formati dondurur.
         """
+        error_code = None
+        message = ""
         if isinstance(exc.detail, dict):
+            error_code = str(exc.detail.get("error")) if exc.detail.get("error") is not None else None
+            message = error_code or str(exc.detail)
+            await log_error_best_effort(
+                request,
+                status_code=exc.status_code,
+                error_code=error_code,
+                message=message,
+            )
             return JSONResponse(exc.detail, status_code=exc.status_code)
+        message = str(exc.detail)
+        await log_error_best_effort(
+            request,
+            status_code=exc.status_code,
+            error_code=None,
+            message=message,
+        )
         return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
 
     @app.exception_handler(Exception)
@@ -112,6 +133,13 @@ def create_app() -> FastAPI:
         Tüm beklenmeyen hatalari loglar ve genel bir hata döner.
         """
         logger.exception("Unhandled exception", exc_info=exc)
+        await log_error_best_effort(
+            request,
+            status_code=500,
+            error_code="server_error",
+            message=str(exc),
+            stack_trace=traceback.format_exc(),
+        )
         # Kullaniciya genel hata mesaji don
         return JSONResponse({"error": "server_error"}, status_code=500)
 
@@ -211,11 +239,14 @@ def create_app() -> FastAPI:
     app.include_router(admin_router, prefix=api_prefix)
     app.include_router(schedule_router, prefix=api_prefix)
     app.include_router(booking_router, prefix=api_prefix)
-    app.include_router(notification_router, prefix=api_prefix)
     app.include_router(superadmin_auth_router, prefix=api_prefix)
     app.include_router(superadmin_stats_router, prefix=api_prefix)
     app.include_router(superadmin_tenants_router, prefix=api_prefix)
+    app.include_router(superadmin_users_router, prefix=api_prefix)
+    app.include_router(superadmin_monitoring_router, prefix=api_prefix)
     app.include_router(superadmin_impersonation_router, prefix=api_prefix)
+    # WhatsApp webhook — tenant middleware'den muaf (TenantMiddleware içinde skip edilir)
+    app.include_router(whatsapp_router, prefix=api_prefix)
 
     return app
 

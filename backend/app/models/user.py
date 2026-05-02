@@ -4,11 +4,12 @@ Müşteri; tenant_id + phone unique.
 """
 
 import uuid
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
+from app.models.enums import UserStatus
 
 
 class User(Base):
@@ -30,6 +31,11 @@ class User(Base):
     phone: Mapped[str] = mapped_column(String(50), nullable=False)
     first_name: Mapped[str] = mapped_column(String(255), nullable=False)
     last_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[UserStatus] = mapped_column(
+        Enum(UserStatus, name="userstatus", create_constraint=True),
+        nullable=False,
+        server_default=UserStatus.active.value,
+    )
     is_blocked: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

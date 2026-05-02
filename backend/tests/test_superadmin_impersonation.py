@@ -269,3 +269,28 @@ async def test_get_current_admin_impersonation_ttl_expired_401():
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == {"error": "invalid_token"}
+
+
+@pytest.mark.asyncio
+async def test_get_current_admin_impersonation_missing_exp_401():
+    tenant_id = uuid.uuid4()
+    token = create_token(
+        {
+            "sub": str(uuid.uuid4()),
+            "role": "admin",
+            "sv": str(uuid.uuid4()),
+            "imp": True,
+            "imp_by": str(uuid.uuid4()),
+            "imp_tenant": str(tenant_id),
+        },
+        expires_minutes=60,
+    )
+    request = MagicMock()
+    request.state = SimpleNamespace(tenant_id=tenant_id)
+    session = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_current_admin(request=request, admin_session=token, db=session)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == {"error": "invalid_token"}

@@ -29,6 +29,7 @@ from app.core.security import (
 )
 from app.core.superadmin_auth import get_superadmin_secret
 from app.models.admin import Admin
+from app.models.enums import UserStatus
 from app.models.super_admin import SuperAdmin
 from app.models.user import User
 
@@ -260,6 +261,31 @@ async def get_current_user(
         # Token var ama user cookie'si değil — admin cookie ile user route'a erişim denemesi
         raise HTTPException(403, {"error": "forbidden"})
 
+    is_impersonated = payload.get("imp") is True
+    if is_impersonated:
+        imp_by = payload.get("imp_by")
+        imp_tenant = payload.get("imp_tenant")
+        imp_exp = payload.get("imp_exp")
+        if not imp_by or not imp_tenant or imp_exp is None:
+            raise HTTPException(401, {"error": "invalid_token"})
+
+        tenant_id = get_tenant_id_from_request(request)
+        if str(imp_tenant) != str(tenant_id):
+            raise HTTPException(403, {"error": "forbidden"})
+
+        try:
+            exp_ts = int(imp_exp)
+        except (TypeError, ValueError):
+            raise HTTPException(401, {"error": "invalid_token"})
+        if int(datetime.now(timezone.utc).timestamp()) > exp_ts:
+            raise HTTPException(401, {"error": "invalid_token"})
+
+        request.state.is_impersonated_user = True
+        request.state.impersonated_by_super_admin_id = str(imp_by)
+    else:
+        request.state.is_impersonated_user = False
+        request.state.impersonated_by_super_admin_id = None
+
     user_id = payload.get("sub")
     if not user_id:
         # Token'da sub alanı yok — hatalı token
@@ -284,13 +310,22 @@ async def get_current_user(
         # Token geçerli ama DB'de bu kullanıcı yok (silinmiş veya tenant uyuşmazlığı)
         raise HTTPException(401, {"error": "user_not_found"})
 
+    raw_status = getattr(user, "status", None)
+    if raw_status is None:
+        user_status = UserStatus.blocked if bool(getattr(user, "is_blocked", False)) else UserStatus.active
+    else:
+        user_status = UserStatus(raw_status)
+    if user_status == UserStatus.deleted:
+        raise HTTPException(403, {"error": "user_deleted"})
+
     # Tek aktif oturum kuralı:
     # Token'daki session_version DB'deki güncel değerle uyuşmuyorsa token iptal edilmiştir.
     if user.session_version != token_session_version:
         raise HTTPException(401, {"error": "session_revoked"})
 
-    # Sliding session için cookie yenilemesini response middleware'e bırak.
-    _renew_user_cookie(request, user)
+    # Impersonation tokenlarinda sabit TTL korunur; sliding cookie yenilenmez.
+    if not is_impersonated:
+        _renew_user_cookie(request, user)
 
     return user
 

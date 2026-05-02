@@ -18,16 +18,16 @@ Business logic booking/service.py iÃ§indedir; bu dosya sadece HTTP katmanÄ±d
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import AsyncSessionLocal, get_db
+from app.core.database import get_db
 from app.core.dependencies import get_current_admin, get_current_user
 from app.core.phone import normalize_tr_phone, phone_variants
 from app.models.admin import Admin
-from app.models.enums import NotificationMessageType
+from app.models.enums import UserStatus
 from app.models.user import User
 from app.modules.booking import service as booking_service
 from app.modules.booking.schemas import (
@@ -36,8 +36,6 @@ from app.modules.booking.schemas import (
     BookingResponse,
     BookingWithUserResponse,
 )
-from app.modules.notification import service as notification_service
-from app.modules.notification.provider import get_sms_provider
 
 # Prefix yok â€” endpoint path'leri dekoratÃ¶rde tam olarak belirtiliyor.
 # Ã‡Ã¼nkÃ¼ mÃ¼ÅŸteri endpoint'leri (/bookings) ve admin endpoint'leri (/admin/bookings)
@@ -86,6 +84,16 @@ async def create_booking(
     - additional_booking_confirmation_required: Ayni gun ek randevu icin kullanici onayi gerekli
     - daily_booking_limit_exceeded: Ayni gun en fazla 3 randevu siniri asildi
     """
+    user_status = getattr(user, "status", None)
+    if user_status is None:
+        user_status = UserStatus.blocked if bool(getattr(user, "is_blocked", False)) else UserStatus.active
+    else:
+        user_status = UserStatus(user_status)
+    if user_status == UserStatus.deleted:
+        raise HTTPException(403, {"error": "user_deleted"})
+    if user_status == UserStatus.blocked:
+        raise HTTPException(403, {"error": "user_blocked"})
+
     booking = await booking_service.create_booking(
         db,
         tenant_id=user.tenant_id,
@@ -200,7 +208,6 @@ async def cancel_my_booking(
 @router.delete("/admin/bookings/{booking_id}", response_model=BookingResponse)
 async def cancel_booking_admin(
     booking_id: uuid.UUID,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
 ):
@@ -215,26 +222,11 @@ async def cancel_booking_admin(
 
     Randevu bulunamazsa veya zaten iptal edilmiÅŸse 404 dÃ¶ner.
     """
-    # Service: randevuyu iptal et, mÃ¼ÅŸterinin telefon numarasÄ±nÄ± dÃ¶ndÃ¼r
-    booking, user_phone = await booking_service.cancel_booking_admin(
+    booking = await booking_service.cancel_booking_admin(
         db,
         tenant_id=admin.tenant_id,
         booking_id=booking_id,
     )
-
-    # SMS background task: telefon varsa notification kuyruÄŸuna ekle
-    # SMS baÅŸarÄ±sÄ±z olsa bile HTTP yanÄ±tÄ± etkilenmez (CLAUDE.md: non-blocking)
-    if user_phone:
-        slot_str = booking.slot_time.strftime("%d.%m.%Y %H:%M")
-        background_tasks.add_task(
-            notification_service.send_sms_task,
-            AsyncSessionLocal,                              # background task kendi session'Ä±nÄ± aÃ§ar
-            get_sms_provider(),                            # dev: Mock, prod: Twilio
-            admin.tenant_id,
-            user_phone,
-            notification_service.format_booking_cancelled_message(slot_str),
-            NotificationMessageType.booking_cancelled,
-        )
 
     return BookingResponse(
         id=booking.id,

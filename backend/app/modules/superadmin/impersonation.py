@@ -128,27 +128,48 @@ async def exit_tenant_admin_impersonation(
     super_admin: SuperAdmin = Depends(get_current_super_admin),
 ):
     tenant_id: uuid.UUID | None = None
-    admin_id: str | None = None
-    token = request.cookies.get("admin_session")
-    if token:
+    entity_id: str | None = None
+    impersonation_type: str | None = None
+    cookie_to_clear: str | None = None
+
+    admin_token = request.cookies.get("admin_session")
+    if admin_token:
         try:
-            payload = decode_token(token)
-            if payload.get("imp") is True:
-                admin_id = str(payload.get("sub")) if payload.get("sub") else None
+            payload = decode_token(admin_token)
+            if payload.get("imp") is True and payload.get("role") == "admin":
+                cookie_to_clear = "admin_session"
+                impersonation_type = "admin"
+                entity_id = str(payload.get("sub")) if payload.get("sub") else None
                 raw_tenant_id = payload.get("imp_tenant")
                 if raw_tenant_id:
                     tenant_id = uuid.UUID(str(raw_tenant_id))
         except (JWTError, ValueError, TypeError):
             pass
 
-    response.delete_cookie("admin_session", domain=resolve_cookie_domain(request))
+    if cookie_to_clear is None:
+        user_token = request.cookies.get("user_session")
+        if user_token:
+            try:
+                payload = decode_token(user_token)
+                if payload.get("imp") is True and payload.get("role") == "user":
+                    cookie_to_clear = "user_session"
+                    impersonation_type = "user"
+                    entity_id = str(payload.get("sub")) if payload.get("sub") else None
+                    raw_tenant_id = payload.get("imp_tenant")
+                    if raw_tenant_id:
+                        tenant_id = uuid.UUID(str(raw_tenant_id))
+            except (JWTError, ValueError, TypeError):
+                pass
+
+    if cookie_to_clear is not None:
+        response.delete_cookie(cookie_to_clear, domain=resolve_cookie_domain(request))
     await _log_activity(
         db=db,
         super_admin=super_admin,
         action_type="impersonation_ended",
         tenant_id=tenant_id,
-        entity_id=admin_id,
+        entity_id=entity_id,
+        metadata_json={"type": impersonation_type},
     )
     await db.commit()
     return {"message": "impersonation_ended"}
-

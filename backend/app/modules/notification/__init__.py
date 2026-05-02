@@ -1,1 +1,1 @@
-"""notification — SMS (Twilio); MVP'de sadece OTP."""
+"""notification — bildirim modülü (gelecek implementasyonlar için)."""

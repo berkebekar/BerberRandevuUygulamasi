@@ -18,6 +18,16 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     ports:
@@ -26,8 +36,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/postgres
       SECRET_KEY: dev_secret_key_min_32_chars_placeholder
       ENV: development
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:

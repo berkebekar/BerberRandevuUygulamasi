@@ -13,9 +13,11 @@ interface ActionConfirmSheetProps {
   description: string
   confirmText: string
   cancelText?: string
+  confirmTone?: "danger" | "neutral"
   isLoading?: boolean
   onConfirm: () => void
   onCancel: () => void
+  children?: React.ReactNode
 }
 
 export default function ActionConfirmSheet({
@@ -24,9 +26,11 @@ export default function ActionConfirmSheet({
   description,
   confirmText,
   cancelText = "Vazgec",
+  confirmTone = "danger",
   isLoading = false,
   onConfirm,
   onCancel,
+  children,
 }: ActionConfirmSheetProps) {
   // Kapaliysa hic render etme
   if (!open) return null
@@ -45,6 +49,7 @@ export default function ActionConfirmSheet({
         <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-3" />
         <h3 className="text-base font-semibold text-zinc-100">{title}</h3>
         <p className="text-sm text-zinc-400 mt-1">{description}</p>
+        {children && <div className="mt-3">{children}</div>}
 
         <div className="grid grid-cols-2 gap-3 mt-4">
           <button
@@ -57,7 +62,9 @@ export default function ActionConfirmSheet({
           <button
             onClick={onConfirm}
             disabled={isLoading}
-            className="py-3 rounded-lg bg-red-600 text-white text-sm font-medium disabled:opacity-50"
+            className={`py-3 rounded-lg text-white text-sm font-medium disabled:opacity-50 ${
+              confirmTone === "danger" ? "bg-red-600" : "bg-zinc-100 text-zinc-900"
+            }`}
           >
             {isLoading ? "Isleniyor..." : confirmText}
           </button>

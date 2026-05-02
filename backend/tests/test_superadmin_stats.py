@@ -17,6 +17,7 @@ from app.core.dependencies import get_current_super_admin
 from app.core.security import create_token_with_secret
 from app.main import app
 from app.models.enums import TenantStatus
+from app.modules.superadmin import stats_service
 
 TZ = ZoneInfo("Europe/Istanbul")
 
@@ -49,8 +50,10 @@ def _override_super_admin():
 @pytest.fixture(autouse=True)
 def reset_dependency_overrides():
     app.dependency_overrides.clear()
+    stats_service._CACHE.clear()
     yield
     app.dependency_overrides.clear()
+    stats_service._CACHE.clear()
 
 
 @pytest.mark.asyncio
@@ -222,3 +225,31 @@ async def test_stats_auth_wrong_role_returns_403():
 
     assert response.status_code == 403
     assert response.json() == {"error": "forbidden"}
+
+
+@pytest.mark.asyncio
+async def test_overview_uses_cache_when_ttl_enabled(monkeypatch):
+    monkeypatch.setattr(stats_service, "get_settings", lambda: SimpleNamespace(superadmin_stats_cache_ttl_seconds=60))
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _make_db_result(all_value=[(TenantStatus.active, 1)]),
+            _make_db_result(scalar_value=3),
+            _make_db_result(one_value=SimpleNamespace(total_bookings=4, cancelled_bookings=1)),
+        ]
+    )
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_super_admin] = _override_super_admin
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        response_1 = await client.get("/api/v1/superadmin/stats/overview")
+        response_2 = await client.get("/api/v1/superadmin/stats/overview")
+
+    assert response_1.status_code == 200
+    assert response_2.status_code == 200
+    assert session.execute.await_count == 3
+    assert response_1.json() == response_2.json()

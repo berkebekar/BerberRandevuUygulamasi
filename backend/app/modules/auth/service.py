@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.phone import normalize_tr_phone, phone_variants
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.models.admin import Admin
-from app.models.enums import OTPRole
+from app.models.enums import OTPRole, UserStatus
 from app.models.otp_record import OTPRecord
 from app.models.user import User
 
@@ -160,6 +160,14 @@ async def verify_otp(
             expires_minutes=10,
         )
         return {"status": "new_user", "registration_token": registration_token, "user": None}
+
+    user_status = getattr(user, "status", None)
+    if user_status is None:
+        user_status = UserStatus.blocked if bool(getattr(user, "is_blocked", False)) else UserStatus.active
+    else:
+        user_status = UserStatus(user_status)
+    if user_status == UserStatus.deleted:
+        raise HTTPException(403, {"error": "user_deleted"})
 
     # Mevcut kullanici tekrar giris yaptiginda tek aktif oturum kurali icin
     # session_version degerini degistiriyoruz. Eski tokenlar bu andan itibaren gecersiz olur.
@@ -459,6 +467,13 @@ async def complete_registration(
     )
     existing = result.scalar_one_or_none()
     if existing:
+        existing_status = getattr(existing, "status", None)
+        if existing_status is None:
+            existing_status = UserStatus.blocked if bool(getattr(existing, "is_blocked", False)) else UserStatus.active
+        else:
+            existing_status = UserStatus(existing_status)
+        if existing_status == UserStatus.deleted:
+            raise HTTPException(403, {"error": "user_deleted"})
         return existing
 
     user = User(

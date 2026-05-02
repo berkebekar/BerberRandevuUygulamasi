@@ -16,14 +16,21 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
     secret_key: str = "CHANGE_ME_MIN_32_CHARS_SECRET_KEY_FOR_DEV"
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_phone_number: str = ""
     app_domain: str = ""
     allowed_subdomains: str = ""
     env: str = "development"
     super_admin_session_secret: str = ""
     super_admin_cookie_name: str = "superadmin_session"
+    superadmin_stats_cache_ttl_seconds: int = 30
+
+    # Redis — konuşma state yönetimi için (WhatsApp botu)
+    redis_url: str = "redis://localhost:6379/0"
+
+    # WhatsApp Business API (Meta Cloud API)
+    # wa_verify_token: Meta dashboard'a girilen webhook doğrulama tokeni (platform geneli)
+    # wa_phone_number_id ve wa_access_token: Tenant bazında DB'de tutulur,
+    # ancak platform geneli default olarak da buradan okunabilir.
+    wa_verify_token: str = ""
 
 
 @lru_cache

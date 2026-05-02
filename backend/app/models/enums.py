@@ -25,22 +25,15 @@ class OTPRole(str, enum.Enum):
     admin = "admin"
 
 
-class NotificationMessageType(str, enum.Enum):
-    """Bildirim mesaj türü (MVP'de çoğunlukla otp)."""
-    otp = "otp"
-    booking_created = "booking_created"
-    booking_cancelled = "booking_cancelled"
-
-
-class NotificationStatus(str, enum.Enum):
-    """Bildirim gönderim sonucu."""
-    sent = "sent"
-    failed = "failed"
-    pending = "pending"
-
-
 class TenantStatus(str, enum.Enum):
     """Tenant status: active, inactive, deleted."""
     active = "active"
     inactive = "inactive"
+    deleted = "deleted"
+
+
+class UserStatus(str, enum.Enum):
+    """User status: active, blocked, deleted."""
+    active = "active"
+    blocked = "blocked"
     deleted = "deleted"

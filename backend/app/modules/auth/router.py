@@ -20,19 +20,20 @@ Business logic auth/service.py içindedir; bu dosya sadece HTTP katmanıdır.
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.cookies import resolve_cookie_domain
-from app.core.database import AsyncSessionLocal, get_db
-from app.core.phone import phone_variants
+from app.core.database import get_db
+from app.core.phone import normalize_tr_phone, phone_variants
 from app.core.security import create_token, decode_token
 from app.models.admin import Admin
-from app.models.enums import NotificationMessageType
+from app.models.tenant import Tenant
 from app.modules.auth import service as auth_service
+from app.modules.whatsapp import client as wa_client
 from app.modules.auth.schemas import (
     AdminLoginPasswordRequest,
     AdminRegisterRequest,
@@ -43,11 +44,46 @@ from app.modules.auth.schemas import (
     VerifyOTPRequest,
     VerifyOTPResponse,
 )
-from app.modules.notification import service as notification_service
-from app.modules.notification.provider import get_sms_provider
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+async def _try_send_otp_via_whatsapp(
+    db: AsyncSession,
+    tenant_id,
+    phone: str,
+    code: str,
+) -> None:
+    """
+    OTP kodunu WhatsApp üzerinden göndermeye çalışır.
+    Tenant WA ayarları yoksa veya gönderim başarısız olursa sessizce geçer.
+    OTP konsol loguna zaten yazıldığından bu fallback güvenlidir.
+    """
+    try:
+        result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+        tenant = result.scalar_one_or_none()
+        if not tenant or not tenant.whatsapp_phone_number_id or not tenant.whatsapp_access_token:
+            return
+        try:
+            normalized = normalize_tr_phone(phone)
+        except Exception:
+            normalized = phone
+        wa_phone = normalized.lstrip("+")
+        msg = (
+            f"Dogrulama kodunuz: *{code}*\n\n"
+            "Bu kodu web sitesindeki giris sayfasina girin.\n"
+            "Kod 5 dakika gecerlidir."
+        )
+        await wa_client.send_text(
+            tenant.whatsapp_phone_number_id,
+            tenant.whatsapp_access_token,
+            wa_phone,
+            msg,
+        )
+        logger.info("[OTP-WA] WhatsApp uzerinden gonderildi | phone=%s", phone)
+    except Exception as exc:
+        logger.debug("WhatsApp OTP gonderilemedi (fallback: log) | error=%s", exc)
 
 # Session cookie ömrü: 40 gün (saniye cinsinden)
 _SESSION_MAX_AGE = 60 * 60 * 24 * 40
@@ -65,13 +101,6 @@ def get_tenant_id(request: Request):
         raise HTTPException(400, {"error": "tenant_required"})
     return tenant_id
 
-
-def _get_provider():
-    """
-    Aktif SMS sağlayıcısını döndürür.
-    Development: MockProvider (console'a yazar), Production: TwilioProvider.
-    """
-    return get_sms_provider()
 
 def _set_session_cookie(request: Request, response: Response, user_id, session_version: str) -> None:
     """
@@ -122,7 +151,6 @@ def _set_admin_session_cookie(request: Request, response: Response, admin_id, se
 @router.post("/send-otp", status_code=200)
 async def send_otp_unified(
     body: SendOTPRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     tenant_id=Depends(get_tenant_id),
 ):
@@ -143,16 +171,9 @@ async def send_otp_unified(
         code = await auth_service.send_admin_otp(db, tenant_id, body.phone)
     else:
         code = await auth_service.send_otp(db, tenant_id, body.phone)
+        await _try_send_otp_via_whatsapp(db, tenant_id, body.phone, code)
 
-    background_tasks.add_task(
-        notification_service.send_sms_task,
-        AsyncSessionLocal,
-        _get_provider(),
-        tenant_id,
-        body.phone,
-        notification_service.format_otp_message(code),
-        NotificationMessageType.otp,
-    )
+    logger.info("[OTP] phone=%s code=%s", body.phone, code)
     return {"message": "otp_sent"}
 
 
@@ -206,31 +227,16 @@ async def verify_otp_unified(
 @router.post("/user/send-otp", status_code=200)
 async def send_otp(
     body: SendOTPRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     tenant_id=Depends(get_tenant_id),
 ):
     """
     Müşteri telefon numarasına 6 haneli OTP gönderir.
-    OTP DB'ye yazıldıktan sonra SMS background task olarak gönderilir.
     Rate limit ihlalinde 429 döner.
-
-    tenant_id: NotificationLog için gerekli — her log kaydına tenant bağlanır.
     """
-    # Service OTP üretir ve DB'ye yazar; code SMS için döner
     code = await auth_service.send_otp(db, tenant_id, body.phone)
-
-    # SMS background task: yanıt kullanıcıya gönderildikten sonra çalışır (non-blocking)
-    # NotificationLog oluşturma + SMS gönderme + log güncelleme hepsi background'da
-    background_tasks.add_task(
-        notification_service.send_sms_task,
-        AsyncSessionLocal,                         # background task kendi session'ını açar
-        _get_provider(),                           # dev: Mock, prod: Twilio
-        tenant_id,
-        body.phone,
-        notification_service.format_otp_message(code),
-        NotificationMessageType.otp,
-    )
+    await _try_send_otp_via_whatsapp(db, tenant_id, body.phone, code)
+    logger.info("[OTP] phone=%s code=%s", body.phone, code)
     return {"message": "otp_sent"}
 
 
@@ -306,28 +312,15 @@ async def admin_register(
 @router.post("/admin/send-otp", status_code=200)
 async def admin_send_otp(
     body: SendOTPRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     tenant_id=Depends(get_tenant_id),
 ):
     """
     Admin telefon numarasına OTP gönderir.
-    User OTP ile aynı mekanizma, sadece role=admin farkıyla çalışır.
     Rate limit ihlalinde 429 döner.
-
-    tenant_id: NotificationLog için gerekli.
     """
     code = await auth_service.send_admin_otp(db, tenant_id, body.phone)
-    # SMS arka planda gönderilir — kullanıcı beklemez (non-blocking)
-    background_tasks.add_task(
-        notification_service.send_sms_task,
-        AsyncSessionLocal,
-        _get_provider(),
-        tenant_id,
-        body.phone,
-        notification_service.format_otp_message(code),
-        NotificationMessageType.otp,
-    )
+    logger.info("[OTP] phone=%s code=%s", body.phone, code)
     return {"message": "otp_sent"}
 
 

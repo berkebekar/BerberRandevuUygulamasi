@@ -316,7 +316,7 @@ async def cancel_booking_admin(
     db: AsyncSession,
     tenant_id: uuid.UUID,
     booking_id: uuid.UUID,
-) -> tuple[Booking, str | None]:
+) -> Booking:
     """
     Admin tarafÄ±ndan randevu iptali.
 
@@ -328,9 +328,7 @@ async def cancel_booking_admin(
     5. (Caller sorumluluÄŸu) Notification background task: booking/router.py Ã§aÄŸÄ±rÄ±r
 
     Returns:
-        tuple[Booking, str | None]:
-            - Booking: Ä°ptal edilmiÅŸ randevu
-            - str | None: MÃ¼ÅŸterinin telefon numarasÄ± (SMS iÃ§in); kullanÄ±cÄ± bulunamazsa None
+        Booking: İptal edilmiş randevu
 
     Raises:
         404 booking_not_found: Randevu bulunamadÄ± veya zaten iptal
@@ -359,15 +357,6 @@ async def cancel_booking_admin(
         raise HTTPException(409, {"error": "booking_cancellation_window_passed"})
 
     # MÃ¼ÅŸteriyi bul â€” notification background task iÃ§in telefon numarasÄ± lazÄ±m
-    user_result = await db.execute(
-        select(User).where(
-            User.id == booking.user_id,
-            User.tenant_id == tenant_id,
-        )
-    )
-    user = user_result.scalar_one_or_none()
-    user_phone = user.phone if user else None
-
     # Randevuyu iptal et
     booking.status = BookingStatus.cancelled
     booking.cancelled_by = CancelledBy.admin
@@ -380,8 +369,7 @@ async def cancel_booking_admin(
         booking_id,
         tenant_id,
     )
-    # user_phone: booking/router.py'nin notification background task'Ä± baÅŸlatmasÄ± iÃ§in
-    return booking, user_phone
+    return booking
 
 
 async def cancel_booking_user(
