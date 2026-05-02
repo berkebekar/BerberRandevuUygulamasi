@@ -168,7 +168,7 @@ async def _send_available_dates(
     week_data = await schedule_service.get_slots_for_week(db, tenant_id, start)
 
     rows = []
-    for day in week_data.days:
+    for day in week_data.week:
         if day.is_closed:
             continue
         avail = [s for s in day.slots if s.status == SlotStatus.available]
