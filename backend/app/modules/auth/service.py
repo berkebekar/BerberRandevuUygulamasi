@@ -1,5 +1,5 @@
 ﻿"""
-auth/service.py â€” OTP ve kullanÄ±cÄ±/admin auth business logic.
+auth/service.py â€" OTP ve kullanÄ±cÄ±/admin auth business logic.
 
 Bu dosya sistemin kritik kurallarÄ±nÄ± iÃ§erir:
 - OTP plain text asla saklanmaz (bcrypt hash)
@@ -51,7 +51,7 @@ async def send_otp(db: AsyncSession, tenant_id, phone: str) -> str:
     phone_candidates = phone_variants(normalized_phone)
 
     # Son 60 saniyede bu numaraya gÃ¶nderilmiÅŸ aktif OTP var mÄ±?
-    # Varsa rate limit ihlali â€” 429 dÃ¶n
+    # Varsa rate limit ihlali â€" 429 dÃ¶n
     sixty_seconds_ago = datetime.now(timezone.utc) - timedelta(seconds=60)
     result = await db.execute(
         select(OTPRecord).where(
@@ -71,7 +71,7 @@ async def send_otp(db: AsyncSession, tenant_id, phone: str) -> str:
     code = _generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
-    # OTP'yi hash'leyerek kaydet â€” plain text asla DB'ye yazÄ±lmaz (CLAUDE.md)
+    # OTP'yi hash'leyerek kaydet â€" plain text asla DB'ye yazÄ±lmaz (CLAUDE.md)
     record = OTPRecord(
         tenant_id=tenant_id,
         phone=normalized_phone,
@@ -184,7 +184,7 @@ async def verify_otp(
     return {"status": "returning_user", "registration_token": None, "user": user}
 
 
-# â”€â”€â”€ Admin Service FonksiyonlarÄ± â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€ Admin Service FonksiyonlarÄ± â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 async def register_admin(
     db: AsyncSession,
@@ -209,7 +209,7 @@ async def register_admin(
         select(Admin).where(Admin.tenant_id == tenant_id)
     )
     if existing_result.scalar_one_or_none():
-        # Zaten bir admin kayÄ±tlÄ± â€” ikinci kayda izin yok (CLAUDE.md: tenant baÅŸÄ±na 1 admin)
+        # Zaten bir admin kayÄ±tlÄ± â€" ikinci kayda izin yok (CLAUDE.md: tenant baÅŸÄ±na 1 admin)
         raise HTTPException(409, {"error": "admin_already_exists"})
 
     admin = Admin(
@@ -262,7 +262,7 @@ async def send_admin_otp(db: AsyncSession, tenant_id, phone: str) -> str:
         tenant_id=tenant_id,
         phone=normalized_phone,
         code_hash=hash_password(code),  # Plain text saklanmaz (CLAUDE.md)
-        role=OTPRole.admin,             # Admin rolÃ¼ â€” user ile karÄ±ÅŸmaz
+        role=OTPRole.admin,             # Admin rolÃ¼ â€" user ile karÄ±ÅŸmaz
         expires_at=expires_at,
         is_used=False,
         attempt_count=0,
@@ -323,13 +323,13 @@ async def verify_admin_otp(
             # 3. yanlÄ±ÅŸ deneme: OTP'yi iptal et
             record.is_used = True
         await db.commit()
-        raise HTTPException(401, {“error”: “otp_invalid”})
+        raise HTTPException(401, {"error": "otp_invalid"})
 
     # DoÄŸru kod: OTP'yi kullanÄ±ldÄ± iÅŸaretle
     record.is_used = True
     await db.commit()
 
-    # Bu tenant'taki admin'i bul (tenant_id filtresi zorunlu â€” CLAUDE.md)
+    # Bu tenant'taki admin'i bul (tenant_id filtresi zorunlu â€" CLAUDE.md)
     admin_result = await db.execute(
         select(Admin).where(
             Admin.tenant_id == tenant_id,
@@ -339,7 +339,7 @@ async def verify_admin_otp(
     admin = admin_result.scalar_one_or_none()
 
     if admin is None:
-        # OTP doÄŸru ama bu tenant'ta admin kaydÄ± yok â€” Ã¶nce kayÄ±t gerekli
+        # OTP doÄŸru ama bu tenant'ta admin kaydÄ± yok â€" Ã¶nce kayÄ±t gerekli
         raise HTTPException(401, {"error": "admin_not_registered"})
 
     # Admin tekrar giris yaptiginda session_version rotate edilir.
@@ -360,13 +360,13 @@ async def login_admin_password(
     Email + ÅŸifre ile admin giriÅŸi yapar.
 
     Email DB'de bulunmazsa veya ÅŸifre yanlÄ±ÅŸsa 401 fÄ±rlatÄ±r.
-    Ä°ki farklÄ± hata durumu iÃ§in kasÄ±tlÄ± olarak aynÄ± 401 mesajÄ± kullanÄ±lÄ±r â€”
+    Ä°ki farklÄ± hata durumu iÃ§in kasÄ±tlÄ± olarak aynÄ± 401 mesajÄ± kullanÄ±lÄ±r â€"
     hangisinin yanlÄ±ÅŸ olduÄŸunu ifÅŸa etmemek iÃ§in (gÃ¼venlik prensibi).
 
     Returns:
         Admin: GiriÅŸ baÅŸarÄ±lÄ±ysa ilgili admin nesnesi.
     """
-    # Tenant'a ait admin'i email ile ara (tenant_id filtresi zorunlu â€” CLAUDE.md)
+    # Tenant'a ait admin'i email ile ara (tenant_id filtresi zorunlu â€" CLAUDE.md)
     result = await db.execute(
         select(Admin).where(
             Admin.tenant_id == tenant_id,
@@ -376,7 +376,7 @@ async def login_admin_password(
     admin = result.scalar_one_or_none()
 
     if admin is None or not verify_password(password, admin.password_hash):
-        # Email bulunamadÄ± veya ÅŸifre yanlÄ±ÅŸ â€” ikisi iÃ§in de aynÄ± hata mesajÄ± (gÃ¼venlik)
+        # Email bulunamadÄ± veya ÅŸifre yanlÄ±ÅŸ â€" ikisi iÃ§in de aynÄ± hata mesajÄ± (gÃ¼venlik)
         raise HTTPException(401, {"error": "invalid_credentials"})
 
     return admin
@@ -456,7 +456,7 @@ async def complete_registration(
         raise HTTPException(401, {"error": "invalid_token"})
 
     if payload.get("type") != "registration":
-        # Session token'Ä± ile kayÄ±t endpointine gelinmiÅŸ â€” reddet
+        # Session token'Ä± ile kayÄ±t endpointine gelinmiÅŸ â€" reddet
         raise HTTPException(401, {"error": "invalid_token"})
 
     phone = payload.get("sub")
