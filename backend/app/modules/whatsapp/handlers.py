@@ -234,11 +234,15 @@ async def _send_available_times(
         else:
             afternoon_rows.append(row)
 
+    # WhatsApp API: toplam satır sayısı tüm section'larda 10'u geçemez
+    morning_limited = morning_rows[:5]
+    afternoon_limited = afternoon_rows[: 10 - len(morning_limited)]
+
     sections = []
-    if morning_rows:
-        sections.append(wa.ListSection(title="Sabah", rows=morning_rows[:10]))
-    if afternoon_rows:
-        sections.append(wa.ListSection(title="Ogleden Sonra", rows=afternoon_rows[:10]))
+    if morning_limited:
+        sections.append(wa.ListSection(title="Sabah", rows=morning_limited))
+    if afternoon_limited:
+        sections.append(wa.ListSection(title="Ogleden Sonra", rows=afternoon_limited))
 
     date_label = _fmt_date(selected_date)
     await wa.send_list(
