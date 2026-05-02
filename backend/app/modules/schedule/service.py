@@ -163,6 +163,7 @@ async def get_slots_for_week(
     tenant_id: uuid.UUID,
     start_date: date,
     now: datetime | None = None,
+    days: int = 7,
 ) -> WeekSlots:
     """
     start_date'den baÅŸlayarak 7 gÃ¼nlÃ¼k slot listesini dÃ¶ndÃ¼rÃ¼r.
@@ -188,12 +189,12 @@ async def get_slots_for_week(
                 max_booking_days_ahead=DEFAULT_MAX_BOOKING_DAYS_AHEAD,
                 slots=[],
             )
-            for i in range(7)
+            for i in range(days)
         ]
         return WeekSlots(week=empty_days)
 
     # 2. HaftalÄ±k DayOverride'larÄ± tek sorguda Ã§ek
-    week_end_date = start_date + timedelta(days=6)
+    week_end_date = start_date + timedelta(days=days - 1)
     overrides_result = await db.execute(
         select(DayOverride).where(
             DayOverride.tenant_id == tenant_id,
@@ -231,7 +232,7 @@ async def get_slots_for_week(
 
     # Her gÃ¼n iÃ§in hesapla â€” booking ve block'larÄ± gÃ¼n bazÄ±nda filtrele
     week_days: list[DaySlots] = []
-    for i in range(7):
+    for i in range(days):
         d = start_date + timedelta(days=i)
 
         # Bu gÃ¼ne ait booking ve block'larÄ± filtrele

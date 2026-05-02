@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.phone import normalize_tr_phone, phone_variants
+from app.models.barber_profile import BarberProfile
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.modules.booking import service as booking_service
@@ -158,31 +159,50 @@ async def _send_available_dates(
     db: AsyncSession,
 ) -> bool:
     """
-    Sonraki 7 günün müsait tarihlerini liste olarak gönderir.
+    Berberin ileri tarih limitine kadar müsait günleri liste olarak gönderir.
+    WhatsApp max 10 row: 9 gün gösterilir, fazlası varsa 10. satır web linki olur.
     Hiç müsait gün yoksa False döner.
     """
     today = datetime.now(TZ).date()
-    start = today + timedelta(days=1)
 
-    week_data = await schedule_service.get_slots_for_week(db, tenant_id, start)
+    profile_result = await db.execute(
+        select(BarberProfile).where(BarberProfile.tenant_id == tenant_id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    max_days = profile.max_booking_days_ahead if profile else 14
 
-    rows = []
+    week_data = await schedule_service.get_slots_for_week(db, tenant_id, today, days=max_days)
+
+    available_days = []
     for day in week_data.week:
         if day.is_closed:
             continue
         avail = [s for s in day.slots if s.status == SlotStatus.available]
-        if not avail:
-            continue
+        if avail:
+            available_days.append((day, len(avail)))
+
+    if not available_days:
+        return False
+
+    add_more = len(available_days) > 9
+    show_days = available_days[:9] if add_more else available_days
+
+    rows = [
+        wa.ListRow(
+            id=f"date_{day.date.isoformat()}",
+            title=_fmt_date_short(day.date),
+            description=f"{count} musait saat",
+        )
+        for day, count in show_days
+    ]
+
+    if add_more:
         rows.append(
             wa.ListRow(
-                id=f"date_{day.date.isoformat()}",
-                title=_fmt_date_short(day.date),
-                description=f"{len(avail)} musait saat",
+                id="date_more",
+                title="Daha ileri bir tarihe randevu almak istiyorum",
             )
         )
-
-    if not rows:
-        return False
 
     sections = [wa.ListSection(title="Musait Gunler", rows=rows)]
     await wa.send_list(
@@ -351,6 +371,14 @@ async def handle_incoming(
 
     # ── DATE_SELECT: Tarih seçimi ─────────────────────────────────────────────
     if state.step == STEP_DATE_SELECT:
+        if content == "date_more":
+            site_url = f"https://{tenant.subdomain}.bbsoft.com.tr"
+            await wa.send_text(
+                pid, tok, wa_phone,
+                f"Daha ileri bir tarihe randevu almak icin web sitemizi ziyaret edebilirsiniz:\n\n{site_url}",
+            )
+            await clear_state(pid, wa_phone)
+            return
         if content and content.startswith("date_"):
             selected_date_str = content[5:]  # "2026-05-10"
             try:
