@@ -20,11 +20,10 @@ logger = logging.getLogger(__name__)
 STATE_TTL = 1800  # 30 dakika (saniye)
 
 # Konuşma adımları
-STEP_IDLE = "idle"                    # Ana menü bekleniyor
-STEP_DATE_SELECT = "date_select"      # Tarih seçimi
-STEP_TIME_SELECT = "time_select"      # Saat seçimi
-STEP_CONFIRM = "confirm"              # Randevu onayı
-STEP_OTP_PHONE = "otp_phone_collect"  # OTP için telefon bekleniyor
+STEP_IDLE = "idle"               # Ana menü bekleniyor
+STEP_DATE_SELECT = "date_select" # Tarih seçimi
+STEP_TIME_SELECT = "time_select" # Saat seçimi
+STEP_CONFIRM = "confirm"         # Randevu onayı
 
 
 @dataclass

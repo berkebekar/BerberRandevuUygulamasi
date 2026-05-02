@@ -2,11 +2,10 @@
 whatsapp/handlers.py — WhatsApp bot konuşma akışı.
 
 Konuşma adımları (state machine):
-  idle            → Ana menü gösterilir, buton beklenir
-  date_select     → Müsait günler listesi, tarih seçimi beklenir
-  time_select     → Seçilen günün saatleri, saat seçimi beklenir
-  confirm         → Randevu özeti, onay/iptal beklenir
-  otp_phone_collect → Web OTP için telefon numarası beklenir
+  idle        → Ana menü gösterilir, buton beklenir
+  date_select → Müsait günler listesi, tarih seçimi beklenir
+  time_select → Seçilen günün saatleri, saat seçimi beklenir
+  confirm     → Randevu özeti, onay/iptal beklenir
 
 Her step'te beklenmedik input gelirse, mevcut adım tekrar gösterilir.
 """
@@ -22,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.phone import normalize_tr_phone, phone_variants
 from app.models.tenant import Tenant
 from app.models.user import User
-from app.modules.auth import service as auth_service
 from app.modules.booking import service as booking_service
 from app.modules.schedule import service as schedule_service
 from app.modules.schedule.schemas import SlotStatus
@@ -31,7 +29,6 @@ from app.modules.whatsapp.state import (
     STEP_CONFIRM,
     STEP_DATE_SELECT,
     STEP_IDLE,
-    STEP_OTP_PHONE,
     STEP_TIME_SELECT,
     ConversationState,
     clear_state,
@@ -145,7 +142,6 @@ async def _send_main_menu(
         body,
         buttons=[
             wa.InteractiveButton(id="booking", title="Randevu Al"),
-            wa.InteractiveButton(id="otp", title="Web Girisi OTP"),
         ],
         footer="Randevu almak icin 'Randevu Al'a basin.",
     )
@@ -331,8 +327,6 @@ async def handle_incoming(
     if state.step == STEP_IDLE:
         if content == "booking":
             await _handle_booking_start(pid, tok, wa_phone, tid, state, db)
-        elif content == "otp":
-            await _handle_otp_start(pid, tok, wa_phone, tid, state)
         else:
             # İlk mesaj veya tanımlanamayan input → hoş geldin + menü
             state.tenant_id = str(tid)
@@ -402,15 +396,6 @@ async def handle_incoming(
                 await _send_main_menu(pid, tok, wa_phone, tenant.name)
         return
 
-    # ── OTP_PHONE: Web OTP için telefon ───────────────────────────────────────
-    if state.step == STEP_OTP_PHONE:
-        phone_input = (content or "").strip()
-        if phone_input:
-            await _handle_otp_phone_received(pid, tok, wa_phone, phone_input, state, tid, db)
-        else:
-            await wa.send_text(pid, tok, wa_phone, "Lutfen telefon numaranizi girin (ornek: 5551234567):")
-        return
-
     # Bilinmeyen adım → sıfırla
     await clear_state(pid, wa_phone)
     await _send_main_menu(pid, tok, wa_phone, tenant.name)
@@ -438,25 +423,6 @@ async def _handle_booking_start(
             "Lutfen daha sonra tekrar deneyin.",
         )
         await clear_state(pid, wa_phone)
-
-
-async def _handle_otp_start(
-    pid: str,
-    tok: str,
-    wa_phone: str,
-    tenant_id: uuid.UUID,
-    state: ConversationState,
-) -> None:
-    """Web OTP butonuna basıldı → telefon numarası iste."""
-    state.step = STEP_OTP_PHONE
-    state.tenant_id = str(tenant_id)
-    await save_state(pid, wa_phone, state)
-    await wa.send_text(
-        pid, tok, wa_phone,
-        "Web sitesine giris icin OTP kodu gonderelim.\n\n"
-        "Telefon numaranizi girin (basindaki sifir olmadan):\n"
-        "Ornek: *5551234567*",
-    )
 
 
 async def _handle_date_selected(
@@ -575,54 +541,3 @@ async def _handle_booking_confirm(
     )
     await wa.send_text(pid, tok, wa_phone, success_msg)
     logger.info("WA randevu oluşturuldu | booking_id=%s | user_id=%s", booking.id, user.id)
-
-
-async def _handle_otp_phone_received(
-    pid: str,
-    tok: str,
-    wa_phone: str,
-    phone_input: str,
-    state: ConversationState,
-    tenant_id: uuid.UUID,
-    db: AsyncSession,
-) -> None:
-    """Kullanıcı telefon numarasını girdi → OTP üret ve WA mesajıyla gönder."""
-    # "0" ile başlıyorsa kaldır, sonra normalize et
-    cleaned = phone_input.strip().replace(" ", "").replace("-", "")
-    if not cleaned.startswith("+"):
-        cleaned = "+" + ("90" + cleaned.lstrip("0") if len(cleaned) <= 10 else cleaned)
-
-    try:
-        from app.core.phone import normalize_tr_phone
-        normalized = normalize_tr_phone(cleaned)
-    except Exception:
-        await wa.send_text(
-            pid, tok, wa_phone,
-            "Gecersiz telefon numarasi. Lutfen tekrar deneyin.\n"
-            "Ornek: *5551234567*",
-        )
-        return
-
-    try:
-        code = await auth_service.send_otp(db, tenant_id, normalized)
-    except Exception as exc:
-        from fastapi import HTTPException
-        if isinstance(exc, HTTPException) and exc.status_code == 429:
-            await wa.send_text(
-                pid, tok, wa_phone,
-                "Az once OTP gonderildi. 60 saniye bekleyip tekrar deneyin.",
-            )
-        else:
-            logger.error("OTP gönderme hatası | error=%s", exc)
-            await wa.send_text(pid, tok, wa_phone, "OTP gonderilemedi. Lutfen tekrar deneyin.")
-        return
-
-    await clear_state(pid, wa_phone)
-
-    otp_msg = (
-        f"Dogrulama kodunuz: *{code}*\n\n"
-        "Bu kodu web sitesindeki giris sayfasina girin.\n"
-        "Kod 5 dakika gecerlidir."
-    )
-    await wa.send_text(pid, tok, wa_phone, otp_msg)
-    logger.info("WA OTP gonderildi | phone=%s", normalized)

@@ -171,7 +171,7 @@ async def send_otp_unified(
         code = await auth_service.send_admin_otp(db, tenant_id, body.phone)
     else:
         code = await auth_service.send_otp(db, tenant_id, body.phone)
-        await _try_send_otp_via_whatsapp(db, tenant_id, body.phone, code)
+    await _try_send_otp_via_whatsapp(db, tenant_id, body.phone, code)
 
     logger.info("[OTP] phone=%s code=%s", body.phone, code)
     return {"message": "otp_sent"}
@@ -320,6 +320,7 @@ async def admin_send_otp(
     Rate limit ihlalinde 429 döner.
     """
     code = await auth_service.send_admin_otp(db, tenant_id, body.phone)
+    await _try_send_otp_via_whatsapp(db, tenant_id, body.phone, code)
     logger.info("[OTP] phone=%s code=%s", body.phone, code)
     return {"message": "otp_sent"}
 
