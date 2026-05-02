@@ -10,7 +10,12 @@ from app.core.config import get_settings
 
 _settings = get_settings()
 # asyncpg sürücüsü kullanılır (postgresql+asyncpg://...)
-_engine = create_async_engine(_settings.database_url, echo=False)
+_engine = create_async_engine(
+    _settings.database_url,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
 AsyncSessionLocal = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
 
 
