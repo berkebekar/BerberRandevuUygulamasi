@@ -200,7 +200,7 @@ async def _send_available_dates(
         rows.append(
             wa.ListRow(
                 id="date_more",
-                title="Daha ileri bir tarihe randevu almak istiyorum",
+                title="Daha Ileri Bir Tarih Sec",
             )
         )
 
