@@ -59,10 +59,7 @@ def _fmt_date(d: date) -> str:
 
 
 def _fmt_date_short(d: date) -> str:
-    """Liste başlığı için kısa format: '05 May Pzt' (max 24 karakter)"""
-    day_abbr = _TR_DAYS[d.weekday()][:3]
-    month_abbr = _TR_MONTHS[d.month][:3]
-    return f"{d.day:02d} {month_abbr} {day_abbr}"
+    return f"{d.day:02d} {_TR_MONTHS[d.month]} {_TR_DAYS[d.weekday()]}"
 
 
 def _phone_to_wa(normalized_phone: str) -> str:
@@ -191,7 +188,6 @@ async def _send_available_dates(
         wa.ListRow(
             id=f"date_{day.date.isoformat()}",
             title=_fmt_date_short(day.date),
-            description=f"{count} musait saat",
         )
         for day, count in show_days
     ]
