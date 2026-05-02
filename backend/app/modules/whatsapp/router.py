@@ -113,7 +113,7 @@ async def _process_webhook(body: dict, db: AsyncSession) -> None:
                 continue
 
             # Gönderen profil adları (contacts listesinde)
-            contacts = {c["wa_id"]: c["profile"].get("name", "Musteri") for c in value.get("contacts", [])}
+            contacts = {c["wa_id"]: c.get("profile", {}).get("name", "Musteri") for c in value.get("contacts", [])}
 
             for msg in value.get("messages", []):
                 wa_phone = msg.get("from", "")
