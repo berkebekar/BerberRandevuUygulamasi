@@ -18,7 +18,7 @@ type MyBooking = {
   id: string
   slot_time: string
   status: "confirmed" | "cancelled" | "no_show"
-  cancelled_by?: "admin" | "user" | null
+  cancelled_by?: "admin" | "user" | "rescheduled_by_user" | "rescheduled_by_admin" | null
 }
 
 type UpcomingBookingState = {
@@ -42,9 +42,11 @@ function formatBookingRow(slotTime: string): { timeText: string; dateText: strin
   return { timeText, dateText }
 }
 
-function getCancellationText(cancelledBy?: "admin" | "user" | null): string {
+function getCancellationText(cancelledBy?: "admin" | "user" | "rescheduled_by_user" | "rescheduled_by_admin" | null): string {
   if (cancelledBy === "admin") return "Berber tarafından iptal edildi."
   if (cancelledBy === "user") return "Tarafınızca iptal edildi."
+  if (cancelledBy === "rescheduled_by_user") return "Randevu saatiniz tarafınızca değiştirildi."
+  if (cancelledBy === "rescheduled_by_admin") return "Randevu saatiniz berber tarafından değiştirildi."
   return "İptal edildi."
 }
 

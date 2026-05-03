@@ -1,16 +1,16 @@
 ﻿"""
-booking/router.py â€” Randevu HTTP endpoint'leri.
+booking/router.py â€" Randevu HTTP endpoint'leri.
 
 MÃ¼ÅŸteri endpoint'leri (user_session cookie gerektirir):
-  POST /bookings                    â†’ Atomik randevu oluÅŸtur
-  GET  /bookings/my                 â†’ Kendi randevularÄ±nÄ± listele
+  POST /bookings                    â†' Atomik randevu oluÅŸtur
+  GET  /bookings/my                 â†' Kendi randevularÄ±nÄ± listele
 
 Admin endpoint'leri (admin_session cookie gerektirir):
-  GET  /bookings?date=YYYY-MM-DD    â†’ Belirli gÃ¼n iÃ§in randevu listesi
-  DELETE /admin/bookings/{id}       â†’ Randevu iptal (cancelled_by='admin')
-  POST /admin/bookings/{id}/mark-no-show   â†’ Gecmis randevuyu gerceklesmedi isaretle
-  POST /admin/bookings/{id}/mark-confirmed â†’ Gecmis no_show randevuyu geri al
-  POST /admin/bookings              â†’ Manuel randevu oluÅŸtur (belirli kullanÄ±cÄ± iÃ§in)
+  GET  /bookings?date=YYYY-MM-DD    â†' Belirli gÃ¼n iÃ§in randevu listesi
+  DELETE /admin/bookings/{id}       â†' Randevu iptal (cancelled_by='admin')
+  POST /admin/bookings/{id}/mark-no-show   â†' Gecmis randevuyu gerceklesmedi isaretle
+  POST /admin/bookings/{id}/mark-confirmed â†' Gecmis no_show randevuyu geri al
+  POST /admin/bookings              â†' Manuel randevu oluÅŸtur (belirli kullanÄ±cÄ± iÃ§in)
 
 Business logic booking/service.py iÃ§indedir; bu dosya sadece HTTP katmanÄ±dÄ±r.
 """
@@ -38,7 +38,7 @@ from app.modules.booking.schemas import (
     BookingWithUserResponse,
 )
 
-# Prefix yok â€” endpoint path'leri dekoratÃ¶rde tam olarak belirtiliyor.
+# Prefix yok â€" endpoint path'leri dekoratÃ¶rde tam olarak belirtiliyor.
 # Ã‡Ã¼nkÃ¼ mÃ¼ÅŸteri endpoint'leri (/bookings) ve admin endpoint'leri (/admin/bookings)
 # ortak bir prefix paylaÅŸmÄ±yor.
 router = APIRouter(tags=["bookings"])
@@ -65,7 +65,7 @@ def _build_placeholder_phone() -> str:
     return f"no-phone-{uuid.uuid4().hex}"
 
 
-# â”€â”€â”€ MÃ¼ÅŸteri: Randevu OluÅŸturma â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€ MÃ¼ÅŸteri: Randevu OluÅŸturma â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 @router.post("/bookings", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
 async def create_booking(
@@ -112,7 +112,7 @@ async def create_booking(
     )
 
 
-# â”€â”€â”€ MÃ¼ÅŸteri: Kendi RandevularÄ±nÄ± Listeleme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€ MÃ¼ÅŸteri: Kendi RandevularÄ±nÄ± Listeleme â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 @router.get("/bookings/my", response_model=list[BookingResponse])
 async def get_my_bookings(
@@ -142,7 +142,7 @@ async def get_my_bookings(
     ]
 
 
-# â”€â”€â”€ Admin: GÃ¼nlÃ¼k Randevu Listesi â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€ Admin: GÃ¼nlÃ¼k Randevu Listesi â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 @router.get("/bookings", response_model=list[BookingWithUserResponse])
 async def get_bookings_by_date(
@@ -204,20 +204,20 @@ async def cancel_my_booking(
     )
 
 
-@router.put(“/bookings/{booking_id}/reschedule”, response_model=BookingResponse)
+@router.put("/bookings/{booking_id}/reschedule", response_model=BookingResponse)
 async def reschedule_my_booking(
     booking_id: uuid.UUID,
     body: BookingRescheduleRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    “””
+    """
     Kullanici kendi randevusunu ayni gun icinde baska bir saate tasir.
 
     - Mevcut randevuya en az 2 saat kalmali
     - Yeni slot mevcut randevuyla ayni gun olmali
     - Yeni slot musait olmali
-    “””
+    """
     booking = await booking_service.reschedule_booking_user(
         db,
         tenant_id=user.tenant_id,
@@ -235,7 +235,37 @@ async def reschedule_my_booking(
     )
 
 
-@router.delete(“/admin/bookings/{booking_id}”, response_model=BookingResponse)
+@router.put("/admin/bookings/{booking_id}/reschedule", response_model=BookingResponse)
+async def reschedule_booking_admin_endpoint(
+    booking_id: uuid.UUID,
+    body: BookingRescheduleRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    """
+    Admin randevuyu ayni gun icinde baska bir saate tasir.
+
+    - Zaman kisitlamasi yok (2 saatlik kural uygulanmaz)
+    - Yeni slot mevcut randevuyla ayni gun olmali
+    - Yeni slot musait olmali
+    """
+    booking = await booking_service.reschedule_booking_admin(
+        db,
+        tenant_id=admin.tenant_id,
+        booking_id=booking_id,
+        new_slot_time=body.new_slot_time,
+    )
+    return BookingResponse(
+        id=booking.id,
+        user_id=booking.user_id,
+        slot_time=booking.slot_time,
+        status=booking.status,
+        cancelled_by=booking.cancelled_by,
+        created_at=booking.created_at,
+    )
+
+
+@router.delete("/admin/bookings/{booking_id}", response_model=BookingResponse)
 async def cancel_booking_admin(
     booking_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -246,9 +276,9 @@ async def cancel_booking_admin(
     status='cancelled', cancelled_by='admin' olarak gÃ¼ncellenir.
 
     Ä°ptal sonrasÄ± SMS notification background task olarak gÃ¶nderilir:
-    - NotificationLog oluÅŸturulur (status='pending' â†’ 'sent' veya 'failed')
+    - NotificationLog oluÅŸturulur (status='pending' â†' 'sent' veya 'failed')
     - SMS baÅŸarÄ±sÄ±z olsa da HTTP yanÄ±tÄ± 200 dÃ¶ner (SMS opsiyonel)
-    - CLAUDE.md: randevu iptali SMS'i MVP dÄ±ÅŸÄ± â€” altyapÄ± hazÄ±r, gÃ¶nderim aktif
+    - CLAUDE.md: randevu iptali SMS'i MVP dÄ±ÅŸÄ± â€" altyapÄ± hazÄ±r, gÃ¶nderim aktif
 
     Randevu bulunamazsa veya zaten iptal edilmiÅŸse 404 dÃ¶ner.
     """
@@ -316,7 +346,7 @@ async def mark_booking_confirmed(
     )
 
 
-# â”€â”€â”€ Admin: Manuel Randevu OluÅŸturma â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€ Admin: Manuel Randevu OluÅŸturma â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 @router.post(
     "/admin/bookings",
@@ -333,8 +363,8 @@ async def create_booking_admin(
 
     Find-or-create mantÄ±ÄŸÄ±:
     1. body.phone + tenant_id ile User tablosunu ara
-    2. User varsa â†’ mevcut user.id ile randevu oluÅŸtur
-    3. User yoksa â†’ body.first_name ve body.last_name zorunlu hale gelir;
+    2. User varsa â†' mevcut user.id ile randevu oluÅŸtur
+    3. User yoksa â†' body.first_name ve body.last_name zorunlu hale gelir;
        yeni User kaydÄ± aÃ§Ä±lÄ±r, ardÄ±ndan randevu oluÅŸturulur
 
     TÃ¼m booking iÅŸ kurallarÄ± geÃ§erlidir:
@@ -356,9 +386,9 @@ async def create_booking_admin(
         user = result.scalar_one_or_none()
 
     if user is None:
-        # KullanÄ±cÄ± sistemde yok â€” yeni kayÄ±t aÃ§Ä±lacak; isim/soyisim zorunlu
+        # KullanÄ±cÄ± sistemde yok â€" yeni kayÄ±t aÃ§Ä±lacak; isim/soyisim zorunlu
         if not body.first_name or not body.last_name:
-            # Ä°sim veya soyisim eksik â€” yeni kullanÄ±cÄ± oluÅŸturulamaz
+            # Ä°sim veya soyisim eksik â€" yeni kullanÄ±cÄ± oluÅŸturulamaz
             raise HTTPException(
                 422,
                 {"error": "missing_user_info",
@@ -376,11 +406,11 @@ async def create_booking_admin(
         )
         db.add(user)
         try:
-            await db.flush()  # id'yi almak iÃ§in flush yap â€” commit Ã¶ncesi geÃ§ici commit gibi davranÄ±r
+            await db.flush()  # id'yi almak iÃ§in flush yap â€" commit Ã¶ncesi geÃ§ici commit gibi davranÄ±r
             # flush neden commit deÄŸil?
             # Randevu oluÅŸturma transaction'Ä± aÅŸaÄŸÄ±da create_booking_admin iÃ§inde commit yapÄ±yor.
             # Ã–nce commit edip sonra randevu oluÅŸturursak mÃ¼ÅŸteri aÃ§Ä±lÄ±r ama randevu baÅŸarÄ±sÄ±z olabilir.
-            # flush: insert'i yapar ama transaction'Ä± aÃ§Ä±k bÄ±rakÄ±r â€” her ikisi atomik olur.
+            # flush: insert'i yapar ama transaction'Ä± aÃ§Ä±k bÄ±rakÄ±r â€" her ikisi atomik olur.
         except IntegrityError:
             # Race condition: aynÄ± telefon+tenant iÃ§in eÅŸzamanlÄ± iki istek geldi,
             # diÄŸeri Ã¶nce commit etti. Rollback yapÄ±p mevcut kullanÄ±cÄ±yÄ± yeniden al.
@@ -401,7 +431,7 @@ async def create_booking_admin(
                 # Telefonsuz placeholder kayitta beklenmedik cakisma.
                 raise HTTPException(500, {"error": "user_creation_failed"})
 
-    # AdÄ±m 2: Randevuyu oluÅŸtur (aynÄ± atomik mantÄ±k â€” booking/service.py)
+    # AdÄ±m 2: Randevuyu oluÅŸtur (aynÄ± atomik mantÄ±k â€" booking/service.py)
     booking = await booking_service.create_booking_admin(
         db,
         tenant_id=admin.tenant_id,

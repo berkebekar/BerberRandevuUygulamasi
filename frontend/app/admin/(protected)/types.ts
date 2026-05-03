@@ -7,7 +7,7 @@ export type DashboardBookingItem = {
   user_phone: string
   slot_time: string
   status: "confirmed" | "cancelled" | "no_show"
-  cancelled_by?: "admin" | "user" | null
+  cancelled_by?: "admin" | "user" | "rescheduled_by_user" | "rescheduled_by_admin" | null
 }
 
 export type DashboardResponse = {

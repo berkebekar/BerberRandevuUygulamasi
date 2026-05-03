@@ -14,9 +14,11 @@ class BookingStatus(str, enum.Enum):
 
 
 class CancelledBy(str, enum.Enum):
-    """Randevuyu iptal eden taraf."""
+    """Randevuyu iptal eden veya degistiren taraf."""
     admin = "admin"
     user = "user"
+    rescheduled_by_user = "rescheduled_by_user"
+    rescheduled_by_admin = "rescheduled_by_admin"
 
 
 class OTPRole(str, enum.Enum):

@@ -13,10 +13,11 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ActionConfirmSheet, AdminSlotGrid, PhoneInput } from "@/components"
-import { apiDelete, apiPost } from "@/lib/api"
+import { apiDelete, apiPost, apiPut } from "@/lib/api"
 import { buildBookingDays } from "@/lib/bookingWindow"
 import type {
   ConfirmAction,
+  DashboardBookingItem,
 } from "./types"
 import {
   formatManualSlotTime,
@@ -43,6 +44,12 @@ export default function AdminDashboardPage() {
   const [pendingAction, setPendingAction] = useState<ConfirmAction | null>(null)
   // Sheet onaylandiktan sonra islem devam ederken loading
   const [confirmLoading, setConfirmLoading] = useState(false)
+
+  // Admin reschedule state
+  const [pendingRescheduleBooking, setPendingRescheduleBooking] = useState<DashboardBookingItem | null>(null)
+  const [rescheduleStep, setRescheduleStep] = useState<"confirm" | "slot_select">("confirm")
+  const [selectedRescheduleSlot, setSelectedRescheduleSlot] = useState<string | null>(null)
+  const [rescheduleLoading, setRescheduleLoading] = useState(false)
 
   // Manuel randevu formu
   const [showManual, setShowManual] = useState(false)
@@ -213,6 +220,45 @@ export default function AdminDashboardPage() {
         `Bu randevuyu gerceklesti olarak isaretlemek ister misiniz? (${timeText} - ${person})`,
       payload: { bookingId },
     })
+  }
+
+  function handleRescheduleBooking(bookingId: string) {
+    const booking = (dashboard?.bookings ?? []).find((b) => b.id === bookingId)
+    if (!booking) return
+    setPendingRescheduleBooking(booking)
+    setRescheduleStep("confirm")
+    setSelectedRescheduleSlot(null)
+  }
+
+  function handleRescheduleConfirm() {
+    setRescheduleStep("slot_select")
+  }
+
+  async function handleRescheduleSubmit() {
+    if (!pendingRescheduleBooking || !selectedRescheduleSlot) return
+    setRescheduleLoading(true)
+    setError("")
+    try {
+      await apiPut(`/api/v1/admin/bookings/${pendingRescheduleBooking.id}/reschedule`, {
+        new_slot_time: selectedRescheduleSlot,
+      })
+      setPendingRescheduleBooking(null)
+      setSelectedRescheduleSlot(null)
+      setRescheduleStep("confirm")
+      setSuccess("Islem basariyla tamamlandi.")
+      await fetchOverview(selectedDate)
+    } catch (err: unknown) {
+      setError(mapAdminError(err))
+      setPendingRescheduleBooking(null)
+    } finally {
+      setRescheduleLoading(false)
+    }
+  }
+
+  function handleRescheduleClose() {
+    setPendingRescheduleBooking(null)
+    setSelectedRescheduleSlot(null)
+    setRescheduleStep("confirm")
   }
 
   /**
@@ -445,7 +491,11 @@ export default function AdminDashboardPage() {
                     ? "Berber tarafindan iptal edildi"
                     : b.cancelled_by === "user"
                       ? "Musteri tarafindan iptal edildi"
-                      : "Iptal edildi"
+                      : b.cancelled_by === "rescheduled_by_user"
+                        ? "Musteri tarafından randevu saati degistirildi"
+                        : b.cancelled_by === "rescheduled_by_admin"
+                          ? "Berber Tarafindan randevu saati degistirildi"
+                          : "Iptal edildi"
                   : isNoShow
                     ? "Randevu gerceklesmedi"
                     : isPastBooking
@@ -472,12 +522,22 @@ export default function AdminDashboardPage() {
                       )}
                     </div>
                     {!isCancelled && !isNoShow && !isPastBooking && (
-                      <button
-                        onClick={() => handleCancelBooking(b.id)}
-                        className="text-xs text-red-300 hover:text-red-200 shrink-0 ml-3"
-                      >
-                        Iptal Et
-                      </button>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0 ml-3">
+                        <button
+                          type="button"
+                          onClick={() => handleRescheduleBooking(b.id)}
+                          className="text-xs text-blue-400 hover:text-blue-300"
+                        >
+                          Düzenle
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCancelBooking(b.id)}
+                          className="text-xs text-red-300 hover:text-red-200"
+                        >
+                          Iptal Et
+                        </button>
+                      </div>
                     )}
                     {!isCancelled && isPastBooking && !isNoShow && (
                       <button
@@ -648,6 +708,72 @@ export default function AdminDashboardPage() {
         onCancel={() => setPendingAction(null)}
         onConfirm={handleConfirmAction}
       />
+
+      {/* Admin Duzenle: Adim 1 - Onay */}
+      <ActionConfirmSheet
+        open={Boolean(pendingRescheduleBooking) && rescheduleStep === "confirm"}
+        title="Randevu Saatini Degistir"
+        description={
+          pendingRescheduleBooking
+            ? `${new Date(pendingRescheduleBooking.slot_time).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" })} saatindeki ${pendingRescheduleBooking.user_first_name} ${pendingRescheduleBooking.user_last_name} randevusunu baska bir saate tasimak ister misiniz?`
+            : ""
+        }
+        confirmText="Evet, Devam Et"
+        cancelText="Vazgec"
+        confirmTone="neutral"
+        isLoading={rescheduleLoading}
+        onCancel={handleRescheduleClose}
+        onConfirm={handleRescheduleConfirm}
+      />
+
+      {/* Admin Duzenle: Adim 2 - Saat Secimi */}
+      <ActionConfirmSheet
+        open={Boolean(pendingRescheduleBooking) && rescheduleStep === "slot_select"}
+        title="Yeni Saat Secin"
+        description={
+          pendingRescheduleBooking
+            ? `${new Date(pendingRescheduleBooking.slot_time).toLocaleDateString("tr-TR", { day: "2-digit", month: "long", timeZone: "Europe/Istanbul" })} icin musait saatler:`
+            : ""
+        }
+        confirmText="Onayla"
+        cancelText="Vazgec"
+        confirmTone="neutral"
+        isLoading={rescheduleLoading}
+        confirmDisabled={!selectedRescheduleSlot}
+        onCancel={handleRescheduleClose}
+        onConfirm={handleRescheduleSubmit}
+      >
+        {slots.filter((s) => s.status === "available" && s.datetime !== pendingRescheduleBooking?.slot_time).length === 0 ? (
+          <p className="text-sm text-zinc-500 text-center py-2">Bu gun icin musait saat bulunamadi.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2 max-h-52 overflow-y-auto">
+            {slots
+              .filter((s) => s.status === "available" && s.datetime !== pendingRescheduleBooking?.slot_time)
+              .map((slot) => {
+                const timeLabel = new Date(slot.datetime).toLocaleTimeString("tr-TR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  timeZone: "Europe/Istanbul",
+                })
+                const isSelected = selectedRescheduleSlot === slot.datetime
+                return (
+                  <button
+                    key={slot.datetime}
+                    type="button"
+                    onClick={() => setSelectedRescheduleSlot(slot.datetime)}
+                    className={`py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      isSelected
+                        ? "bg-zinc-100 text-zinc-900 border-zinc-100"
+                        : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:border-zinc-400"
+                    }`}
+                  >
+                    {timeLabel}
+                  </button>
+                )
+              })}
+          </div>
+        )}
+      </ActionConfirmSheet>
     </>
   )
 }
