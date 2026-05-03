@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
 from app.core.phone import normalize_tr_phone
 from app.models.booking import Booking
@@ -41,6 +42,10 @@ def _full_name(tenant: Tenant) -> str:
 
 async def send_reminders() -> None:
     """88-92 dakika icinde randevusu olan, henuz hatirlatilmamis musterilere WP gonderir."""
+    settings = get_settings()
+    if not settings.wa_phone_number_id or not settings.wa_access_token:
+        return
+
     now = datetime.now(tz=ZoneInfo("Europe/Istanbul"))
     window_start = now + timedelta(minutes=88)
     window_end = now + timedelta(minutes=92)
@@ -68,7 +73,7 @@ async def send_reminders() -> None:
             try:
                 t_res = await db.execute(select(Tenant).where(Tenant.id == booking.tenant_id))
                 tenant = t_res.scalar_one_or_none()
-                if not tenant or not tenant.whatsapp_phone_number_id or not tenant.whatsapp_access_token:
+                if not tenant:
                     continue
 
                 u_res = await db.execute(select(User).where(User.id == booking.user_id))
@@ -89,8 +94,8 @@ async def send_reminders() -> None:
                     f"Sizi bekliyoruz! ✂️"
                 )
                 await wa_client.send_text(
-                    tenant.whatsapp_phone_number_id,
-                    tenant.whatsapp_access_token,
+                    settings.wa_phone_number_id,
+                    settings.wa_access_token,
                     wa_phone,
                     msg,
                 )

@@ -36,15 +36,5 @@ class Tenant(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    # WhatsApp Business API entegrasyonu — her tenant kendi Meta numarasını kullanır.
-    # phone_number_id: Meta dashboard'daki Phone Number ID (benzersiz, webhook routing için)
-    # access_token: Meta Graph API Bearer token (bu tenant'ın mesajlarını göndermek için)
-    whatsapp_phone_number_id: Mapped[str | None] = mapped_column(
-        String(100), unique=True, nullable=True
-    )
-    whatsapp_access_token: Mapped[str | None] = mapped_column(
-        String(500), nullable=True
-    )
-
     def __repr__(self) -> str:
         return f"<Tenant id={self.id!r} subdomain={self.subdomain!r}>"

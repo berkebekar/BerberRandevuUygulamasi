@@ -26,11 +26,10 @@ class Settings(BaseSettings):
     # Redis — konuşma state yönetimi için (WhatsApp botu)
     redis_url: str = "redis://localhost:6379/0"
 
-    # WhatsApp Business API (Meta Cloud API)
-    # wa_verify_token: Meta dashboard'a girilen webhook doğrulama tokeni (platform geneli)
-    # wa_phone_number_id ve wa_access_token: Tenant bazında DB'de tutulur,
-    # ancak platform geneli default olarak da buradan okunabilir.
+    # WhatsApp Business API (Meta Cloud API) — tek numara, platform geneli
     wa_verify_token: str = ""
+    wa_phone_number_id: str = ""
+    wa_access_token: str = ""
 
 
 @lru_cache

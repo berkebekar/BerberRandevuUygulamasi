@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_admin, get_current_user
 from app.core.phone import normalize_tr_phone, phone_variants
@@ -74,9 +75,12 @@ async def _notify_cancelled_by_admin(
 ) -> None:
     """Berber iptali sonrasi musteriye WP mesaji gonderir; basarisizlik sessizce yutulur."""
     try:
+        settings = get_settings()
+        if not settings.wa_phone_number_id or not settings.wa_access_token:
+            return
         t_res = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = t_res.scalar_one_or_none()
-        if not tenant or not tenant.whatsapp_phone_number_id or not tenant.whatsapp_access_token:
+        if not tenant:
             return
         u_res = await db.execute(
             select(User).where(User.id == user_id, User.tenant_id == tenant_id)
@@ -91,8 +95,8 @@ async def _notify_cancelled_by_admin(
         slot_str = _tr_datetime(slot_time)
         msg = f"{slot_str} saatindeki randevunuz {_tenant_full_name(tenant)} tarafından iptal edilmiştir."
         await wa_client.send_text(
-            tenant.whatsapp_phone_number_id,
-            tenant.whatsapp_access_token,
+            settings.wa_phone_number_id,
+            settings.wa_access_token,
             wa_phone,
             msg,
         )
@@ -109,9 +113,12 @@ async def _notify_rescheduled_by_admin(
 ) -> None:
     """Berber saat degisikligi sonrasi musteriye WP mesaji gonderir; basarisizlik sessizce yutulur."""
     try:
+        settings = get_settings()
+        if not settings.wa_phone_number_id or not settings.wa_access_token:
+            return
         t_res = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = t_res.scalar_one_or_none()
-        if not tenant or not tenant.whatsapp_phone_number_id or not tenant.whatsapp_access_token:
+        if not tenant:
             return
         u_res = await db.execute(
             select(User).where(User.id == user_id, User.tenant_id == tenant_id)
@@ -130,8 +137,8 @@ async def _notify_rescheduled_by_admin(
             f"{_tenant_full_name(tenant)} tarafından alınmıştır."
         )
         await wa_client.send_text(
-            tenant.whatsapp_phone_number_id,
-            tenant.whatsapp_access_token,
+            settings.wa_phone_number_id,
+            settings.wa_access_token,
             wa_phone,
             msg,
         )

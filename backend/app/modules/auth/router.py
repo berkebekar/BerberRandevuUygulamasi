@@ -61,9 +61,8 @@ async def _try_send_otp_via_whatsapp(
     OTP konsol loguna zaten yazıldığından bu fallback güvenlidir.
     """
     try:
-        result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
-        tenant = result.scalar_one_or_none()
-        if not tenant or not tenant.whatsapp_phone_number_id or not tenant.whatsapp_access_token:
+        settings = get_settings()
+        if not settings.wa_phone_number_id or not settings.wa_access_token:
             return
         try:
             normalized = normalize_tr_phone(phone)
@@ -76,8 +75,8 @@ async def _try_send_otp_via_whatsapp(
             "Kod 5 dakika gecerlidir."
         )
         await wa_client.send_text(
-            tenant.whatsapp_phone_number_id,
-            tenant.whatsapp_access_token,
+            settings.wa_phone_number_id,
+            settings.wa_access_token,
             wa_phone,
             msg,
         )

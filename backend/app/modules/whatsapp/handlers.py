@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.phone import normalize_tr_phone, phone_variants
 from app.models.barber_profile import BarberProfile
 from app.models.booking import Booking
@@ -64,17 +65,9 @@ def _fmt_date_short(d: date) -> str:
     return f"{d.day:02d} {_TR_MONTHS[d.month]} {_TR_DAYS[d.weekday()]}"
 
 
-def _phone_to_wa(normalized_phone: str) -> str:
-    """'+905551234567' → '905551234567' (WA format, + olmadan)"""
-    return normalized_phone.lstrip("+")
-
-
-async def _get_tenant_by_phone_number_id(
-    db: AsyncSession, phone_number_id: str
-) -> Tenant | None:
-    """Gelen webhook'un phone_number_id'sine göre tenant bulur."""
+async def _get_tenant_by_subdomain(db: AsyncSession, subdomain: str) -> Tenant | None:
     result = await db.execute(
-        select(Tenant).where(Tenant.whatsapp_phone_number_id == phone_number_id)
+        select(Tenant).where(Tenant.subdomain == subdomain, Tenant.is_active.is_(True))
     )
     return result.scalar_one_or_none()
 
@@ -127,6 +120,80 @@ async def _get_or_create_user(
 
 
 # ─── Mesaj Gönderme Yardımcıları ─────────────────────────────────────────────
+
+async def _send_tenant_list(
+    pid: str,
+    tok: str,
+    wa_phone: str,
+    db: AsyncSession,
+) -> None:
+    """Aktif tenant listesini WA list mesajı olarak gönderir (fallback: linksiz mesaj)."""
+    result = await db.execute(
+        select(Tenant).where(Tenant.is_active.is_(True)).order_by(Tenant.name)
+    )
+    tenants = result.scalars().all()
+
+    if not tenants:
+        await wa.send_text(pid, tok, wa_phone, "Simdilik kayitli isletme bulunmuyor.")
+        return
+
+    show = tenants[:9]
+    rows = [
+        wa.ListRow(id=f"select_tenant_{t.subdomain}", title=t.name)
+        for t in show
+    ]
+    if len(tenants) > 9:
+        rows.append(wa.ListRow(id="tenant_more", title="Diger isletmeler..."))
+
+    sections = [wa.ListSection(title="Isletmeler", rows=rows)]
+    await wa.send_list(
+        pid, tok, wa_phone,
+        body="Hangi isletmeyle gorusmek istiyorsunuz?",
+        button_label="Isletme Sec",
+        sections=sections,
+        footer="Isletmenin size verdigi linki kullanabilirsiniz.",
+    )
+
+
+async def _handle_tenant_selection(
+    pid: str,
+    tok: str,
+    wa_phone: str,
+    wa_name: str,
+    content: str | None,
+    state: "ConversationState",
+    db: AsyncSession,
+) -> None:
+    """
+    Henüz tenant seçilmemiş kullanıcı için routing.
+    - content subdomain ise → doğrudan tenant'ı set et
+    - content 'select_tenant_X' ise → listeden seçim
+    - content 'tenant_more' ise → yönlendirme mesajı
+    - diğer → tenant listesini göster
+    """
+    if content:
+        slug = content.strip().lower()
+
+        if slug == "tenant_more":
+            await wa.send_text(
+                pid, tok, wa_phone,
+                "Diger isletmeler icin lutfen isletmenin size verdigi linki kullanin.",
+            )
+            return
+
+        if slug.startswith("select_tenant_"):
+            slug = slug[14:]
+
+        tenant = await _get_tenant_by_subdomain(db, slug)
+        if tenant:
+            state.tenant_id = str(tenant.id)
+            state.wa_name = wa_name
+            await save_state(pid, wa_phone, state)
+            await _send_main_menu(pid, tok, wa_phone, tenant.name)
+            return
+
+    await _send_tenant_list(pid, tok, wa_phone, db)
+
 
 async def _send_main_menu(
     phone_number_id: str,
@@ -313,27 +380,41 @@ async def handle_incoming(
     Gelen WhatsApp mesajını işler.
 
     wa_phone      : gönderen numarası, "+" olmadan (örn: "905551234567")
-    phone_number_id: hangi WA numarasına gönderildiği (Meta'dan)
+    phone_number_id: webhook'tan gelen Meta phone number ID (state anahtarı için)
     wa_name       : gönderenin WA profil adı
     msg_type      : "text" | "interactive"
     content       : text mesajı için metin, interactive için button/list id
     """
-    # Tenant'ı bul
-    tenant = await _get_tenant_by_phone_number_id(db, phone_number_id)
-    if tenant is None:
-        logger.warning("Bilinmeyen phone_number_id=%s — mesaj yoksayıldı", phone_number_id)
-        return
-
-    if not tenant.whatsapp_access_token:
-        logger.error("Tenant %s için access_token eksik", tenant.id)
-        return
-
+    settings = get_settings()
+    tok = settings.wa_access_token
     pid = phone_number_id
-    tok = tenant.whatsapp_access_token
-    tid = tenant.id
+
+    if not tok:
+        logger.error("WA_ACCESS_TOKEN ayarlanmamis — mesaj yoksayildi")
+        return
 
     # Mevcut state
     state = await get_state(pid, wa_phone)
+
+    # Tenant'ı state'den çöz; yoksa subdomain keyword ile bul
+    tenant: Tenant | None = None
+    if state.tenant_id:
+        try:
+            t_res = await db.execute(
+                select(Tenant).where(
+                    Tenant.id == uuid.UUID(state.tenant_id),
+                    Tenant.is_active.is_(True),
+                )
+            )
+            tenant = t_res.scalar_one_or_none()
+        except Exception:
+            pass
+
+    if tenant is None:
+        await _handle_tenant_selection(pid, tok, wa_phone, wa_name, content, state, db)
+        return
+
+    tid = tenant.id
 
     # "iptal" veya "geri" kelimeleri her adımda ana menüye döner
     if content and content.strip().lower() in ("iptal", "geri", "menu", "menü"):
