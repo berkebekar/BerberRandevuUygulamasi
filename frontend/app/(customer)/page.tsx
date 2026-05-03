@@ -357,7 +357,10 @@ export default function HomePage() {
         )}
 
         <div>
-          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-2">Tarih Secin</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Tarih Secin</p>
+            <span className="text-sm text-zinc-500">↔</span>
+          </div>
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
             {weekDays.map((day) => {
               const isSelected = day.date === selectedDate

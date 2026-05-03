@@ -400,10 +400,11 @@ export default function AdminDashboardPage() {
       <div className="px-4 pt-4 space-y-6">
         {/* Tarih secici */}
         <div>
-          <div className="mb-2">
+          <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
               TARİH SEÇİN
             </p>
+            <span className="text-sm text-zinc-500">↔</span>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
             {weekDays.map((day) => {
