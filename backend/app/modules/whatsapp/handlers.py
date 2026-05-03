@@ -38,7 +38,6 @@ from app.modules.whatsapp.state import (
     STEP_NAME_COLLECT,
     STEP_TIME_SELECT,
     ConversationState,
-    clear_state,
     get_state,
     save_state,
 )
@@ -120,6 +119,21 @@ async def _get_or_create_user(
 
 
 # ─── Mesaj Gönderme Yardımcıları ─────────────────────────────────────────────
+
+async def _reset_to_idle(
+    pid: str,
+    wa_phone: str,
+    tenant_id: uuid.UUID,
+    wa_name: str | None = None,
+) -> None:
+    """Booking alanlarını sıfırlar ama tenant_id ve wa_name'i korur."""
+    fresh = ConversationState(
+        step=STEP_IDLE,
+        tenant_id=str(tenant_id),
+        wa_name=wa_name,
+    )
+    await save_state(pid, wa_phone, fresh)
+
 
 async def _send_tenant_list(
     pid: str,
@@ -418,7 +432,7 @@ async def handle_incoming(
 
     # "iptal" veya "geri" kelimeleri her adımda ana menüye döner
     if content and content.strip().lower() in ("iptal", "geri", "menu", "menü"):
-        await clear_state(pid, wa_phone)
+        await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
         await _send_main_menu(pid, tok, wa_phone, tenant.name)
         return
 
@@ -455,7 +469,7 @@ async def handle_incoming(
                 pid, tok, wa_phone,
                 f"Daha ileri bir tarihe randevu almak icin web sitemizi ziyaret edebilirsiniz:\n\n{site_url}",
             )
-            await clear_state(pid, wa_phone)
+            await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
             return
         if content and content.startswith("date_"):
             selected_date_str = content[5:]  # "2026-05-10"
@@ -470,7 +484,7 @@ async def handle_incoming(
             has_dates = await _send_available_dates(pid, tok, wa_phone, tid, db)
             if not has_dates:
                 await wa.send_text(pid, tok, wa_phone, "Simdilik musait gun bulunmuyor. Daha sonra tekrar deneyin.")
-                await clear_state(pid, wa_phone)
+                await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
         return
 
     # ── TIME_SELECT: Saat seçimi ──────────────────────────────────────────────
@@ -513,7 +527,7 @@ async def handle_incoming(
                     await save_state(pid, wa_phone, state)
                     await _send_available_dates(pid, tok, wa_phone, tid, db)
             else:
-                await clear_state(pid, wa_phone)
+                await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
                 await _send_main_menu(pid, tok, wa_phone, tenant.name)
         return
 
@@ -522,9 +536,8 @@ async def handle_incoming(
         if content == "confirm_yes":
             await _handle_booking_confirm(pid, tok, wa_phone, wa_name, state, tenant, db)
         elif content == "cancel_booking":
-            await clear_state(pid, wa_phone)
+            await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
             await wa.send_text(pid, tok, wa_phone, "Randevu iptal edildi. Baska bir islem icin mesaj gonderin.")
-            # Kısa gecikme sonrası menüyü tekrar gönder
             await _send_main_menu(pid, tok, wa_phone, tenant.name)
         else:
             # Tekrar onayla mesajı göster
@@ -536,12 +549,12 @@ async def handle_incoming(
                     tenant.name,
                 )
             else:
-                await clear_state(pid, wa_phone)
+                await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
                 await _send_main_menu(pid, tok, wa_phone, tenant.name)
         return
 
     # Bilinmeyen adım → sıfırla
-    await clear_state(pid, wa_phone)
+    await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
     await _send_main_menu(pid, tok, wa_phone, tenant.name)
 
 
@@ -592,7 +605,7 @@ async def _handle_booking_start(
             "Simdilik onumuzdeki 7 gun icin musait randevu bulunmuyor.\n"
             "Lutfen daha sonra tekrar deneyin.",
         )
-        await clear_state(pid, wa_phone)
+        await _reset_to_idle(pid, wa_phone, tenant_id, state.wa_name)
 
 
 async def _handle_name_received(
@@ -655,7 +668,7 @@ async def _handle_name_received(
             "Simdilik onumuzdeki 7 gun icin musait randevu bulunmuyor.\n"
             "Lutfen daha sonra tekrar deneyin.",
         )
-        await clear_state(pid, wa_phone)
+        await _reset_to_idle(pid, wa_phone, tenant.id, state.wa_name)
 
 
 async def _handle_date_selected(
@@ -714,7 +727,7 @@ async def _handle_booking_confirm(
 ) -> None:
     """Onay verildi → kullanıcı bul/oluştur → randevu oluştur."""
     if not state.selected_date or not state.selected_time:
-        await clear_state(pid, wa_phone)
+        await _reset_to_idle(pid, wa_phone, tenant.id, wa_name)
         await _send_main_menu(pid, tok, wa_phone, tenant.name)
         return
 
@@ -723,7 +736,7 @@ async def _handle_booking_confirm(
     except Exception as exc:
         logger.error("Kullanıcı oluşturma hatası | error=%s", exc)
         await wa.send_text(pid, tok, wa_phone, "Bir hata olustu. Lutfen tekrar deneyin.")
-        await clear_state(pid, wa_phone)
+        await _reset_to_idle(pid, wa_phone, tenant.id, wa_name)
         return
 
     selected_date = date.fromisoformat(state.selected_date)
@@ -762,8 +775,8 @@ async def _handle_booking_confirm(
         await _send_available_times(pid, tok, wa_phone, tenant.id, selected_date, db, offset=state.slot_offset)
         return
 
-    # Başarılı
-    await clear_state(pid, wa_phone)
+    # Başarılı — tenant_id'yi koruyarak idle'a sıfırla
+    await _reset_to_idle(pid, wa_phone, tenant.id, wa_name)
     date_label = _fmt_date(selected_date)
     site_url = f"https://{tenant.subdomain}.bbsoft.com.tr"
     success_msg = (

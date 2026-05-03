@@ -17,7 +17,7 @@ from app.core.redis import get_redis
 
 logger = logging.getLogger(__name__)
 
-STATE_TTL = 1800  # 30 dakika (saniye)
+STATE_TTL = 60 * 60 * 24 * 7  # 7 gün (saniye) — tenant seçiminin kaybolmaması için
 
 # Konuşma adımları
 STEP_IDLE = "idle"               # Ana menü bekleniyor
