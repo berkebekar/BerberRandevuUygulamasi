@@ -56,8 +56,8 @@ _TR_MONTHS = [
 # ─── Yardımcılar ─────────────────────────────────────────────────────────────
 
 def _fmt_date(d: date) -> str:
-    """Tarihi Türkçe'ye çevirir: 'Pazartesi 5 Mayıs'"""
-    return f"{_TR_DAYS[d.weekday()]} {d.day} {_TR_MONTHS[d.month]}"
+    """Tarihi Türkçe'ye çevirir: '09 Mayıs Cumartesi'"""
+    return f"{d.day:02d} {_TR_MONTHS[d.month]} {_TR_DAYS[d.weekday()]}"
 
 
 def _fmt_date_short(d: date) -> str:
