@@ -22,6 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.phone import normalize_tr_phone, phone_variants
 from app.models.barber_profile import BarberProfile
+from app.models.booking import Booking
+from app.models.enums import BookingStatus
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.modules.booking import service as booking_service
@@ -143,8 +145,9 @@ async def _send_main_menu(
         body,
         buttons=[
             wa.InteractiveButton(id="booking", title="Randevu Al"),
+            wa.InteractiveButton(id="my_bookings", title="Mevcut Randevularım"),
         ],
-        footer="Randevu almak icin 'Randevu Al'a basin.",
+        footer="Yapmak istediginiz islemi secin.",
     )
 
 
@@ -239,10 +242,9 @@ async def _send_available_times(
 
     for slot in available:
         hour = int(slot.time.split(":")[0])
-        end_time = slot.end_datetime.strftime("%H:%M")
         row = wa.ListRow(
             id=f"time_{slot.time}",
-            title=f"{slot.time} - {end_time}",
+            title=slot.time,
         )
         if hour < 12:
             morning_rows.append(row)
@@ -346,6 +348,8 @@ async def handle_incoming(
     if state.step == STEP_IDLE:
         if content == "booking":
             await _handle_booking_start(pid, tok, wa_phone, tid, state, db)
+        elif content == "my_bookings":
+            await _handle_my_bookings(pid, tok, wa_phone, tid, tenant, db)
         else:
             # İlk mesaj veya tanımlanamayan input → hoş geldin + menü
             state.tenant_id = str(tid)
@@ -658,13 +662,85 @@ async def _handle_booking_confirm(
     # Başarılı
     await clear_state(pid, wa_phone)
     date_label = _fmt_date(selected_date)
+    site_url = f"https://{tenant.subdomain}.bbsoft.com.tr"
     success_msg = (
         f"Randevunuz olusturuldu!\n\n"
         f"Isletme: {tenant.name}\n"
+        f"Misafir: {user.first_name} {user.last_name}\n"
         f"Gun:     {date_label}\n"
         f"Saat:    {state.selected_time}\n\n"
-        f"Randevu ID: {str(booking.id)[:8]}...\n\n"
-        "Iptal icin web sitemizi ziyaret edebilirsiniz."
+        f"Saat degisikligi, iptal ve diger hizmetler icin web sitemizi ziyaret edin:\n"
+        f"🌐 {site_url}"
     )
     await wa.send_text(pid, tok, wa_phone, success_msg)
     logger.info("WA randevu oluşturuldu | booking_id=%s | user_id=%s", booking.id, user.id)
+
+
+async def _handle_my_bookings(
+    pid: str,
+    tok: str,
+    wa_phone: str,
+    tenant_id: uuid.UUID,
+    tenant: Tenant,
+    db: AsyncSession,
+) -> None:
+    """Kullanıcının yaklaşan confirmed randevularını listeler."""
+    phone_with_plus = "+" + wa_phone
+    try:
+        normalized = normalize_tr_phone(phone_with_plus)
+    except Exception:
+        normalized = phone_with_plus
+
+    user_result = await db.execute(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.phone.in_(phone_variants(normalized)),
+        )
+    )
+    user = user_result.scalar_one_or_none()
+
+    site_url = f"https://{tenant.subdomain}.bbsoft.com.tr"
+
+    if user is None:
+        await wa.send_text(
+            pid, tok, wa_phone,
+            "Sistemde kaydınız bulunmuyor.\n\n"
+            "Randevu almak için 'Randevu Al' butonuna basın.",
+        )
+        return
+
+    now = datetime.now(TZ)
+    bookings_result = await db.execute(
+        select(Booking)
+        .where(
+            Booking.tenant_id == tenant_id,
+            Booking.user_id == user.id,
+            Booking.status == BookingStatus.confirmed,
+            Booking.slot_time >= now,
+        )
+        .order_by(Booking.slot_time)
+    )
+    bookings = bookings_result.scalars().all()
+
+    if not bookings:
+        await wa.send_text(
+            pid, tok, wa_phone,
+            "Aktif randevunuz bulunmuyor.\n\n"
+            "Randevu almak için 'Randevu Al' butonuna basın.",
+        )
+        return
+
+    lines = ["📋 *Mevcut Randevularınız*\n"]
+    for b in bookings:
+        local = b.slot_time.astimezone(TZ)
+        day_name = _TR_DAYS[local.weekday()]
+        month_name = _TR_MONTHS[local.month]
+        lines.append(f"📅 {day_name} {local.day} {month_name} - {local.strftime('%H:%M')}")
+
+    lines.append(
+        "\n\nSaat değiştirme, iptal etme ve benzeri işlemler için "
+        "web sitemizi ziyaret edin:\n"
+        f"🌐 {site_url}"
+    )
+
+    await wa.send_text(pid, tok, wa_phone, "\n".join(lines))

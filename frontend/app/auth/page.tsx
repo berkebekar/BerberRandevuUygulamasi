@@ -195,7 +195,7 @@ export default function AuthPage() {
             <div className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-3 text-center">
-                  {phone} numarasına gönderilen kodu girin
+                  {phone} numarasına WhatsApp'tan gönderilen kodu girin
                 </label>
                 <OTPInput onComplete={handleVerifyOtp} disabled={isLoading} />
               </div>
