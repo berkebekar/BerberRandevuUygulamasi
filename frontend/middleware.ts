@@ -16,12 +16,15 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const host = normalizeHost(request)
 
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set("x-tenant-host", host)
+
   if (!isSuperAdminHost(host)) {
-    return NextResponse.next()
+    return NextResponse.next({ request: { headers: requestHeaders } })
   }
 
   if (pathname.startsWith("/api/") || pathname.startsWith("/_next/")) {
-    return NextResponse.next()
+    return NextResponse.next({ request: { headers: requestHeaders } })
   }
 
   if (pathname === "/") {
@@ -32,7 +35,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(`/superadmin${pathname}`, request.url))
   }
 
-  return NextResponse.next()
+  return NextResponse.next({ request: { headers: requestHeaders } })
 }
 
 export const config = {

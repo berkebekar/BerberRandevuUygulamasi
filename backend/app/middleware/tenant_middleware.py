@@ -55,8 +55,14 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/api/v1/whatsapp/"):
             return await call_next(request)
 
+        tenant_host = request.headers.get("x-tenant-host", "")
         forwarded_host = request.headers.get("x-forwarded-host", "")
-        host = forwarded_host.split(",")[0].strip() if forwarded_host else request.headers.get("host", "")
+        raw_host = (
+            tenant_host.split(",")[0].strip()
+            or forwarded_host.split(",")[0].strip()
+            or request.headers.get("host", "")
+        )
+        host = raw_host
         subdomain = parse_subdomain(host)
 
         if subdomain is None:
