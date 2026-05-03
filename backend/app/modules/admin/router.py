@@ -11,7 +11,7 @@ Business logic admin/service.py icindedir.
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -20,6 +20,7 @@ from app.models.admin import Admin
 from app.modules.admin import service as admin_service
 from app.modules.admin.schemas import (
     AdminOverviewResponse,
+    AdminRangeStatisticsResponse,
     AdminStatisticsResponse,
     DashboardResponse,
 )
@@ -83,3 +84,24 @@ async def get_statistics(
         target_date=date,
     )
     return AdminStatisticsResponse(**data)
+
+
+@router.get("/statistics/range", response_model=AdminRangeStatisticsResponse)
+async def get_statistics_range(
+    start_date: date = Query(..., description="Baslangic tarihi: YYYY-MM-DD"),
+    end_date: date = Query(..., description="Bitis tarihi: YYYY-MM-DD"),
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    """
+    Admin icin ozel tarih araligi istatistik verileri.
+    """
+    if end_date < start_date:
+        raise HTTPException(status_code=422, detail="Bitis tarihi baslangic tarihinden once olamaz.")
+    data = await admin_service.get_statistics_range(
+        db,
+        tenant_id=admin.tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return AdminRangeStatisticsResponse(**data)

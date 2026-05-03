@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
 
-type SummaryStats = {
+type StatsSummary = {
   start_date: string
   end_date: string
   total_bookings: number
@@ -15,17 +15,6 @@ type SummaryStats = {
   no_show_rate: number
   cancellation_rate: number
 }
-
-type SummaryMetricKey = keyof Pick<
-  SummaryStats,
-  | "total_bookings"
-  | "completed_count"
-  | "no_show_count"
-  | "cancelled_count"
-  | "completion_rate"
-  | "no_show_rate"
-  | "cancellation_rate"
->
 
 type PeriodCustomerStats = {
   start_date: string
@@ -49,24 +38,24 @@ type PeriodCapacityStats = {
   busiest_hour: NamedStatItem
 }
 
-type StatisticsResponse = {
-  selected_date: string
-  daily_summary: SummaryStats
-  weekly_summary: SummaryStats
-  monthly_summary: SummaryStats
-  customer_stats: {
-    daily: PeriodCustomerStats
-    weekly: PeriodCustomerStats
-    monthly: PeriodCustomerStats
-  }
-  capacity_stats: {
-    daily: PeriodCapacityStats
-    weekly: PeriodCapacityStats
-    monthly: PeriodCapacityStats
-  }
+type RangeStatisticsResponse = {
+  start_date: string
+  end_date: string
+  summary: StatsSummary
+  customer_stats: PeriodCustomerStats
+  capacity_stats: PeriodCapacityStats
 }
 
-type PeriodTab = "daily" | "weekly" | "monthly"
+type SummaryMetricKey = keyof Pick<
+  StatsSummary,
+  | "total_bookings"
+  | "completed_count"
+  | "no_show_count"
+  | "cancelled_count"
+  | "completion_rate"
+  | "no_show_rate"
+  | "cancellation_rate"
+>
 
 const SUMMARY_CARD_COPY: {
   key: SummaryMetricKey
@@ -74,75 +63,31 @@ const SUMMARY_CARD_COPY: {
   description: string
   suffix?: "%"
 }[] = [
-  {
-    key: "total_bookings",
-    title: "Toplam randevu",
-    description: "Secilen donemde olusan tum randevu kayitlari.",
-  },
-  {
-    key: "completed_count",
-    title: "Tamamlanan",
-    description: "Saati gecmis ve iptal edilmemis randevular.",
-  },
-  {
-    key: "no_show_count",
-    title: "Gelmeyen",
-    description: "Musteri gelmedi diye isaretlenen randevular.",
-  },
-  {
-    key: "cancelled_count",
-    title: "Iptal edilen",
-    description: "Iptal edilmis randevularin toplami.",
-  },
-  {
-    key: "completion_rate",
-    title: "Tamamlanma orani",
-    description: "Toplam randevular icinde tamamlananlarin yuzdesi.",
-    suffix: "%",
-  },
-  {
-    key: "no_show_rate",
-    title: "No-show orani",
-    description: "Toplam randevular icinde gelmeyenlerin yuzdesi.",
-    suffix: "%",
-  },
-  {
-    key: "cancellation_rate",
-    title: "Iptal orani",
-    description: "Toplam randevular icinde iptal edilenlerin yuzdesi.",
-    suffix: "%",
-  },
+  { key: "total_bookings", title: "Toplam randevu", description: "Secilen donemde olusan tum randevu kayitlari." },
+  { key: "completed_count", title: "Tamamlanan", description: "Saati gecmis ve iptal edilmemis randevular." },
+  { key: "no_show_count", title: "Gelmeyen", description: "Musteri gelmedi diye isaretlenen randevular." },
+  { key: "cancelled_count", title: "Iptal edilen", description: "Iptal edilmis randevularin toplami." },
+  { key: "completion_rate", title: "Tamamlanma orani", description: "Toplam randevular icinde tamamlananlarin yuzdesi.", suffix: "%" },
+  { key: "no_show_rate", title: "No-show orani", description: "Toplam randevular icinde gelmeyenlerin yuzdesi.", suffix: "%" },
+  { key: "cancellation_rate", title: "Iptal orani", description: "Toplam randevular icinde iptal edilenlerin yuzdesi.", suffix: "%" },
 ] as const
-
-const PERIOD_TABS: { key: PeriodTab; label: string }[] = [
-  { key: "daily", label: "Gunluk" },
-  { key: "weekly", label: "Haftalik" },
-  { key: "monthly", label: "Aylik" },
-]
 
 function todayInIstanbulIso(): string {
   return new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" })
 }
 
 function formatDateRange(startDate: string, endDate: string): string {
-  const options: Intl.DateTimeFormatOptions = {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    timeZone: "Europe/Istanbul",
-  }
+  const options: Intl.DateTimeFormatOptions = { day: "2-digit", month: "long", year: "numeric", timeZone: "Europe/Istanbul" }
   const startText = new Date(`${startDate}T12:00:00`).toLocaleDateString("tr-TR", options)
   const endText = new Date(`${endDate}T12:00:00`).toLocaleDateString("tr-TR", options)
+  if (startDate === endDate) return startText
   return `${startText} - ${endText}`
 }
 
 function formatDayLabel(value: string | null): string {
   if (!value) return "Veri yok"
   return new Date(`${value}T12:00:00`).toLocaleDateString("tr-TR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    timeZone: "Europe/Istanbul",
+    weekday: "long", day: "2-digit", month: "long", timeZone: "Europe/Istanbul",
   })
 }
 
@@ -151,194 +96,26 @@ function formatValue(value: number, suffix?: string): string {
   return suffix ? `${text}${suffix}` : text
 }
 
-function PeriodTabs({
-  value,
-  onChange,
-}: {
-  value: PeriodTab
-  onChange: (tab: PeriodTab) => void
-}) {
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      {PERIOD_TABS.map((tab) => {
-        const isActive = tab.key === value
-        return (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => onChange(tab.key)}
-            className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-zinc-100 text-zinc-950 border-zinc-100"
-                : "bg-zinc-950 text-zinc-300 border-zinc-800 hover:border-zinc-500"
-            }`}
-          >
-            {tab.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function SummarySection({
-  title,
-  period,
-  onPeriodChange,
-  stats,
-}: {
-  title: string
-  period: PeriodTab
-  onPeriodChange: (tab: PeriodTab) => void
-  stats: SummaryStats
-}) {
-  return (
-    <section className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-4">
-      <div>
-        <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
-        <p className="text-xs text-zinc-500 mt-1">
-          {formatDateRange(stats.start_date, stats.end_date)}
-        </p>
-      </div>
-      <PeriodTabs value={period} onChange={onPeriodChange} />
-      <div className="grid grid-cols-1 gap-3">
-        {SUMMARY_CARD_COPY.map((item) => (
-          <div key={item.key} className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-zinc-100">{item.title}</p>
-                <p className="text-xs text-zinc-400 mt-1">{item.description}</p>
-              </div>
-              <p className="text-lg font-semibold text-zinc-100">
-                {formatValue(stats[item.key], item.suffix)}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function CustomerSection({
-  period,
-  onPeriodChange,
-  stats,
-}: {
-  period: PeriodTab
-  onPeriodChange: (tab: PeriodTab) => void
-  stats: StatisticsResponse["customer_stats"]
-}) {
-  const currentStats = stats[period]
-
-  return (
-    <section className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-      <div>
-        <h2 className="text-sm font-semibold text-zinc-100">Musteri istatistikleri</h2>
-        <p className="text-xs text-zinc-400 mt-1">
-          Yeni musteri ilk randevusunu bu donemde alan kisidir. Tekrar gelen musteri ise daha once de kaydi olan kisidir.
-        </p>
-      </div>
-      <PeriodTabs value={period} onChange={onPeriodChange} />
-      <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3 space-y-3">
-        <div>
-          <p className="text-sm font-medium text-zinc-100">
-            {PERIOD_TABS.find((tab) => tab.key === period)?.label}
-          </p>
-          <p className="text-xs text-zinc-500 mt-1">
-            {formatDateRange(currentStats.start_date, currentStats.end_date)}
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-zinc-800 p-3">
-            <p className="text-xs text-zinc-400">Yeni musteri</p>
-            <p className="text-lg font-semibold text-zinc-100 mt-2">{currentStats.new_customers}</p>
-          </div>
-          <div className="rounded-lg border border-zinc-800 p-3">
-            <p className="text-xs text-zinc-400">Tekrar gelen</p>
-            <p className="text-lg font-semibold text-zinc-100 mt-2">{currentStats.returning_customers}</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function CapacitySection({
-  period,
-  onPeriodChange,
-  stats,
-}: {
-  period: PeriodTab
-  onPeriodChange: (tab: PeriodTab) => void
-  stats: StatisticsResponse["capacity_stats"]
-}) {
-  const currentStats = stats[period]
-
-  return (
-    <section className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-      <div>
-        <h2 className="text-sm font-semibold text-zinc-100">Yogunluk ve doluluk</h2>
-        <p className="text-xs text-zinc-400 mt-1">
-          Doluluk, uretilen toplam slotlarin kacinda aktif randevu oldugunu gosterir.
-        </p>
-      </div>
-      <PeriodTabs value={period} onChange={onPeriodChange} />
-      <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3 space-y-3">
-        <div>
-          <p className="text-sm font-medium text-zinc-100">
-            {PERIOD_TABS.find((tab) => tab.key === period)?.label}
-          </p>
-          <p className="text-xs text-zinc-500 mt-1">
-            {formatDateRange(currentStats.start_date, currentStats.end_date)}
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-zinc-800 p-3">
-            <p className="text-xs text-zinc-400">Doluluk orani</p>
-            <p className="text-lg font-semibold text-zinc-100 mt-2">{currentStats.occupancy_rate.toFixed(1)}%</p>
-            <p className="text-xs text-zinc-500 mt-1">
-              {currentStats.occupied_slots} / {currentStats.total_capacity_slots} slot dolu
-            </p>
-          </div>
-          <div className="rounded-lg border border-zinc-800 p-3">
-            <p className="text-xs text-zinc-400">En yogun gun</p>
-            <p className="text-sm font-semibold text-zinc-100 mt-2">
-              {formatDayLabel(currentStats.busiest_day.label)}
-            </p>
-            <p className="text-xs text-zinc-500 mt-1">{currentStats.busiest_day.value} randevu</p>
-          </div>
-          <div className="rounded-lg border border-zinc-800 p-3 col-span-2">
-            <p className="text-xs text-zinc-400">En yogun saat</p>
-            <p className="text-lg font-semibold text-zinc-100 mt-2">
-              {currentStats.busiest_hour.label ?? "Veri yok"}
-            </p>
-            <p className="text-xs text-zinc-500 mt-1">{currentStats.busiest_hour.value} randevu</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
 export default function AdminStatisticsPage() {
   const router = useRouter()
-  const [selectedDate, setSelectedDate] = useState(() => todayInIstanbulIso())
-  const [stats, setStats] = useState<StatisticsResponse | null>(null)
+  const today = todayInIstanbulIso()
+  const [startDate, setStartDate] = useState(today)
+  const [endDate, setEndDate] = useState(today)
+  const [appliedStart, setAppliedStart] = useState(today)
+  const [appliedEnd, setAppliedEnd] = useState(today)
+  const [stats, setStats] = useState<RangeStatisticsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [summaryPeriod, setSummaryPeriod] = useState<PeriodTab>("daily")
-  const [customerPeriod, setCustomerPeriod] = useState<PeriodTab>("daily")
-  const [capacityPeriod, setCapacityPeriod] = useState<PeriodTab>("daily")
 
   useEffect(() => {
     let active = true
-
-    async function loadStatistics() {
+    async function load() {
       setLoading(true)
       setError("")
       try {
-        const data = await apiFetch<StatisticsResponse>(`/api/v1/admin/statistics?date=${selectedDate}`)
+        const data = await apiFetch<RangeStatisticsResponse>(
+          `/api/v1/admin/statistics/range?start_date=${appliedStart}&end_date=${appliedEnd}`
+        )
         if (!active) return
         setStats(data)
       } catch (err: unknown) {
@@ -346,27 +123,22 @@ export default function AdminStatisticsPage() {
         setStats(null)
         setError(err instanceof Error ? err.message : "Istatistikler yuklenemedi.")
       } finally {
-        if (active) {
-          setLoading(false)
-        }
+        if (active) setLoading(false)
       }
     }
+    load()
+    return () => { active = false }
+  }, [appliedStart, appliedEnd])
 
-    loadStatistics()
-    return () => {
-      active = false
+  function handleApply() {
+    if (endDate < startDate) {
+      setError("Bitis tarihi baslangic tarihinden once olamaz.")
+      return
     }
-  }, [selectedDate])
-
-  const headerText = useMemo(() => {
-    if (!stats) return "Secilen tarihe gore gunluk, haftalik ve aylik performansinizi gorun."
-    return `Secilen tarih: ${formatDateRange(stats.selected_date, stats.selected_date)}`
-  }, [stats])
-
-  const activeSummary = useMemo(() => {
-    if (!stats) return null
-    return stats[`${summaryPeriod}_summary` as const]
-  }, [stats, summaryPeriod])
+    setError("")
+    setAppliedStart(startDate)
+    setAppliedEnd(endDate)
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 pb-8">
@@ -380,25 +152,44 @@ export default function AdminStatisticsPage() {
           </button>
           <div>
             <h1 className="text-lg font-bold text-zinc-100">Istatistiklerim</h1>
-            <p className="text-xs text-zinc-400">{headerText}</p>
+            <p className="text-xs text-zinc-400">
+              {stats ? formatDateRange(stats.start_date, stats.end_date) : "Tarih araligi secin"}
+            </p>
           </div>
         </div>
       </div>
 
       <div className="px-4 pt-6 space-y-4">
         <section className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-100">Tarih secimi</h2>
-            <p className="text-xs text-zinc-400 mt-1">
-              Sectiginiz tarih gunluk, haftalik ve aylik ozetlerin referans noktasi olur.
-            </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-zinc-400">Baslangic Tarihi</label>
+              <input
+                type="date"
+                value={startDate}
+                max={endDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="block w-full appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-950 text-zinc-100"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-zinc-400">Bitis Tarihi</label>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="block w-full appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-950 text-zinc-100"
+              />
+            </div>
           </div>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(event) => setSelectedDate(event.target.value)}
-            className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-950 text-zinc-100"
-          />
+          <button
+            type="button"
+            onClick={handleApply}
+            className="w-full rounded-lg bg-zinc-100 px-3 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-white"
+          >
+            Uygula
+          </button>
         </section>
 
         {error && (
@@ -413,24 +204,90 @@ export default function AdminStatisticsPage() {
 
         {!loading && stats && (
           <>
-            {activeSummary && (
-              <SummarySection
-                title="Randevu ozeti"
-                period={summaryPeriod}
-                onPeriodChange={setSummaryPeriod}
-                stats={activeSummary}
-              />
-            )}
-            <CustomerSection
-              period={customerPeriod}
-              onPeriodChange={setCustomerPeriod}
-              stats={stats.customer_stats}
-            />
-            <CapacitySection
-              period={capacityPeriod}
-              onPeriodChange={setCapacityPeriod}
-              stats={stats.capacity_stats}
-            />
+            <section className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Randevu ozeti</h2>
+                <p className="text-xs text-zinc-500 mt-1">
+                  {formatDateRange(stats.summary.start_date, stats.summary.end_date)}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {SUMMARY_CARD_COPY.map((item) => (
+                  <div key={item.key} className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-100">{item.title}</p>
+                        <p className="text-xs text-zinc-400 mt-1">{item.description}</p>
+                      </div>
+                      <p className="text-lg font-semibold text-zinc-100">
+                        {formatValue(stats.summary[item.key], item.suffix)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Musteri istatistikleri</h2>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Yeni musteri ilk randevusunu bu donemde alan kisidir. Tekrar gelen musteri ise daha once de kaydi olan kisidir.
+                </p>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+                <p className="text-xs text-zinc-500 mb-3">
+                  {formatDateRange(stats.customer_stats.start_date, stats.customer_stats.end_date)}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-zinc-800 p-3">
+                    <p className="text-xs text-zinc-400">Yeni musteri</p>
+                    <p className="text-lg font-semibold text-zinc-100 mt-2">{stats.customer_stats.new_customers}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 p-3">
+                    <p className="text-xs text-zinc-400">Tekrar gelen</p>
+                    <p className="text-lg font-semibold text-zinc-100 mt-2">{stats.customer_stats.returning_customers}</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Yogunluk ve doluluk</h2>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Doluluk, uretilen toplam slotlarin kacinda aktif randevu oldugunu gosterir.
+                </p>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3 space-y-3">
+                <p className="text-xs text-zinc-500">
+                  {formatDateRange(stats.capacity_stats.start_date, stats.capacity_stats.end_date)}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-zinc-800 p-3">
+                    <p className="text-xs text-zinc-400">Doluluk orani</p>
+                    <p className="text-lg font-semibold text-zinc-100 mt-2">{stats.capacity_stats.occupancy_rate.toFixed(1)}%</p>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {stats.capacity_stats.occupied_slots} / {stats.capacity_stats.total_capacity_slots} slot dolu
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 p-3">
+                    <p className="text-xs text-zinc-400">En yogun gun</p>
+                    <p className="text-sm font-semibold text-zinc-100 mt-2">
+                      {formatDayLabel(stats.capacity_stats.busiest_day.label)}
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-1">{stats.capacity_stats.busiest_day.value} randevu</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 p-3 col-span-2">
+                    <p className="text-xs text-zinc-400">En yogun saat</p>
+                    <p className="text-lg font-semibold text-zinc-100 mt-2">
+                      {stats.capacity_stats.busiest_hour.label ?? "Veri yok"}
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-1">{stats.capacity_stats.busiest_hour.value} randevu</p>
+                  </div>
+                </div>
+              </div>
+            </section>
           </>
         )}
       </div>

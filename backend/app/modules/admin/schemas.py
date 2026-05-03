@@ -143,3 +143,13 @@ class AdminStatisticsResponse(BaseModel):
     monthly_summary: StatsSummary
     customer_stats: CustomerStatsGroup
     capacity_stats: CapacityStatsGroup
+
+
+class AdminRangeStatisticsResponse(BaseModel):
+    """Admin ozel tarih araligi istatistik ekrani icin veri bloklari."""
+
+    start_date: date
+    end_date: date
+    summary: StatsSummary
+    customer_stats: PeriodCustomerStats
+    capacity_stats: PeriodCapacityStats

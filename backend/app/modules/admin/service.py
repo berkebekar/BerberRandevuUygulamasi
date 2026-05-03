@@ -324,6 +324,31 @@ async def _build_period_stats(
     return summary, customer_stats, capacity_stats
 
 
+async def get_statistics_range(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    start_date: date,
+    end_date: date,
+) -> dict:
+    """Admin ozel tarih araligi icin tek donem istatistiklerini dondurur."""
+    now = datetime.now(TZ)
+    rows = await _get_booking_rows_in_range(db, tenant_id, start_date, end_date)
+    summary = {
+        "start_date": start_date,
+        "end_date": end_date,
+        **_build_summary(rows, now),
+    }
+    customer_stats = await _build_customer_stats(db, tenant_id, start_date, end_date, rows)
+    capacity_stats = await _build_capacity_stats(db, tenant_id, start_date, end_date, rows, now)
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "summary": summary,
+        "customer_stats": customer_stats,
+        "capacity_stats": capacity_stats,
+    }
+
+
 async def get_statistics(
     db: AsyncSession,
     tenant_id: uuid.UUID,
