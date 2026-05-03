@@ -35,6 +35,16 @@ export default function SuperAdminTenantDetailPage() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [statusReason, setStatusReason] = useState("")
+  const [copied, setCopied] = useState(false)
+
+  const waPhone = process.env.NEXT_PUBLIC_WA_PHONE_NUMBER ?? ""
+
+  function handleCopyLink() {
+    if (!tenant || !waPhone) return
+    navigator.clipboard.writeText(`https://wa.me/${waPhone}?text=${tenant.subdomain}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
   const [editValues, setEditValues] = useState<EditableFields>({
     subdomain: "",
     name: "",
@@ -229,6 +239,33 @@ export default function SuperAdminTenantDetailPage() {
           <p>Telefon: {tenant.admin?.phone ?? "-"}</p>
           <p>Kayit: {formatTenantDate(tenant.created_at)}</p>
         </div>
+      </section>
+
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+        <h2 className="text-sm font-semibold text-zinc-100">WhatsApp Bot Linki</h2>
+        {waPhone ? (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-zinc-400">
+              Bu linki berbere gonderin. Musteriler bu link uzerinden randevu alabilir.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 break-all rounded bg-zinc-950 px-3 py-2 text-sm text-emerald-300">
+                {`https://wa.me/${waPhone}?text=${tenant.subdomain}`}
+              </code>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="shrink-0 rounded border border-zinc-700 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800"
+              >
+                {copied ? "Kopyalandi!" : "Kopyala"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-amber-400">
+            NEXT_PUBLIC_WA_PHONE_NUMBER env degiskeni ayarlanmamis.
+          </p>
+        )}
       </section>
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
