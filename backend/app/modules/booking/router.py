@@ -16,9 +16,10 @@ Business logic booking/service.py iÃ§indedir; bu dosya sadece HTTP katmanÄ±d
 """
 
 import uuid
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,9 +28,12 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_admin, get_current_user
 from app.core.phone import normalize_tr_phone, phone_variants
 from app.models.admin import Admin
+from app.models.booking import Booking as BookingModel
 from app.models.enums import UserStatus
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.modules.booking import service as booking_service
+from app.modules.whatsapp import client as wa_client
 from app.modules.booking.schemas import (
     AdminBookingCreateRequest,
     BookingCreateRequest,
@@ -42,6 +46,90 @@ from app.modules.booking.schemas import (
 # Ã‡Ã¼nkÃ¼ mÃ¼ÅŸteri endpoint'leri (/bookings) ve admin endpoint'leri (/admin/bookings)
 # ortak bir prefix paylaÅŸmÄ±yor.
 router = APIRouter(tags=["bookings"])
+
+_TR_MONTHS = [
+    "Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran",
+    "Temmuz", "Agustos", "Eylul", "Ekim", "Kasim", "Aralik",
+]
+
+
+def _tr_datetime(dt: datetime) -> str:
+    """'3 Mayis 15:30' formatinda Turkce tarih-saat dizgesi dondurur."""
+    local = dt.astimezone(ZoneInfo("Europe/Istanbul"))
+    return f"{local.day} {_TR_MONTHS[local.month - 1]} {local.strftime('%H:%M')}"
+
+
+async def _notify_cancelled_by_admin(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    slot_time: datetime,
+) -> None:
+    """Berber iptali sonrasi musteriye WP mesaji gonderir; basarisizlik sessizce yutulur."""
+    try:
+        t_res = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+        tenant = t_res.scalar_one_or_none()
+        if not tenant or not tenant.whatsapp_phone_number_id or not tenant.whatsapp_access_token:
+            return
+        u_res = await db.execute(
+            select(User).where(User.id == user_id, User.tenant_id == tenant_id)
+        )
+        user = u_res.scalar_one_or_none()
+        if not user:
+            return
+        try:
+            wa_phone = normalize_tr_phone(user.phone).lstrip("+")
+        except Exception:
+            wa_phone = user.phone.lstrip("+")
+        slot_str = _tr_datetime(slot_time)
+        msg = f"{slot_str} saatindeki randevunuz {tenant.name} tarafindan iptal edilmistir."
+        await wa_client.send_text(
+            tenant.whatsapp_phone_number_id,
+            tenant.whatsapp_access_token,
+            wa_phone,
+            msg,
+        )
+    except Exception:
+        pass
+
+
+async def _notify_rescheduled_by_admin(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    old_slot_time: datetime,
+    new_slot_time: datetime,
+) -> None:
+    """Berber saat degisikligi sonrasi musteriye WP mesaji gonderir; basarisizlik sessizce yutulur."""
+    try:
+        t_res = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+        tenant = t_res.scalar_one_or_none()
+        if not tenant or not tenant.whatsapp_phone_number_id or not tenant.whatsapp_access_token:
+            return
+        u_res = await db.execute(
+            select(User).where(User.id == user_id, User.tenant_id == tenant_id)
+        )
+        user = u_res.scalar_one_or_none()
+        if not user:
+            return
+        try:
+            wa_phone = normalize_tr_phone(user.phone).lstrip("+")
+        except Exception:
+            wa_phone = user.phone.lstrip("+")
+        old_str = _tr_datetime(old_slot_time)
+        new_str = _tr_datetime(new_slot_time)
+        msg = (
+            f"{old_str} saatindeki randevunuz {new_str} olarak "
+            f"{tenant.name} tarafindan degistirilmistir."
+        )
+        await wa_client.send_text(
+            tenant.whatsapp_phone_number_id,
+            tenant.whatsapp_access_token,
+            wa_phone,
+            msg,
+        )
+    except Exception:
+        pass
 
 
 def _normalize_phone(phone: str | None) -> str | None:
@@ -239,6 +327,7 @@ async def reschedule_my_booking(
 async def reschedule_booking_admin_endpoint(
     booking_id: uuid.UUID,
     body: BookingRescheduleRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
 ):
@@ -249,12 +338,32 @@ async def reschedule_booking_admin_endpoint(
     - Yeni slot mevcut randevuyla ayni gun olmali
     - Yeni slot musait olmali
     """
+    # Eski slot bilgisini WP bildirimi icin onceden al; servis FOR UPDATE ile yeniden alir
+    old_q = await db.execute(
+        select(BookingModel).where(
+            BookingModel.id == booking_id,
+            BookingModel.tenant_id == admin.tenant_id,
+        )
+    )
+    old_snap = old_q.scalar_one_or_none()
+
     booking = await booking_service.reschedule_booking_admin(
         db,
         tenant_id=admin.tenant_id,
         booking_id=booking_id,
         new_slot_time=body.new_slot_time,
     )
+
+    if old_snap is not None:
+        background_tasks.add_task(
+            _notify_rescheduled_by_admin,
+            db,
+            admin.tenant_id,
+            old_snap.user_id,
+            old_snap.slot_time,
+            booking.slot_time,
+        )
+
     return BookingResponse(
         id=booking.id,
         user_id=booking.user_id,
@@ -268,24 +377,27 @@ async def reschedule_booking_admin_endpoint(
 @router.delete("/admin/bookings/{booking_id}", response_model=BookingResponse)
 async def cancel_booking_admin(
     booking_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
 ):
     """
     Admin randevuyu iptal eder.
-    status='cancelled', cancelled_by='admin' olarak gÃ¼ncellenir.
-
-    Ä°ptal sonrasÄ± SMS notification background task olarak gÃ¶nderilir:
-    - NotificationLog oluÅŸturulur (status='pending' â†' 'sent' veya 'failed')
-    - SMS baÅŸarÄ±sÄ±z olsa da HTTP yanÄ±tÄ± 200 dÃ¶ner (SMS opsiyonel)
-    - CLAUDE.md: randevu iptali SMS'i MVP dÄ±ÅŸÄ± â€" altyapÄ± hazÄ±r, gÃ¶nderim aktif
-
-    Randevu bulunamazsa veya zaten iptal edilmiÅŸse 404 dÃ¶ner.
+    status='cancelled', cancelled_by='admin' olarak guncellenir.
+    Iptal sonrasi WP bildirimi background task olarak gonderilir.
     """
     booking = await booking_service.cancel_booking_admin(
         db,
         tenant_id=admin.tenant_id,
         booking_id=booking_id,
+    )
+
+    background_tasks.add_task(
+        _notify_cancelled_by_admin,
+        db,
+        admin.tenant_id,
+        booking.user_id,
+        booking.slot_time,
     )
 
     return BookingResponse(
