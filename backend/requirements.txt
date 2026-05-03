@@ -14,3 +14,4 @@ pydantic[email]
 pydantic-settings
 psycopg2-binary
 redis[hiredis]
+apscheduler>=3.0,<4

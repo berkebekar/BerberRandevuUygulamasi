@@ -48,15 +48,22 @@ from app.modules.booking.schemas import (
 router = APIRouter(tags=["bookings"])
 
 _TR_MONTHS = [
-    "Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran",
-    "Temmuz", "Agustos", "Eylul", "Ekim", "Kasim", "Aralik",
+    "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+    "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
 ]
 
 
 def _tr_datetime(dt: datetime) -> str:
-    """'3 Mayis 15:30' formatinda Turkce tarih-saat dizgesi dondurur."""
     local = dt.astimezone(ZoneInfo("Europe/Istanbul"))
     return f"{local.day} {_TR_MONTHS[local.month - 1]} {local.strftime('%H:%M')}"
+
+
+def _tenant_full_name(tenant: Tenant) -> str:
+    fn = (tenant.first_name or "").strip()
+    ln = (tenant.last_name or "").strip()
+    if fn and ln:
+        return f"{fn} {ln}"
+    return (fn or ln or tenant.name).strip()
 
 
 async def _notify_cancelled_by_admin(
@@ -82,7 +89,7 @@ async def _notify_cancelled_by_admin(
         except Exception:
             wa_phone = user.phone.lstrip("+")
         slot_str = _tr_datetime(slot_time)
-        msg = f"{slot_str} saatindeki randevunuz {tenant.name} tarafindan iptal edilmistir."
+        msg = f"{slot_str} saatindeki randevunuz {_tenant_full_name(tenant)} tarafından iptal edilmiştir."
         await wa_client.send_text(
             tenant.whatsapp_phone_number_id,
             tenant.whatsapp_access_token,
@@ -119,8 +126,8 @@ async def _notify_rescheduled_by_admin(
         old_str = _tr_datetime(old_slot_time)
         new_str = _tr_datetime(new_slot_time)
         msg = (
-            f"{old_str} saatindeki randevunuz {new_str} olarak "
-            f"{tenant.name} tarafindan degistirilmistir."
+            f"{old_str} saatindeki randevunuz {new_str} saatine "
+            f"{_tenant_full_name(tenant)} tarafından alınmıştır."
         )
         await wa_client.send_text(
             tenant.whatsapp_phone_number_id,

@@ -9,7 +9,9 @@ import logging
 import time
 import traceback
 import uuid
+from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,8 +33,20 @@ from app.modules.superadmin.monitoring import router as superadmin_monitoring_ro
 from app.modules.superadmin.users import router as superadmin_users_router
 from app.modules.user.router import router as user_router
 from app.modules.whatsapp.router import router as whatsapp_router
+from app.core.reminder import send_reminders
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    scheduler = AsyncIOScheduler(timezone="Europe/Istanbul")
+    scheduler.add_job(send_reminders, "interval", minutes=2, id="reminder_job")
+    scheduler.start()
+    logger.info("APScheduler started — reminder job every 2 minutes")
+    yield
+    scheduler.shutdown(wait=False)
+    logger.info("APScheduler stopped")
 
 
 def _build_allowed_origins() -> list[str]:
@@ -80,6 +94,7 @@ def create_app() -> FastAPI:
         title="Single Barber Appointment API",
         version="0.1.0",
         debug=(settings.env != "production"),
+        lifespan=_lifespan,
     )
 
     # TenantMiddleware: /api/v1/ altindaki her request'te subdomain  tenant gozmlemesi yapar
