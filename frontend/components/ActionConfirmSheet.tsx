@@ -15,6 +15,7 @@ interface ActionConfirmSheetProps {
   cancelText?: string
   confirmTone?: "danger" | "neutral"
   isLoading?: boolean
+  confirmDisabled?: boolean
   onConfirm: () => void
   onCancel: () => void
   children?: React.ReactNode
@@ -28,6 +29,7 @@ export default function ActionConfirmSheet({
   cancelText = "Vazgec",
   confirmTone = "danger",
   isLoading = false,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
   children,
@@ -61,7 +63,7 @@ export default function ActionConfirmSheet({
           </button>
           <button
             onClick={onConfirm}
-            disabled={isLoading}
+            disabled={isLoading || confirmDisabled}
             className={`py-3 rounded-lg text-white text-sm font-medium disabled:opacity-50 ${
               confirmTone === "danger" ? "bg-red-600" : "bg-zinc-100 text-zinc-900"
             }`}

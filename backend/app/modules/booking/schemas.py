@@ -57,6 +57,20 @@ class BookingResponse(BaseModel):
     created_at: datetime
 
 
+class BookingRescheduleRequest(BaseModel):
+    """Kullanici tarafindan randevu saati degistirme istegi."""
+
+    new_slot_time: datetime
+
+    @field_validator("new_slot_time")
+    @classmethod
+    def slot_time_must_be_timezone_aware(cls, v: datetime) -> datetime:
+        """Randevu zamani timezone bilgisi icermelidir (ornek: +03:00)."""
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("new_slot_time timezone bilgisi icermelidir")
+        return v
+
+
 class BookingWithUserResponse(BaseModel):
     """Admin gorunumu icin randevu + musteri bilgileri."""
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { ActionConfirmSheet, SlotGrid } from "@/components"
 import type { Slot } from "@/components"
-import { apiDelete, apiFetch } from "@/lib/api"
+import { apiDelete, apiFetch, apiPut } from "@/lib/api"
 import { buildBookingDays } from "@/lib/bookingWindow"
 
 type UserMe = {
@@ -67,6 +67,12 @@ export default function HomePage() {
   })
   const [pendingCancelBooking, setPendingCancelBooking] = useState<MyBooking | null>(null)
   const [cancelLoading, setCancelLoading] = useState(false)
+
+  const [pendingRescheduleBooking, setPendingRescheduleBooking] = useState<MyBooking | null>(null)
+  const [rescheduleStep, setRescheduleStep] = useState<"confirm" | "slot_select">("confirm")
+  const [rescheduleSlots, setRescheduleSlots] = useState<Slot[]>([])
+  const [selectedRescheduleSlot, setSelectedRescheduleSlot] = useState<string | null>(null)
+  const [rescheduleLoading, setRescheduleLoading] = useState(false)
 
   const fetchSlots = useCallback(async (date: string, options?: { resetSelection?: boolean; silent?: boolean }) => {
     const resetSelection = options?.resetSelection ?? false
@@ -183,6 +189,64 @@ export default function HomePage() {
     router.push("/confirm")
   }
 
+  function isRescheduleEligible(booking: MyBooking): boolean {
+    if (booking.status !== "confirmed") return false
+    const bookingTime = new Date(booking.slot_time)
+    const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000)
+    return bookingTime > twoHoursFromNow
+  }
+
+  async function handleRescheduleConfirm() {
+    if (!pendingRescheduleBooking) return
+    setRescheduleLoading(true)
+    try {
+      const bookingDate = new Date(pendingRescheduleBooking.slot_time).toLocaleDateString("sv-SE", {
+        timeZone: "Europe/Istanbul",
+      })
+      const data = await apiFetch<{
+        slots: { datetime: string; end_datetime?: string; status: Slot["status"] }[]
+      }>(`/api/v1/slots?date=${bookingDate}`)
+      const available = (data.slots ?? [])
+        .filter((s) => s.status === "available" && s.datetime !== pendingRescheduleBooking.slot_time)
+        .map((s) => ({ slot_time: s.datetime, slot_end_time: s.end_datetime, status: s.status }))
+      setRescheduleSlots(available)
+      setSelectedRescheduleSlot(null)
+      setRescheduleStep("slot_select")
+    } catch {
+      setError("Musait saatler yuklenemedi.")
+      setPendingRescheduleBooking(null)
+    } finally {
+      setRescheduleLoading(false)
+    }
+  }
+
+  async function handleRescheduleSubmit() {
+    if (!pendingRescheduleBooking || !selectedRescheduleSlot) return
+    setRescheduleLoading(true)
+    try {
+      await apiPut(`/api/v1/bookings/${pendingRescheduleBooking.id}/reschedule`, {
+        new_slot_time: selectedRescheduleSlot,
+      })
+      setPendingRescheduleBooking(null)
+      setSelectedRescheduleSlot(null)
+      await Promise.all([
+        fetchProfileAndCurrentBooking(),
+        fetchSlots(selectedDate, { silent: true, resetSelection: false }),
+      ])
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Randevu duzenlenemedi.")
+      setPendingRescheduleBooking(null)
+    } finally {
+      setRescheduleLoading(false)
+    }
+  }
+
+  function handleRescheduleClose() {
+    setPendingRescheduleBooking(null)
+    setSelectedRescheduleSlot(null)
+    setRescheduleStep("confirm")
+  }
+
   async function handleConfirmCancelBooking() {
     if (!pendingCancelBooking) return
     setCancelLoading(true)
@@ -253,13 +317,27 @@ export default function HomePage() {
                       )}
                     </div>
                     {!isCancelled ? (
-                      <button
-                        type="button"
-                        onClick={() => setPendingCancelBooking(booking)}
-                        className="text-sm text-red-300 hover:text-red-200 shrink-0 ml-3"
-                      >
-                        Iptal Et
-                      </button>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0 ml-3">
+                        {isRescheduleEligible(booking) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPendingRescheduleBooking(booking)
+                              setRescheduleStep("confirm")
+                            }}
+                            className="text-sm text-blue-400 hover:text-blue-300"
+                          >
+                            Düzenle
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPendingCancelBooking(booking)}
+                          className="text-sm text-red-300 hover:text-red-200"
+                        >
+                          Iptal Et
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-sm text-zinc-600 shrink-0 ml-3">Iptal Edildi</span>
                     )}
@@ -330,6 +408,70 @@ export default function HomePage() {
         onCancel={() => setPendingCancelBooking(null)}
         onConfirm={handleConfirmCancelBooking}
       />
+
+      {/* Düzenle: Adım 1 — Onay */}
+      <ActionConfirmSheet
+        open={Boolean(pendingRescheduleBooking) && rescheduleStep === "confirm"}
+        title="Randevu Saatini Degistir"
+        description={
+          pendingRescheduleBooking
+            ? `${formatBookingRow(pendingRescheduleBooking.slot_time).dateText} tarihindeki ${formatBookingRow(pendingRescheduleBooking.slot_time).timeText} randevunuzu gun icinde baska bir saatle degistirmek ister misiniz?`
+            : ""
+        }
+        confirmText="Evet, Devam Et"
+        cancelText="Vazgec"
+        confirmTone="neutral"
+        isLoading={rescheduleLoading}
+        onCancel={handleRescheduleClose}
+        onConfirm={handleRescheduleConfirm}
+      />
+
+      {/* Düzenle: Adım 2 — Saat Seçimi */}
+      <ActionConfirmSheet
+        open={Boolean(pendingRescheduleBooking) && rescheduleStep === "slot_select"}
+        title="Yeni Saat Secin"
+        description={
+          pendingRescheduleBooking
+            ? `${formatBookingRow(pendingRescheduleBooking.slot_time).dateText} icin musait saatler:`
+            : ""
+        }
+        confirmText="Onayla"
+        cancelText="Vazgec"
+        confirmTone="neutral"
+        isLoading={rescheduleLoading}
+        confirmDisabled={!selectedRescheduleSlot}
+        onCancel={handleRescheduleClose}
+        onConfirm={handleRescheduleSubmit}
+      >
+        {rescheduleSlots.length === 0 ? (
+          <p className="text-sm text-zinc-500 text-center py-2">Bu gun icin musait saat bulunamadi.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2 max-h-52 overflow-y-auto">
+            {rescheduleSlots.map((slot) => {
+              const timeLabel = new Date(slot.slot_time).toLocaleTimeString("tr-TR", {
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZone: "Europe/Istanbul",
+              })
+              const isSelected = selectedRescheduleSlot === slot.slot_time
+              return (
+                <button
+                  key={slot.slot_time}
+                  type="button"
+                  onClick={() => setSelectedRescheduleSlot(slot.slot_time)}
+                  className={`py-2 rounded-lg text-sm font-medium border transition-colors ${
+                    isSelected
+                      ? "bg-zinc-100 text-zinc-900 border-zinc-100"
+                      : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:border-zinc-400"
+                  }`}
+                >
+                  {timeLabel}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </ActionConfirmSheet>
     </div>
   )
 }

@@ -41,7 +41,8 @@ TZ = ZoneInfo("Europe/Istanbul")
 
 # Ayni kullanicinin ayni gun alabilecegi maksimum confirmed randevu sayisi.
 MAX_BOOKINGS_PER_DAY = 3
-USER_CANCELLATION_MINUTES_BEFORE = 15
+USER_CANCELLATION_MINUTES_BEFORE = 60
+USER_RESCHEDULE_HOURS_BEFORE = 2
 
 
 def _to_local_tz(dt: datetime) -> datetime:
@@ -414,6 +415,95 @@ async def cancel_booking_user(
     await db.commit()
     await db.refresh(booking)
     return booking
+
+
+async def reschedule_booking_user(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    booking_id: uuid.UUID,
+    new_slot_time: datetime,
+) -> Booking:
+    """
+    Kullanici randevusunu ayni gun icinde baska bir saate tasir.
+
+    Kurallar:
+    - Booking confirmed ve kullaniciya ait olmali
+    - Mevcut randevuya en az 2 saat kalmali
+    - Yeni slot mevcut randevuyla ayni gun olmali
+    - Yeni slot berber takvimine gore gecerli, dolu veya bloklanmamis olmali
+    """
+    try:
+        result = await db.execute(
+            select(Booking)
+            .where(Booking.id == booking_id, Booking.tenant_id == tenant_id)
+            .with_for_update()
+        )
+        booking = result.scalar_one_or_none()
+
+        if booking is None or booking.user_id != user_id or booking.status != BookingStatus.confirmed:
+            raise HTTPException(404, {"error": "booking_not_found"})
+
+        now_local = datetime.now(TZ)
+        booking_local = _to_local_tz(booking.slot_time)
+        if booking_local - now_local < timedelta(hours=USER_RESCHEDULE_HOURS_BEFORE):
+            raise HTTPException(409, {"error": "booking_reschedule_window_passed"})
+
+        slot_local = new_slot_time.astimezone(TZ)
+        if slot_local.date() != booking_local.date():
+            raise HTTPException(400, {"error": "reschedule_different_day"})
+
+        if slot_local == booking_local:
+            raise HTTPException(400, {"error": "reschedule_same_slot"})
+
+        profile_result = await db.execute(
+            select(BarberProfile).where(BarberProfile.tenant_id == tenant_id)
+        )
+        profile = profile_result.scalar_one_or_none()
+        if not await _validate_slot_in_schedule(db, tenant_id, slot_local, profile=profile):
+            raise HTTPException(400, {"error": "invalid_slot"})
+
+        taken_result = await db.execute(
+            select(Booking)
+            .where(
+                Booking.tenant_id == tenant_id,
+                Booking.slot_time == slot_local,
+                Booking.status == BookingStatus.confirmed,
+            )
+            .with_for_update()
+        )
+        if taken_result.scalar_one_or_none():
+            raise HTTPException(409, {"error": "slot_taken"})
+
+        blocked_result = await db.execute(
+            select(SlotBlock)
+            .where(SlotBlock.tenant_id == tenant_id, SlotBlock.blocked_at == slot_local)
+            .with_for_update()
+        )
+        if blocked_result.scalar_one_or_none():
+            raise HTTPException(409, {"error": "slot_blocked"})
+
+        booking.status = BookingStatus.cancelled
+        booking.cancelled_by = CancelledBy.user
+
+        new_booking = Booking(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            slot_time=slot_local,
+            status=BookingStatus.confirmed,
+        )
+        db.add(new_booking)
+        await db.commit()
+        await db.refresh(new_booking)
+        return new_booking
+
+    except HTTPException:
+        await db.rollback()
+        raise
+    except IntegrityError as e:
+        await db.rollback()
+        logger.warning("Reschedule IntegrityError | tenant_id=%s | error=%s", tenant_id, e)
+        raise HTTPException(409, {"error": "slot_taken"})
 
 
 async def set_booking_no_show_admin(

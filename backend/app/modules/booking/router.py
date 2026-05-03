@@ -33,6 +33,7 @@ from app.modules.booking import service as booking_service
 from app.modules.booking.schemas import (
     AdminBookingCreateRequest,
     BookingCreateRequest,
+    BookingRescheduleRequest,
     BookingResponse,
     BookingWithUserResponse,
 )
@@ -185,7 +186,7 @@ async def cancel_my_booking(
     Kullanici kendi randevusunu iptal eder.
 
     - Sadece kullanicinin kendi booking kaydi iptal edilebilir
-    - Slot saatine 15 dakikadan az kaldiysa iptal edilemez
+    - Slot saatine 60 dakikadan az kaldiysa iptal edilemez
     """
     booking = await booking_service.cancel_booking_user(
         db,
@@ -203,9 +204,38 @@ async def cancel_my_booking(
     )
 
 
-# â”€â”€â”€ Admin: Randevu Ä°ptal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+@router.put(“/bookings/{booking_id}/reschedule”, response_model=BookingResponse)
+async def reschedule_my_booking(
+    booking_id: uuid.UUID,
+    body: BookingRescheduleRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    “””
+    Kullanici kendi randevusunu ayni gun icinde baska bir saate tasir.
 
-@router.delete("/admin/bookings/{booking_id}", response_model=BookingResponse)
+    - Mevcut randevuya en az 2 saat kalmali
+    - Yeni slot mevcut randevuyla ayni gun olmali
+    - Yeni slot musait olmali
+    “””
+    booking = await booking_service.reschedule_booking_user(
+        db,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        booking_id=booking_id,
+        new_slot_time=body.new_slot_time,
+    )
+    return BookingResponse(
+        id=booking.id,
+        user_id=booking.user_id,
+        slot_time=booking.slot_time,
+        status=booking.status,
+        cancelled_by=booking.cancelled_by,
+        created_at=booking.created_at,
+    )
+
+
+@router.delete(“/admin/bookings/{booking_id}”, response_model=BookingResponse)
 async def cancel_booking_admin(
     booking_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
