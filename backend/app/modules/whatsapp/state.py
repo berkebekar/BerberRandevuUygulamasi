@@ -36,6 +36,7 @@ class ConversationState:
     selected_date: Optional[str] = None   # "YYYY-MM-DD"
     selected_time: Optional[str] = None   # "HH:MM"
     user_id: Optional[str] = None         # DB'deki User.id (kaydedilmişse)
+    slot_offset: int = 0                  # Saat listesi sayfalama: mevcut başlangıç indeksi
 
 
 def _key(phone_number_id: str, wa_phone: str) -> str:

@@ -216,6 +216,9 @@ async def _send_available_dates(
     return True
 
 
+_SLOT_PAGE_SIZE = 8
+
+
 async def _send_available_times(
     phone_number_id: str,
     access_token: str,
@@ -223,10 +226,13 @@ async def _send_available_times(
     tenant_id: uuid.UUID,
     selected_date: date,
     db: AsyncSession,
+    offset: int = 0,
 ) -> bool:
     """
-    Seçilen günün müsait saatlerini sabah/öğleden sonra bölümlerine ayırarak gönderir.
+    Seçilen günün müsait saatlerini sayfalı liste olarak gönderir.
     Hiç müsait saat yoksa False döner.
+
+    offset: gösterilecek ilk slot'un indeksi (_SLOT_PAGE_SIZE adımlarıyla artar)
     """
     day_slots = await schedule_service.get_slots_for_date(db, tenant_id, selected_date)
 
@@ -237,30 +243,21 @@ async def _send_available_times(
     if not available:
         return False
 
-    morning_rows = []
-    afternoon_rows = []
+    total = len(available)
+    page = available[offset: offset + _SLOT_PAGE_SIZE]
 
-    for slot in available:
-        hour = int(slot.time.split(":")[0])
-        row = wa.ListRow(
-            id=f"time_{slot.time}",
-            title=slot.time,
-        )
-        if hour < 12:
-            morning_rows.append(row)
-        else:
-            afternoon_rows.append(row)
+    rows: list[wa.ListRow] = []
 
-    # WhatsApp API: toplam satır sayısı tüm section'larda 10'u geçemez
-    morning_limited = morning_rows[:5]
-    afternoon_limited = afternoon_rows[: 10 - len(morning_limited)]
+    if offset > 0:
+        rows.append(wa.ListRow(id="slot_prev", title="<- Onceki saatler"))
 
-    sections = []
-    if morning_limited:
-        sections.append(wa.ListSection(title="Sabah", rows=morning_limited))
-    if afternoon_limited:
-        sections.append(wa.ListSection(title="Ogleden Sonra", rows=afternoon_limited))
+    for slot in page:
+        rows.append(wa.ListRow(id=f"time_{slot.time}", title=slot.time))
 
+    if offset + _SLOT_PAGE_SIZE < total:
+        rows.append(wa.ListRow(id="slot_next", title="-> Sonraki saatler"))
+
+    sections = [wa.ListSection(title="Uygun Saatler", rows=rows)]
     date_label = _fmt_date(selected_date)
     await wa.send_list(
         phone_number_id,
@@ -397,17 +394,41 @@ async def handle_incoming(
 
     # ── TIME_SELECT: Saat seçimi ──────────────────────────────────────────────
     if state.step == STEP_TIME_SELECT:
+        if content == "slot_next":
+            state.slot_offset += _SLOT_PAGE_SIZE
+            await save_state(pid, wa_phone, state)
+            if state.selected_date:
+                await _send_available_times(
+                    pid, tok, wa_phone, tid,
+                    date.fromisoformat(state.selected_date), db,
+                    offset=state.slot_offset,
+                )
+            return
+        if content == "slot_prev":
+            state.slot_offset = max(0, state.slot_offset - _SLOT_PAGE_SIZE)
+            await save_state(pid, wa_phone, state)
+            if state.selected_date:
+                await _send_available_times(
+                    pid, tok, wa_phone, tid,
+                    date.fromisoformat(state.selected_date), db,
+                    offset=state.slot_offset,
+                )
+            return
         if content and content.startswith("time_"):
             selected_time = content[5:]  # "14:00"
             await _handle_time_selected(pid, tok, wa_phone, selected_time, state, tenant.name)
         else:
             if state.selected_date:
                 selected_date = date.fromisoformat(state.selected_date)
-                has_times = await _send_available_times(pid, tok, wa_phone, tid, selected_date, db)
+                has_times = await _send_available_times(
+                    pid, tok, wa_phone, tid, selected_date, db,
+                    offset=state.slot_offset,
+                )
                 if not has_times:
                     await wa.send_text(pid, tok, wa_phone, "Bu gun icin musait saat kalmadi. Baska gun secin.")
                     state.step = STEP_DATE_SELECT
                     state.selected_date = None
+                    state.slot_offset = 0
                     await save_state(pid, wa_phone, state)
                     await _send_available_dates(pid, tok, wa_phone, tid, db)
             else:
@@ -568,9 +589,10 @@ async def _handle_date_selected(
     """Tarih seçildi → o günün saatlerini göster."""
     state.step = STEP_TIME_SELECT
     state.selected_date = selected_date.isoformat()
+    state.slot_offset = 0
     await save_state(pid, wa_phone, state)
 
-    has_times = await _send_available_times(pid, tok, wa_phone, tenant_id, selected_date, db)
+    has_times = await _send_available_times(pid, tok, wa_phone, tenant_id, selected_date, db, offset=0)
     if not has_times:
         await wa.send_text(
             pid, tok, wa_phone,
@@ -652,11 +674,11 @@ async def _handle_booking_confirm(
             logger.error("Randevu oluşturma hatası | error=%s", exc)
 
         await wa.send_text(pid, tok, wa_phone, msg)
-        # Saatleri tekrar göster
+        # Saatleri tekrar göster (aynı sayfada)
         state.step = STEP_TIME_SELECT
         state.selected_time = None
         await save_state(pid, wa_phone, state)
-        await _send_available_times(pid, tok, wa_phone, tenant.id, selected_date, db)
+        await _send_available_times(pid, tok, wa_phone, tenant.id, selected_date, db, offset=state.slot_offset)
         return
 
     # Başarılı
