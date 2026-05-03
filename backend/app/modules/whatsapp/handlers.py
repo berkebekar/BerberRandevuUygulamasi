@@ -118,6 +118,23 @@ async def _get_or_create_user(
     return user
 
 
+async def _find_user_tenants(db: AsyncSession, wa_phone: str) -> list[Tenant]:
+    """Bu WA numarasının DB'de kayıtlı olduğu aktif tenant'ları döner."""
+    phone_with_plus = "+" + wa_phone
+    try:
+        normalized = normalize_tr_phone(phone_with_plus)
+    except Exception:
+        normalized = phone_with_plus
+    candidates = phone_variants(normalized)
+    result = await db.execute(
+        select(Tenant)
+        .join(User, User.tenant_id == Tenant.id)
+        .where(User.phone.in_(candidates), Tenant.is_active.is_(True))
+        .order_by(Tenant.name)
+    )
+    return list(result.scalars().all())
+
+
 # ─── Mesaj Gönderme Yardımcıları ─────────────────────────────────────────────
 
 async def _reset_to_idle(
@@ -140,12 +157,19 @@ async def _send_tenant_list(
     tok: str,
     wa_phone: str,
     db: AsyncSession,
+    tenants: list[Tenant] | None = None,
+    body: str = "Hangi isletmeyle gorusmek istiyorsunuz?",
+    section_title: str = "Isletmeler",
 ) -> None:
-    """Aktif tenant listesini WA list mesajı olarak gönderir (fallback: linksiz mesaj)."""
-    result = await db.execute(
-        select(Tenant).where(Tenant.is_active.is_(True)).order_by(Tenant.name)
-    )
-    tenants = result.scalars().all()
+    """Tenant listesini WA list mesajı olarak gönderir.
+
+    tenants: verilirse bu liste kullanılır, yoksa tüm aktif tenantlar sorgulanır.
+    """
+    if tenants is None:
+        result = await db.execute(
+            select(Tenant).where(Tenant.is_active.is_(True)).order_by(Tenant.name)
+        )
+        tenants = list(result.scalars().all())
 
     if not tenants:
         await wa.send_text(pid, tok, wa_phone, "Simdilik kayitli isletme bulunmuyor.")
@@ -159,10 +183,10 @@ async def _send_tenant_list(
     if len(tenants) > 9:
         rows.append(wa.ListRow(id="tenant_more", title="Diger isletmeler..."))
 
-    sections = [wa.ListSection(title="Isletmeler", rows=rows)]
+    sections = [wa.ListSection(title=section_title, rows=rows)]
     await wa.send_list(
         pid, tok, wa_phone,
-        body="Hangi isletmeyle gorusmek istiyorsunuz?",
+        body=body,
         button_label="Isletme Sec",
         sections=sections,
         footer="Isletmenin size verdigi linki kullanabilirsiniz.",
@@ -177,13 +201,17 @@ async def _handle_tenant_selection(
     content: str | None,
     state: "ConversationState",
     db: AsyncSession,
+    known_tenants: list[Tenant] | None = None,
 ) -> None:
     """
     Henüz tenant seçilmemiş kullanıcı için routing.
-    - content subdomain ise → doğrudan tenant'ı set et
-    - content 'select_tenant_X' ise → listeden seçim
-    - content 'tenant_more' ise → yönlendirme mesajı
-    - diğer → tenant listesini göster
+
+    Öncelik sırası:
+    1. content bir subdomain keyword veya listeden seçim ise → o tenant'a bağla
+    2. content keyword değilse → known_tenants'a göre:
+       - 1 tenant → otomatik bağla (kullanıcı zaten o berbere kayıtlı)
+       - Birden fazla → o kullanıcının berberlerini listele
+       - Hiç yok → tüm aktif tenant listesini göster
     """
     if content:
         slug = content.strip().lower()
@@ -206,6 +234,27 @@ async def _handle_tenant_selection(
             await _send_main_menu(pid, tok, wa_phone, tenant.name)
             return
 
+    # Content subdomain eşleşmedi — DB bilgisine göre davran
+    if known_tenants is not None:
+        if len(known_tenants) == 1:
+            # Daha önce bu berbere kayıtlı → otomatik bağla
+            tenant = known_tenants[0]
+            state.tenant_id = str(tenant.id)
+            state.wa_name = wa_name
+            await save_state(pid, wa_phone, state)
+            await _send_main_menu(pid, tok, wa_phone, tenant.name)
+            return
+        if len(known_tenants) > 1:
+            # Birden fazla berbere kayıtlı → sadece onları listele
+            await _send_tenant_list(
+                pid, tok, wa_phone, db,
+                tenants=known_tenants,
+                body="Hangi isletmeyle gorusmek istiyorsunuz?",
+                section_title="Randevu Aldiginiz Isletmeler",
+            )
+            return
+
+    # Hiç kayıt yok (yeni kullanıcı) → tüm liste
     await _send_tenant_list(pid, tok, wa_phone, db)
 
 
@@ -425,7 +474,8 @@ async def handle_incoming(
             pass
 
     if tenant is None:
-        await _handle_tenant_selection(pid, tok, wa_phone, wa_name, content, state, db)
+        known_tenants = await _find_user_tenants(db, wa_phone)
+        await _handle_tenant_selection(pid, tok, wa_phone, wa_name, content, state, db, known_tenants=known_tenants)
         return
 
     tid = tenant.id
