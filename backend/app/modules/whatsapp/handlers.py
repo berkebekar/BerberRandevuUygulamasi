@@ -31,6 +31,7 @@ from app.modules.booking import service as booking_service
 from app.modules.schedule import service as schedule_service
 from app.modules.schedule.schemas import SlotStatus
 from app.modules.whatsapp import client as wa
+from app.modules.whatsapp.tracking import log_wa_contact, log_wa_error
 from app.modules.whatsapp.state import (
     STEP_CONFIRM,
     STEP_DATE_SELECT,
@@ -228,6 +229,7 @@ async def _handle_tenant_selection(
 
         tenant = await _get_tenant_by_subdomain(db, slug)
         if tenant:
+            await log_wa_contact(db, wa_phone, tenant.id)
             state.tenant_id = str(tenant.id)
             state.wa_name = wa_name
             await save_state(pid, wa_phone, state)
@@ -239,6 +241,7 @@ async def _handle_tenant_selection(
         if len(known_tenants) == 1:
             # Daha önce bu berbere kayıtlı → otomatik bağla
             tenant = known_tenants[0]
+            await log_wa_contact(db, wa_phone, tenant.id)
             state.tenant_id = str(tenant.id)
             state.wa_name = wa_name
             await save_state(pid, wa_phone, state)
@@ -454,6 +457,7 @@ async def handle_incoming(
 
     if not tok:
         logger.error("WA_ACCESS_TOKEN ayarlanmamis — mesaj yoksayildi")
+        await log_wa_error(db, "config_error", "WA_ACCESS_TOKEN ayarlanmamis")
         return
 
     # Mevcut state
@@ -478,6 +482,7 @@ async def handle_incoming(
         await _handle_tenant_selection(pid, tok, wa_phone, wa_name, content, state, db, known_tenants=known_tenants)
         return
 
+    await log_wa_contact(db, wa_phone, tenant.id)
     tid = tenant.id
 
     # "iptal" veya "geri" kelimeleri her adımda ana menüye döner
@@ -785,6 +790,7 @@ async def _handle_booking_confirm(
         user = await _get_or_create_user(db, tenant.id, wa_phone, wa_name)
     except Exception as exc:
         logger.error("Kullanıcı oluşturma hatası | error=%s", exc)
+        await log_wa_error(db, "user_create_failed", str(exc), tenant_id=tenant.id, wa_phone=wa_phone)
         await wa.send_text(pid, tok, wa_phone, "Bir hata olustu. Lutfen tekrar deneyin.")
         await _reset_to_idle(pid, wa_phone, tenant.id, wa_name)
         return
@@ -800,6 +806,7 @@ async def _handle_booking_confirm(
             user.id,
             slot_dt,
             confirm_additional_same_day=True,
+            source="whatsapp",
         )
     except Exception as exc:
         from fastapi import HTTPException
@@ -816,6 +823,7 @@ async def _handle_booking_confirm(
         else:
             msg = "Beklenmedik bir hata olustu. Lutfen tekrar deneyin."
             logger.error("Randevu oluşturma hatası | error=%s", exc)
+            await log_wa_error(db, "booking_failed", str(exc), tenant_id=tenant.id, wa_phone=wa_phone)
 
         await wa.send_text(pid, tok, wa_phone, msg)
         # Saatleri tekrar göster (aynı sayfada)

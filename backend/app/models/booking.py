@@ -4,7 +4,7 @@ Partial unique: (tenant_id, slot_time) ve (tenant_id, user_id, date) WHERE statu
 """
 
 import uuid
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -49,6 +49,9 @@ class Booking(Base):
     )
     reminder_sent: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
+    )
+    source: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'web'")
     )
 
     def __repr__(self) -> str:

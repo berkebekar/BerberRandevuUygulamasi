@@ -90,6 +90,7 @@ async def create_booking(
     user_id: uuid.UUID,
     slot_time: datetime,
     confirm_additional_same_day: bool = False,
+    source: str = "web",
 ) -> Booking:
     """
     Atomik randevu oluÅŸturur.
@@ -236,6 +237,7 @@ async def create_booking(
             user_id=user_id,
             slot_time=slot_local,
             status=BookingStatus.confirmed,
+            source=source,
         )
         db.add(booking)
         await db.commit()  # Transaction'Ä± tamamla â€” kilit Ã§Ã¶zÃ¼lÃ¼r

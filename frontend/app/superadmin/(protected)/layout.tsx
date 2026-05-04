@@ -7,6 +7,7 @@ const MENU_ITEMS: Array<{ href: string; label: string }> = [
   { href: "/superadmin", label: "Dashboard" },
   { href: "/superadmin/tenants", label: "Tenants" },
   { href: "/superadmin/users", label: "Users" },
+  { href: "/superadmin/whatsapp", label: "WhatsApp Bot" },
   { href: "/superadmin/monitoring", label: "Monitoring" },
   { href: "/superadmin/logs/errors", label: "Error Logs" },
   { href: "/superadmin/logs/activities", label: "Activity Logs" },

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.modules.whatsapp.handlers import handle_incoming
+from app.modules.whatsapp.tracking import log_wa_error
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ async def receive_webhook(
     except Exception as exc:
         # İşleme hatası bot akışını durdurmamalı; Meta'ya hep 200 dön
         logger.error("Webhook işleme hatası | error=%s", exc, exc_info=True)
+        await log_wa_error(db, "webhook_error", str(exc))
 
     return {"status": "ok"}
 

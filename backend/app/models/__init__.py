@@ -16,6 +16,8 @@ from app.models.otp_record import OTPRecord
 from app.models.activity_log import ActivityLog
 from app.models.error_log import ErrorLog
 from app.models.uptime_check import UptimeCheck
+from app.models.wa_contact_log import WaContactLog
+from app.models.wa_error_log import WaErrorLog
 
 __all__ = [
     "Base",
@@ -31,4 +33,6 @@ __all__ = [
     "ActivityLog",
     "ErrorLog",
     "UptimeCheck",
+    "WaContactLog",
+    "WaErrorLog",
 ]
