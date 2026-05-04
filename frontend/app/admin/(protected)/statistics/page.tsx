@@ -34,6 +34,8 @@ type NamedStatItem = {
   value: number
 }
 
+type TrendPoint = { label: string; value: number }
+
 type PeriodCapacityStats = {
   start_date: string
   end_date: string
@@ -42,8 +44,8 @@ type PeriodCapacityStats = {
   occupied_slots: number
   busiest_day: NamedStatItem
   busiest_hour: NamedStatItem
-  bookings_per_day: NamedStatItem[]
-  bookings_per_hour: NamedStatItem[]
+  bookings_per_day: TrendPoint[]
+  bookings_per_hour: TrendPoint[]
 }
 
 type RangeStatisticsResponse = {
