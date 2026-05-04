@@ -14,7 +14,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.phone import normalize_tr_phone
-from app.core.security import hash_password
 from app.models.activity_log import ActivityLog
 from app.models.admin import Admin
 from app.models.barber_profile import BarberProfile
@@ -322,7 +321,6 @@ async def create_tenant(
             tenant_id=tenant.id,
             email=normalized_email,
             phone=phone,
-            password_hash=hash_password(body.admin_initial_password),
         )
         db.add(admin)
 

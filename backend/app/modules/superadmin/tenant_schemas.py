@@ -92,7 +92,6 @@ class TenantCreateRequest(BaseModel):
     admin_last_name: str = Field(min_length=2, max_length=255)
     admin_phone: str = Field(min_length=10, max_length=50)
     admin_email: str = Field(min_length=5, max_length=255)
-    admin_initial_password: str = Field(min_length=8, max_length=255)
     defaults: TenantDefaultsInput | None = None
 
 

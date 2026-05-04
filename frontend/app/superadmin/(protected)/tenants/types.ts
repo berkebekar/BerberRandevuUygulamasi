@@ -49,7 +49,6 @@ export type TenantCreateRequest = {
   admin_last_name: string
   admin_phone: string
   admin_email: string
-  admin_initial_password: string
   defaults: {
     work_start_time: string
     work_end_time: string

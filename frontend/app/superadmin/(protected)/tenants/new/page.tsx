@@ -20,7 +20,6 @@ export default function SuperAdminNewTenantPage() {
   const [adminLastName, setAdminLastName] = useState("")
   const [adminPhone, setAdminPhone] = useState("")
   const [adminEmail, setAdminEmail] = useState("")
-  const [adminPassword, setAdminPassword] = useState("")
 
   const [workStartTime, setWorkStartTime] = useState("09:00")
   const [workEndTime, setWorkEndTime] = useState("18:00")
@@ -94,7 +93,6 @@ export default function SuperAdminNewTenantPage() {
     if (adminFirstName.trim().length < 2 || adminLastName.trim().length < 2) return "Admin ad soyad bilgisi zorunlu."
     if (!TR_PHONE_REGEX.test(adminPhone.trim())) return "Admin telefon +90XXXXXXXXXX formatinda olmali."
     if (!adminEmail.includes("@")) return "Gecerli admin email girin."
-    if (adminPassword.length < 8) return "Ilk sifre en az 8 karakter olmali."
     if (slotDurationMinutes < 5 || slotDurationMinutes > 180) return "Slot suresi 5-180 arasinda olmali."
     return null
   }
@@ -119,7 +117,6 @@ export default function SuperAdminNewTenantPage() {
         admin_last_name: adminLastName.trim(),
         admin_phone: adminPhone.trim(),
         admin_email: adminEmail.trim(),
-        admin_initial_password: adminPassword,
         defaults: {
           work_start_time: workStartTime,
           work_end_time: workEndTime,
@@ -213,15 +210,6 @@ export default function SuperAdminNewTenantPage() {
               type="email"
               value={adminEmail}
               onChange={(event) => setAdminEmail(event.target.value)}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-zinc-300">Ilk Sifre</label>
-            <input
-              type="password"
-              value={adminPassword}
-              onChange={(event) => setAdminPassword(event.target.value)}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none"
             />
           </div>

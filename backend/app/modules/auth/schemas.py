@@ -7,7 +7,7 @@ Hem kullanıcı (customer) hem de admin akışlarının şemalarını içerir.
 
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr
 
 
 # ─── Kullanıcı (Customer) Şemaları ───────────────────────────────────────────
@@ -56,30 +56,6 @@ class UnifiedVerifyOTPResponse(BaseModel):
 
 
 # ─── Admin Şemaları ───────────────────────────────────────────────────────────
-
-class AdminRegisterRequest(BaseModel):
-    """
-    Admin (berber) tek seferlik kayıt isteği.
-    Tenant başına yalnızca 1 admin kayıt edilebilir; ikinci denemede 409 döner.
-    """
-    email: EmailStr          # E-posta adresi (email+şifre girişinde kullanılır)
-    phone: str               # Telefon numarası (OTP girişinde kullanılır)
-    password: str            # Düz metin şifre; service katmanında bcrypt ile hash'lenir
-
-    @field_validator("password")
-    @classmethod
-    def password_min_length(cls, v: str) -> str:
-        """Şifre en az 8 karakter olmalıdır (CURSOR_PROMPTS ADIM 5 kuralı)."""
-        if len(v) < 8:
-            raise ValueError("Şifre en az 8 karakter olmalıdır")
-        return v
-
-
-class AdminLoginPasswordRequest(BaseModel):
-    """Email + şifre ile admin giriş isteği."""
-    email: EmailStr
-    password: str            # Düz metin; service katmanında hash ile karşılaştırılır
-
 
 class AdminVerifyOTPRequest(BaseModel):
     """

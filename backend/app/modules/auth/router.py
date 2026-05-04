@@ -20,7 +20,7 @@ Business logic auth/service.py içindedir; bu dosya sadece HTTP katmanıdır.
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,8 +35,6 @@ from app.models.tenant import Tenant
 from app.modules.auth import service as auth_service
 from app.modules.whatsapp import client as wa_client
 from app.modules.auth.schemas import (
-    AdminLoginPasswordRequest,
-    AdminRegisterRequest,
     AdminVerifyOTPRequest,
     CompleteRegistrationRequest,
     SendOTPRequest,
@@ -290,23 +288,6 @@ async def complete_registration(
 
 # ─── Admin Endpoint'leri ──────────────────────────────────────────────────────
 
-@router.post("/admin/register", status_code=201)
-async def admin_register(
-    body: AdminRegisterRequest,
-    db: AsyncSession = Depends(get_db),
-    tenant_id=Depends(get_tenant_id),
-):
-    """
-    Admin (berber) tek seferlik kayıt endpoint'i.
-    Bu tenant'ta zaten admin varsa 409 döner.
-    Cookie set edilmez; kayıt sonrası admin login endpoint'lerini kullanmalıdır.
-    """
-    await auth_service.register_admin(
-        db, tenant_id, body.email, body.phone, body.password
-    )
-    # Kayıt başarılı; sadece onay mesajı dön (bilgi sızdırmamak için id dönme)
-    return {"message": "admin_registered"}
-
 
 @router.post("/admin/send-otp", status_code=200)
 async def admin_send_otp(
@@ -341,21 +322,6 @@ async def admin_verify_otp(
     admin = await auth_service.verify_admin_otp(db, tenant_id, body.phone, body.code)
     _set_admin_session_cookie(request, response, admin.id, admin.session_version)
     return {"message": "login_successful"}
-
-
-@router.post("/admin/login/password", status_code=200)
-async def admin_login_password(
-    body: AdminLoginPasswordRequest,
-    request: Request,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-    tenant_id=Depends(get_tenant_id),
-):
-    """
-    Admin girisi yalnizca OTP ile yapilir.
-    Bu endpoint bilerek devre disidir.
-    """
-    raise HTTPException(403, {"error": "otp_required"})
 
 
 # ─── Ortak: Logout ────────────────────────────────────────────────────────────

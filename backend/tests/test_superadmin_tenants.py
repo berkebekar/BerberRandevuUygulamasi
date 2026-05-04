@@ -183,7 +183,6 @@ async def test_create_tenant_service_transaction_success():
         admin_last_name="Veli",
         admin_phone="+905551112233",
         admin_email="owner@acme.com",
-        admin_initial_password="StrongPass123",
     )
     session = AsyncMock()
     session.execute = AsyncMock(
@@ -236,7 +235,6 @@ async def test_create_tenant_service_duplicate_subdomain_409():
         admin_last_name="Veli",
         admin_phone="+905551112233",
         admin_email="owner@acme.com",
-        admin_initial_password="StrongPass123",
     )
     session = AsyncMock()
     session.execute = AsyncMock(

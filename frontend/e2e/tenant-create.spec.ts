@@ -17,7 +17,6 @@ test("tenant create flow", async ({ request }) => {
       admin_last_name: "Admin",
       admin_phone: `+90555${String(suffix).slice(-7)}`,
       admin_email: `e2e.${suffix}@example.com`,
-      admin_initial_password: "E2E_admin_123!",
       defaults: {
         work_start_time: "09:00",
         work_end_time: "18:00",

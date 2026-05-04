@@ -66,7 +66,6 @@ async def _ensure_tenant_and_admin(db) -> tuple[Tenant, Admin]:
 
     admin_email = os.getenv("E2E_ADMIN_EMAIL", "e2e.admin@example.com")
     admin_phone = os.getenv("E2E_ADMIN_PHONE", "+905551110000")
-    admin_password = os.getenv("E2E_ADMIN_PASSWORD", "E2E_admin_123!")
 
     admin_result = await db.execute(select(Admin).where(Admin.tenant_id == tenant.id))
     admin = admin_result.scalar_one_or_none()
@@ -75,14 +74,12 @@ async def _ensure_tenant_and_admin(db) -> tuple[Tenant, Admin]:
             tenant_id=tenant.id,
             email=admin_email,
             phone=admin_phone,
-            password_hash=hash_password(admin_password),
             session_version=str(uuid.uuid4()),
         )
         db.add(admin)
     else:
         admin.email = admin_email
         admin.phone = admin_phone
-        admin.password_hash = hash_password(admin_password)
         admin.session_version = str(uuid.uuid4())
 
     return tenant, admin

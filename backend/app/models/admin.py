@@ -29,7 +29,6 @@ class Admin(Base):
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     phone: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     session_version: Mapped[str] = mapped_column(
         String(36),
         nullable=False,

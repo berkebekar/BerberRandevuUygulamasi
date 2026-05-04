@@ -186,44 +186,6 @@ async def verify_otp(
 
 # â"€â"€â"€ Admin Service FonksiyonlarÄ± â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
-async def register_admin(
-    db: AsyncSession,
-    tenant_id,
-    email: str,
-    phone: str,
-    password: str,
-) -> Admin:
-    """
-    Admin kaydÄ± oluÅŸturur (tek seferlik).
-
-    Tenant baÅŸÄ±na yalnÄ±zca 1 admin olabilir (CLAUDE.md).
-    Bu tenant iÃ§in zaten admin varsa 409 fÄ±rlatÄ±r.
-    Åifre bcrypt ile hash'lenerek saklanÄ±r; plain text asla DB'ye yazÄ±lmaz.
-
-    Returns:
-        Admin: Yeni oluÅŸturulan admin nesnesi.
-    """
-    normalized_phone = normalize_tr_phone(phone)
-    # Bu tenant'ta admin var mÄ±? UNIQUE constraint DB'de de var ama Ã¶nce API seviyesinde kontrol et
-    existing_result = await db.execute(
-        select(Admin).where(Admin.tenant_id == tenant_id)
-    )
-    if existing_result.scalar_one_or_none():
-        # Zaten bir admin kayÄ±tlÄ± â€" ikinci kayda izin yok (CLAUDE.md: tenant baÅŸÄ±na 1 admin)
-        raise HTTPException(409, {"error": "admin_already_exists"})
-
-    admin = Admin(
-        tenant_id=tenant_id,
-        email=email,
-        phone=normalized_phone,
-        password_hash=hash_password(password),  # Åifreyi hash'le; plain text saklanmaz
-    )
-    db.add(admin)
-    await db.commit()
-    await db.refresh(admin)
-    return admin
-
-
 async def send_admin_otp(db: AsyncSession, tenant_id, phone: str) -> str:
     """
     Admin telefon numarasÄ±na 6 haneli OTP gÃ¶nderir.
@@ -347,38 +309,6 @@ async def verify_admin_otp(
     admin.session_version = str(uuid.uuid4())
     await db.commit()
     await db.refresh(admin)
-    return admin
-
-
-async def login_admin_password(
-    db: AsyncSession,
-    tenant_id,
-    email: str,
-    password: str,
-) -> Admin:
-    """
-    Email + ÅŸifre ile admin giriÅŸi yapar.
-
-    Email DB'de bulunmazsa veya ÅŸifre yanlÄ±ÅŸsa 401 fÄ±rlatÄ±r.
-    Ä°ki farklÄ± hata durumu iÃ§in kasÄ±tlÄ± olarak aynÄ± 401 mesajÄ± kullanÄ±lÄ±r â€"
-    hangisinin yanlÄ±ÅŸ olduÄŸunu ifÅŸa etmemek iÃ§in (gÃ¼venlik prensibi).
-
-    Returns:
-        Admin: GiriÅŸ baÅŸarÄ±lÄ±ysa ilgili admin nesnesi.
-    """
-    # Tenant'a ait admin'i email ile ara (tenant_id filtresi zorunlu â€" CLAUDE.md)
-    result = await db.execute(
-        select(Admin).where(
-            Admin.tenant_id == tenant_id,
-            Admin.email == email,
-        )
-    )
-    admin = result.scalar_one_or_none()
-
-    if admin is None or not verify_password(password, admin.password_hash):
-        # Email bulunamadÄ± veya ÅŸifre yanlÄ±ÅŸ â€" ikisi iÃ§in de aynÄ± hata mesajÄ± (gÃ¼venlik)
-        raise HTTPException(401, {"error": "invalid_credentials"})
-
     return admin
 
 
