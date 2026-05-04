@@ -57,6 +57,14 @@ async function parseSuperAdminError(res: Response): Promise<ParsedSuperAdminApiE
     const rawError = data?.error
 
     if (typeof rawError === "string") {
+      if (rawError === "too_many_attempts" && typeof data.retry_after === "number") {
+        const minutes = Math.ceil((data.retry_after as number) / 60)
+        return {
+          message: `Cok fazla basarisiz deneme. ${minutes} dakika sonra tekrar deneyin.`,
+          errorCode: rawError,
+          payload: data,
+        }
+      }
       return {
         message: SUPERADMIN_ERROR_MESSAGES[rawError] ?? SUPERADMIN_STATUS_MESSAGES[res.status] ?? "Islem tamamlanamadi.",
         errorCode: rawError,

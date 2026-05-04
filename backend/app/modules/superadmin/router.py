@@ -2,13 +2,14 @@
 superadmin/router.py - Super admin auth endpoint'leri.
 """
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.cookies import resolve_cookie_domain
 from app.core.database import get_db
+from app.core.login_limiter import superadmin_login_limiter
 from app.core.security import create_token_with_secret, decode_token_with_secret
 from app.core.superadmin_auth import get_superadmin_cookie_name, get_superadmin_secret
 from app.modules.superadmin.schemas import SuperAdminLoginRequest, SuperAdminLoginResponse
@@ -47,6 +48,13 @@ def _set_super_admin_session_cookie(
     )
 
 
+def _get_client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/login", status_code=200, response_model=SuperAdminLoginResponse)
 async def super_admin_login(
     body: SuperAdminLoginRequest,
@@ -54,7 +62,22 @@ async def super_admin_login(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    super_admin = await authenticate_super_admin(db, body.username, body.password)
+    client_ip = _get_client_ip(request)
+
+    blocked, retry_after = superadmin_login_limiter.check(client_ip, body.username)
+    if blocked:
+        raise HTTPException(
+            429,
+            {"error": "too_many_attempts", "retry_after": retry_after},
+        )
+
+    try:
+        super_admin = await authenticate_super_admin(db, body.username, body.password)
+    except HTTPException:
+        superadmin_login_limiter.record_failure(client_ip, body.username)
+        raise
+
+    superadmin_login_limiter.clear(client_ip, body.username)
     _set_super_admin_session_cookie(request, response, super_admin.id, super_admin.session_version)
     return SuperAdminLoginResponse(message="login_successful")
 
