@@ -13,7 +13,12 @@ const BookingTrendChart = dynamic(() => import("./dashboard/BookingTrendChart"),
   loading: () => <div className="h-[260px] animate-pulse rounded-xl bg-zinc-800/70" />,
 })
 
-const TenantStatusPieChart = dynamic(() => import("./dashboard/TenantStatusPieChart"), {
+const UserTrendChart = dynamic(() => import("./dashboard/UserTrendChart"), {
+  ssr: false,
+  loading: () => <div className="h-[260px] animate-pulse rounded-xl bg-zinc-800/70" />,
+})
+
+const TenantTrendChart = dynamic(() => import("./dashboard/TenantTrendChart"), {
   ssr: false,
   loading: () => <div className="h-[260px] animate-pulse rounded-xl bg-zinc-800/70" />,
 })
@@ -38,13 +43,10 @@ export default function SuperAdminDashboardPage() {
 
       <StatsCards overview={data.overview} />
 
-      <section className="grid gap-4 xl:grid-cols-2">
+      <section className="grid gap-4 xl:grid-cols-3">
         <BookingTrendChart points={data.trends.bookings_per_month} />
-        <TenantStatusPieChart
-          active={data.overview.tenants.active}
-          inactive={data.overview.tenants.inactive}
-          deleted={data.overview.tenants.deleted}
-        />
+        <UserTrendChart points={data.trends.new_users_per_month} />
+        <TenantTrendChart points={data.trends.new_tenants_per_month} />
       </section>
 
       <RecentActivityTimeline items={data.recentActivities.items} />

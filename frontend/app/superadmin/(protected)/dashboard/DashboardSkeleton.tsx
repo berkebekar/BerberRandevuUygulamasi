@@ -17,7 +17,8 @@ export default function DashboardSkeleton() {
         <SkeletonBlock className="h-28" />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-3">
+        <SkeletonBlock className="h-[320px]" />
         <SkeletonBlock className="h-[320px]" />
         <SkeletonBlock className="h-[320px]" />
       </div>
