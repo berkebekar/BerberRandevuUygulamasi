@@ -1,8 +1,14 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
+
+const BookingStatusDonut = dynamic(() => import("./BookingStatusDonut"), { ssr: false })
+const CustomerTypeDonut = dynamic(() => import("./CustomerTypeDonut"), { ssr: false })
+const DailyBookingBar = dynamic(() => import("./DailyBookingBar"), { ssr: false })
+const HourlyBookingBar = dynamic(() => import("./HourlyBookingBar"), { ssr: false })
 
 type StatsSummary = {
   start_date: string
@@ -36,6 +42,8 @@ type PeriodCapacityStats = {
   occupied_slots: number
   busiest_day: NamedStatItem
   busiest_hour: NamedStatItem
+  bookings_per_day: NamedStatItem[]
+  bookings_per_hour: NamedStatItem[]
 }
 
 type RangeStatisticsResponse = {
@@ -228,6 +236,12 @@ export default function AdminStatisticsPage() {
               </div>
             </section>
 
+            <BookingStatusDonut
+              completed={stats.summary.completed_count}
+              noShow={stats.summary.no_show_count}
+              cancelled={stats.summary.cancelled_count}
+            />
+
             <section className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
               <div>
                 <h2 className="text-sm font-semibold text-zinc-100">Musteri istatistikleri</h2>
@@ -251,6 +265,11 @@ export default function AdminStatisticsPage() {
                 </div>
               </div>
             </section>
+
+            <CustomerTypeDonut
+              newCustomers={stats.customer_stats.new_customers}
+              returningCustomers={stats.customer_stats.returning_customers}
+            />
 
             <section className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
               <div>
@@ -288,6 +307,10 @@ export default function AdminStatisticsPage() {
                 </div>
               </div>
             </section>
+
+            <DailyBookingBar points={stats.capacity_stats.bookings_per_day} />
+
+            <HourlyBookingBar points={stats.capacity_stats.bookings_per_hour} />
           </>
         )}
       </div>

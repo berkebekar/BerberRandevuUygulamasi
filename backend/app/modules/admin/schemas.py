@@ -116,6 +116,8 @@ class PeriodCapacityStats(BaseModel):
     occupied_slots: int
     busiest_day: NamedStatItem
     busiest_hour: NamedStatItem
+    bookings_per_day: list[NamedStatItem] = []
+    bookings_per_hour: list[NamedStatItem] = []
 
 
 class CustomerStatsGroup(BaseModel):

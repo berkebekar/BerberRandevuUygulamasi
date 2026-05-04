@@ -292,6 +292,15 @@ async def _build_capacity_stats(
             "value": hour_counter[top_hour],
         }
 
+    bookings_per_day = [
+        {"label": str(d), "value": c}
+        for d, c in sorted(day_counter.items())
+    ]
+    bookings_per_hour = [
+        {"label": h, "value": c}
+        for h, c in sorted(hour_counter.items())
+    ]
+
     return {
         "start_date": start_date,
         "end_date": end_date,
@@ -300,6 +309,8 @@ async def _build_capacity_stats(
         "occupied_slots": occupied_slots,
         "busiest_day": busiest_day,
         "busiest_hour": busiest_hour,
+        "bookings_per_day": bookings_per_day,
+        "bookings_per_hour": bookings_per_hour,
     }
 
 
