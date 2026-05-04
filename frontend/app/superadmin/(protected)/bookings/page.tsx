@@ -148,7 +148,7 @@ export default function SuperAdminBookingsPage() {
           <div>
             <h1 className="text-xl font-bold text-zinc-100">Randevular</h1>
             <p className="mt-1 text-sm text-zinc-400">
-              Tüm tenant'lara ait randevular.
+              Tüm tenantlara ait randevular.
               {data && (
                 <span className="ml-2 text-zinc-500">
                   Toplam {data.pagination.total} kayıt
