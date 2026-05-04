@@ -25,6 +25,7 @@ from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
 from app.modules.booking.router import router as booking_router
 from app.modules.schedule.router import router as schedule_router
+from app.modules.superadmin.bookings_router import router as superadmin_bookings_router
 from app.modules.superadmin.impersonation import router as superadmin_impersonation_router
 from app.modules.superadmin.whatsapp_router import router as superadmin_whatsapp_router
 from app.modules.superadmin.router import router as superadmin_auth_router
@@ -262,6 +263,7 @@ def create_app() -> FastAPI:
     app.include_router(superadmin_tenants_router, prefix=api_prefix)
     app.include_router(superadmin_users_router, prefix=api_prefix)
     app.include_router(superadmin_monitoring_router, prefix=api_prefix)
+    app.include_router(superadmin_bookings_router, prefix=api_prefix)
     app.include_router(superadmin_impersonation_router, prefix=api_prefix)
     app.include_router(superadmin_whatsapp_router, prefix=api_prefix)
     # WhatsApp webhook — tenant middleware'den muaf (TenantMiddleware içinde skip edilir)
