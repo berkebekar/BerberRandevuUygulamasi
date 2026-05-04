@@ -13,7 +13,7 @@
 
 import { useState, useEffect } from "react"
 import { PhoneInput, OTPInput } from "@/components"
-import { apiPost } from "@/lib/api"
+import { apiFetch, apiPost } from "@/lib/api"
 
 // Formun hangi aşamada olduğunu temsil eder
 type Step = "phone" | "otp" | "register"
