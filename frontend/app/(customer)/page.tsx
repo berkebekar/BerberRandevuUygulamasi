@@ -277,7 +277,10 @@ export default function HomePage() {
             </h1>
             <p className="text-xs text-zinc-400">Lütfen randevu almak için bir gün ve bir saat Seçin</p>
           </div>
-          <LogoutButton />
+          <div className="flex items-center gap-3">
+            <SettingsButton />
+            <LogoutButton />
+          </div>
         </div>
       </div>
 
@@ -478,6 +481,18 @@ export default function HomePage() {
         )}
       </ActionConfirmSheet>
     </div>
+  )
+}
+
+function SettingsButton() {
+  const router = useRouter()
+  return (
+    <button
+      onClick={() => router.push("/settings")}
+      className="text-sm text-zinc-400 hover:text-zinc-300"
+    >
+      Ayarlar
+    </button>
   )
 }
 

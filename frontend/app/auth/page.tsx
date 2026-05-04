@@ -34,8 +34,23 @@ export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
+  // Tenant adı
+  const [tenantName, setTenantName] = useState<string | null>(null)
+
   // OTP tekrar gönderme için geri sayım (saniye)
   const [countdown, setCountdown] = useState(0)
+
+  useEffect(() => {
+    async function loadTenantInfo() {
+      try {
+        const data = await apiFetch<{ name: string }>("/api/v1/tenant/info")
+        setTenantName(data.name)
+      } catch {
+        // fallback: başlık gösterilmez
+      }
+    }
+    loadTenantInfo()
+  }, [])
 
   // Geri sayım her saniye azalır
   useEffect(() => {
@@ -154,9 +169,11 @@ export default function AuthPage() {
         {/* Logo / Başlık */}
         <div className="text-center mb-8">
           <div className="text-4xl mb-3">✂️</div>
-          <h1 className="text-2xl font-bold text-zinc-100">Berber Randevu</h1>
+          <h1 className="text-2xl font-bold text-zinc-100">
+            {tenantName ? `${tenantName} Randevu Paneli` : "Randevu Paneli"}
+          </h1>
           <p className="text-zinc-400 text-sm mt-1">
-            {step === "phone" && "Telefon numaranızı girin"}
+            {step === "phone" && "Telefon numaranızı başında 0 olmadan girin"}
             {step === "otp" && "Doğrulama kodunu girin"}
             {step === "register" && "Bilgilerinizi tamamlayın"}
           </p>

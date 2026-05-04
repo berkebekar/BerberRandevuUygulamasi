@@ -1,9 +1,43 @@
-﻿"""tenant/router.py - Legacy tenant module placeholder.
+﻿"""tenant/router.py - Tenant bilgisi endpoint'leri."""
 
-This module is intentionally not mounted in app.main.
-Tenant management is implemented under modules/superadmin.
-"""
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
-from fastapi import APIRouter
+from app.core.database import get_db
+from app.models.tenant import Tenant
 
 router = APIRouter(prefix="/tenant", tags=["tenant"])
+
+
+class TenantInfoResponse(BaseModel):
+    name: str
+
+
+@router.get("/info", response_model=TenantInfoResponse)
+async def get_tenant_info(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Tenant'ın görünen adını döndürür. Auth gerektirmez."""
+    tenant_id = getattr(request.state, "tenant_id", None)
+    if not tenant_id:
+        raise HTTPException(404, {"error": "tenant_not_found"})
+
+    result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(404, {"error": "tenant_not_found"})
+
+    fn = (tenant.first_name or "").strip()
+    ln = (tenant.last_name or "").strip()
+    if fn and ln:
+        display_name = f"{fn} {ln}"
+    elif fn or ln:
+        display_name = fn or ln
+    else:
+        display_name = tenant.name
+
+    return TenantInfoResponse(name=display_name)

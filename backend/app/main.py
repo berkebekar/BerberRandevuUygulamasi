@@ -31,6 +31,7 @@ from app.modules.superadmin.stats import router as superadmin_stats_router
 from app.modules.superadmin.tenants import router as superadmin_tenants_router
 from app.modules.superadmin.monitoring import router as superadmin_monitoring_router
 from app.modules.superadmin.users import router as superadmin_users_router
+from app.modules.tenant.router import router as tenant_router
 from app.modules.user.router import router as user_router
 from app.modules.whatsapp.router import router as whatsapp_router
 from app.core.reminder import send_reminders
@@ -250,6 +251,7 @@ def create_app() -> FastAPI:
     # su an iskelet; her adimda ilgili router dolacak
     api_prefix = "/api/v1"
     app.include_router(auth_router, prefix=api_prefix)
+    app.include_router(tenant_router, prefix=api_prefix)
     app.include_router(user_router, prefix=api_prefix)
     app.include_router(admin_router, prefix=api_prefix)
     app.include_router(schedule_router, prefix=api_prefix)
