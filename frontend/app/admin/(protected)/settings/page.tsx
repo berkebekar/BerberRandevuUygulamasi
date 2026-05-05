@@ -4,7 +4,7 @@
 
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { apiDelete, apiFetch, apiPut } from "@/lib/api"
 
@@ -59,17 +59,24 @@ export default function AdminSettingsPage() {
 
   // Ozel gun ayarlari
   const [specialDate, setSpecialDate] = useState(todayIso)
-  const [specialIsClosed, setSpecialIsClosed] = useState(false)
   const [specialWorkStart, setSpecialWorkStart] = useState("09:00")
   const [specialWorkEnd, setSpecialWorkEnd] = useState("19:00")
   const [specialSlotDuration, setSpecialSlotDuration] = useState(30)
   const [specialExists, setSpecialExists] = useState(false)
   const [specialLoading, setSpecialLoading] = useState(false)
+  const [closeDate, setCloseDate] = useState(todayIso)
+  const [closeExists, setCloseExists] = useState(false)
+  const [closeLoading, setCloseLoading] = useState(false)
 
   // UI state
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const generalDefaultsRef = useRef({
+    slotDuration: 30,
+    workStart: "09:00",
+    workEnd: "19:00",
+  })
 
   const maxSpecialDate = useMemo(
     () => addDaysIso(todayIso, maxBookingDaysAhead),
@@ -83,13 +90,20 @@ export default function AdminSettingsPage() {
   }
 
   const fillSpecialWithGeneralSettings = useCallback((settings?: BarberSettings | null) => {
-    const duration = settings?.slot_duration_minutes ?? slotDuration
-    const start = (settings?.work_start_time ?? workStart).slice(0, 5)
-    const end = (settings?.work_end_time ?? workEnd).slice(0, 5)
-    setSpecialIsClosed(false)
-    setSpecialWorkStart(start)
-    setSpecialWorkEnd(end)
-    setSpecialSlotDuration(duration)
+      const duration = settings?.slot_duration_minutes ?? slotDuration
+      const start = (settings?.work_start_time ?? workStart).slice(0, 5)
+      const end = (settings?.work_end_time ?? workEnd).slice(0, 5)
+      setSpecialWorkStart(start)
+      setSpecialWorkEnd(end)
+      setSpecialSlotDuration(duration)
+    }, [slotDuration, workStart, workEnd])
+
+  useEffect(() => {
+    generalDefaultsRef.current = {
+      slotDuration,
+      workStart,
+      workEnd,
+    }
   }, [slotDuration, workStart, workEnd])
 
   useEffect(() => {
@@ -98,14 +112,21 @@ export default function AdminSettingsPage() {
       try {
         const data = await apiFetch<BarberSettings | null>("/api/v1/admin/schedule/settings")
         if (data) {
-          setSlotDuration(data.slot_duration_minutes)
-          setWorkStart(data.work_start_time.slice(0, 5))
-          setWorkEnd(data.work_end_time.slice(0, 5))
+          const nextSlotDuration = data.slot_duration_minutes
+          const nextWorkStart = data.work_start_time.slice(0, 5)
+          const nextWorkEnd = data.work_end_time.slice(0, 5)
+          setSlotDuration(nextSlotDuration)
+          setWorkStart(nextWorkStart)
+          setWorkEnd(nextWorkEnd)
           setClosedDays(data.weekly_closed_days ?? [])
           setMaxBookingDaysAhead(data.max_booking_days_ahead ?? 14)
-          fillSpecialWithGeneralSettings(data)
+          setSpecialWorkStart(nextWorkStart)
+          setSpecialWorkEnd(nextWorkEnd)
+          setSpecialSlotDuration(nextSlotDuration)
         } else {
-          fillSpecialWithGeneralSettings(null)
+          setSpecialWorkStart("09:00")
+          setSpecialWorkEnd("19:00")
+          setSpecialSlotDuration(30)
         }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Ayarlar yuklenemedi.")
@@ -113,7 +134,7 @@ export default function AdminSettingsPage() {
     }
 
     loadSettings()
-  }, [fillSpecialWithGeneralSettings])
+  }, [])
 
   useEffect(() => {
     async function loadSpecialDay() {
@@ -129,11 +150,16 @@ export default function AdminSettingsPage() {
           fillSpecialWithGeneralSettings(null)
           return
         }
+        if (data.is_closed) {
+          setSpecialExists(false)
+          fillSpecialWithGeneralSettings(null)
+          return
+        }
         setSpecialExists(true)
-        setSpecialIsClosed(Boolean(data.is_closed))
-        setSpecialWorkStart((data.work_start_time ?? workStart).slice(0, 5))
-        setSpecialWorkEnd((data.work_end_time ?? workEnd).slice(0, 5))
-        setSpecialSlotDuration(data.slot_duration_minutes ?? slotDuration)
+        const general = generalDefaultsRef.current
+        setSpecialWorkStart((data.work_start_time ?? general.workStart).slice(0, 5))
+        setSpecialWorkEnd((data.work_end_time ?? general.workEnd).slice(0, 5))
+        setSpecialSlotDuration(data.slot_duration_minutes ?? general.slotDuration)
       } catch (err: unknown) {
         setSpecialExists(false)
         setError(err instanceof Error ? err.message : "Ozel gun ayari yuklenemedi.")
@@ -143,7 +169,28 @@ export default function AdminSettingsPage() {
     }
 
     loadSpecialDay()
-  }, [fillSpecialWithGeneralSettings, specialDate, slotDuration, workEnd, workStart])
+  }, [fillSpecialWithGeneralSettings, specialDate])
+
+  useEffect(() => {
+    async function loadCloseDay() {
+      if (!closeDate) return
+      setCloseLoading(true)
+      setError("")
+      try {
+        const data = await apiFetch<DayOverride | null>(
+          `/api/v1/admin/schedule/override?date=${closeDate}`
+        )
+        setCloseExists(Boolean(data?.is_closed))
+      } catch (err: unknown) {
+        setCloseExists(false)
+        setError(err instanceof Error ? err.message : "Gun kapatma ayari yuklenemedi.")
+      } finally {
+        setCloseLoading(false)
+      }
+    }
+
+    loadCloseDay()
+  }, [closeDate])
 
   async function handleSaveSettings() {
     if (!workStart || !workEnd) {
@@ -180,7 +227,7 @@ export default function AdminSettingsPage() {
       setError("Ozel gun tarihi secin.")
       return
     }
-    if (!specialIsClosed && (!specialWorkStart || !specialWorkEnd)) {
+    if (!specialWorkStart || !specialWorkEnd) {
       setError("Acik ozel gun icin baslangic ve bitis saatleri zorunludur.")
       return
     }
@@ -191,10 +238,10 @@ export default function AdminSettingsPage() {
     try {
       await apiPut("/api/v1/admin/schedule/override", {
         date: specialDate,
-        is_closed: specialIsClosed,
-        work_start_time: specialIsClosed ? null : specialWorkStart,
-        work_end_time: specialIsClosed ? null : specialWorkEnd,
-        slot_duration_minutes: specialIsClosed ? null : specialSlotDuration,
+        is_closed: false,
+        work_start_time: specialWorkStart,
+        work_end_time: specialWorkEnd,
+        slot_duration_minutes: specialSlotDuration,
       })
       setSpecialExists(true)
       setSuccess("Ozel gun kaydedildi.")
@@ -202,6 +249,49 @@ export default function AdminSettingsPage() {
       setError(err instanceof Error ? err.message : "Ozel gun kaydedilemedi.")
     } finally {
       setSpecialLoading(false)
+    }
+  }
+
+  async function handleCloseDay() {
+    if (!closeDate) {
+      setError("Gun kapatma tarihi secin.")
+      return
+    }
+
+    setCloseLoading(true)
+    setError("")
+    setSuccess("")
+    try {
+      await apiPut("/api/v1/admin/schedule/override", {
+        date: closeDate,
+        is_closed: true,
+        work_start_time: null,
+        work_end_time: null,
+        slot_duration_minutes: null,
+      })
+      setCloseExists(true)
+      setSuccess("Gun kapatildi.")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Gun kapatilamadi.")
+    } finally {
+      setCloseLoading(false)
+    }
+  }
+
+  async function handleOpenClosedDay() {
+    if (!closeDate) return
+
+    setCloseLoading(true)
+    setError("")
+    setSuccess("")
+    try {
+      await apiDelete(`/api/v1/admin/schedule/override?date=${closeDate}`)
+      setCloseExists(false)
+      setSuccess("Gun kapatma kaldirildi.")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Gun kapatma kaldirilamadi.")
+    } finally {
+      setCloseLoading(false)
     }
   }
 
@@ -296,9 +386,7 @@ export default function AdminSettingsPage() {
 
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
           <h2 className="text-sm font-semibold text-zinc-200">Ozel Gun</h2>
-          <p className="text-xs text-zinc-400">
-            Secili tarihte calisma saati, kapalilik ve slot suresi ayri yonetilir.
-          </p>
+          <p className="text-xs text-zinc-400">Secili tarihte calisma saati ve slot suresi ayri yonetilir.</p>
           <div>
             <label className="block text-xs font-medium text-zinc-400 mb-1">Tarih</label>
             <input
@@ -310,55 +398,40 @@ export default function AdminSettingsPage() {
               className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
             />
           </div>
-
-          <label className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5">
-            <span className="text-sm text-zinc-200">Bu gun kapali</span>
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Baslangic</label>
             <input
-              type="checkbox"
-              checked={specialIsClosed}
-              onChange={(e) => setSpecialIsClosed(e.target.checked)}
-              className="h-4 w-4"
+              type="time"
+              value={specialWorkStart}
+              onChange={(e) => setSpecialWorkStart(e.target.value)}
+              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
             />
-          </label>
-
-          {!specialIsClosed && (
-            <>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Baslangic</label>
-                <input
-                  type="time"
-                  value={specialWorkStart}
-                  onChange={(e) => setSpecialWorkStart(e.target.value)}
-                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Bitis</label>
-                <input
-                  type="time"
-                  value={specialWorkEnd}
-                  onChange={(e) => setSpecialWorkEnd(e.target.value)}
-                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">
-                  Ozel Gun Slot Suresi
-                </label>
-                <select
-                  value={specialSlotDuration}
-                  onChange={(e) => setSpecialSlotDuration(Number(e.target.value))}
-                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
-                >
-                  {DURATION_OPTIONS.map((value) => (
-                    <option key={value} value={value}>
-                      {value} dk
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Bitis</label>
+            <input
+              type="time"
+              value={specialWorkEnd}
+              onChange={(e) => setSpecialWorkEnd(e.target.value)}
+              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">
+              Ozel Gun Slot Suresi
+            </label>
+            <select
+              value={specialSlotDuration}
+              onChange={(e) => setSpecialSlotDuration(Number(e.target.value))}
+              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
+            >
+              {DURATION_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {value} dk
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -374,6 +447,38 @@ export default function AdminSettingsPage() {
               className="w-full py-2.5 bg-zinc-800 text-zinc-200 rounded-lg font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700 transition-colors"
             >
               Ozel Gunu Sil
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+          <h2 className="text-sm font-semibold text-zinc-200">Gun Kapatma</h2>
+          <p className="text-xs text-zinc-400">Secili tarihi tamamen kapatir; istenirse tekrar acilir.</p>
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Tarih</label>
+            <input
+              type="date"
+              value={closeDate}
+              min={todayIso}
+              max={maxSpecialDate}
+              onChange={(e) => setCloseDate(e.target.value)}
+              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={handleCloseDay}
+              disabled={closeLoading}
+              className="w-full py-2.5 bg-zinc-100 text-zinc-950 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
+            >
+              {closeLoading ? "Kaydediliyor..." : "Gunu Kapat"}
+            </button>
+            <button
+              onClick={handleOpenClosedDay}
+              disabled={closeLoading || !closeExists}
+              className="w-full py-2.5 bg-zinc-800 text-zinc-200 rounded-lg font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700 transition-colors"
+            >
+              Kapatmayi Kaldir
             </button>
           </div>
         </div>
@@ -425,4 +530,3 @@ export default function AdminSettingsPage() {
     </div>
   )
 }
-
