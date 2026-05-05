@@ -8,7 +8,7 @@ ARG BACKEND_URL=http://localhost:8000
 ENV BACKEND_URL=${BACKEND_URL}
 
 COPY . .
-ENV NODE_OPTIONS="--max-old-space-size=512"
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 RUN npm run build
 
 FROM node:20-alpine AS runner
