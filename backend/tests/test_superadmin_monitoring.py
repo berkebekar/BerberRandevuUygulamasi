@@ -15,6 +15,8 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_super_admin
 from app.core.security import create_token_with_secret
 from app.main import app
+from app.modules.superadmin import monitoring_service
+from app.modules.superadmin.monitoring_schemas import HostResourceUsage
 
 
 def _db_result(*, scalar_or_none=None, scalar_value=None, all_value=None):
@@ -84,18 +86,10 @@ async def test_monitoring_auth_wrong_role_returns_403():
 
 @pytest.mark.asyncio
 async def test_monitoring_health_returns_backend_db_frontend():
-    frontend_check = SimpleNamespace(
-        service_name="frontend",
-        status="operational",
-        response_ms=120,
-        checked_at=datetime.now(timezone.utc),
-        meta_json={"deployment": "ok"},
-    )
     session = AsyncMock()
     session.execute = AsyncMock(
         side_effect=[
             _db_result(),  # SELECT 1
-            _db_result(scalar_or_none=frontend_check),  # frontend last check
         ]
     )
 
@@ -104,13 +98,32 @@ async def test_monitoring_health_returns_backend_db_frontend():
 
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_super_admin] = _override_super_admin
+    original_frontend_check = monitoring_service._check_frontend_health
+    original_host_resources = monitoring_service._collect_host_resources
+    monitoring_service._check_frontend_health = AsyncMock(
+        return_value=("operational", 120.0, datetime.now(timezone.utc), {"url": "https://example.com"})
+    )
+    monitoring_service._collect_host_resources = AsyncMock(
+        return_value=HostResourceUsage(
+            cpu_percent=25.0,
+            ram_percent=50.0,
+            disk_percent=40.0,
+            ram_used_mb=2048.0,
+            ram_total_mb=4096.0,
+            disk_used_gb=16.0,
+            disk_total_gb=40.0,
+        )
+    )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
         response = await client.get("/api/v1/superadmin/monitoring/health")
+    monitoring_service._check_frontend_health = original_frontend_check
+    monitoring_service._collect_host_resources = original_host_resources
 
     assert response.status_code == 200
     payload = response.json()
     assert len(payload["services"]) == 3
     assert {item["name"] for item in payload["services"]} == {"backend", "database", "frontend"}
+    assert payload["host_resources"]["cpu_percent"] == 25.0
 
 
 @pytest.mark.asyncio

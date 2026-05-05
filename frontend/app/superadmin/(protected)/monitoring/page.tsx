@@ -17,6 +17,15 @@ type ServiceHealthItem = {
 type MonitoringHealthResponse = {
   checked_at: string
   services: ServiceHealthItem[]
+  host_resources: {
+    cpu_percent: number | null
+    ram_percent: number | null
+    disk_percent: number | null
+    ram_used_mb: number | null
+    ram_total_mb: number | null
+    disk_used_gb: number | null
+    disk_total_gb: number | null
+  } | null
 }
 
 type UptimeSummaryItem = {
@@ -74,6 +83,11 @@ function parseRefreshSec(value: string | null): number {
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed < 0) return 0
   return Math.min(Math.floor(parsed), 300)
+}
+
+function formatPercent(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return "-"
+  return `${value.toFixed(2)}%`
 }
 
 export default function SuperAdminMonitoringPage() {
@@ -236,6 +250,43 @@ export default function SuperAdminMonitoringPage() {
                 <p className="mt-1 text-xs text-zinc-400">Last check: {formatDateTime(service.last_checked_at)}</p>
               </article>
             ))}
+          </section>
+
+          <section className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+            <h2 className="text-sm font-semibold text-zinc-100">VPS Kaynak Kullanimi</h2>
+            <p className="mt-1 text-xs text-zinc-400">CPU, RAM ve Disk kullanim oranlari (canli olcum).</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <article className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-xs text-zinc-400">CPU</p>
+                <p className="mt-1 text-xl font-bold text-zinc-100">
+                  {formatPercent(data?.health.host_resources?.cpu_percent ?? null)}
+                </p>
+              </article>
+              <article className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-xs text-zinc-400">RAM</p>
+                <p className="mt-1 text-xl font-bold text-zinc-100">
+                  {formatPercent(data?.health.host_resources?.ram_percent ?? null)}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {data?.health.host_resources?.ram_used_mb != null &&
+                  data?.health.host_resources?.ram_total_mb != null
+                    ? `${data.health.host_resources.ram_used_mb.toFixed(0)} / ${data.health.host_resources.ram_total_mb.toFixed(0)} MB`
+                    : "-"}
+                </p>
+              </article>
+              <article className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-xs text-zinc-400">Disk</p>
+                <p className="mt-1 text-xl font-bold text-zinc-100">
+                  {formatPercent(data?.health.host_resources?.disk_percent ?? null)}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {data?.health.host_resources?.disk_used_gb != null &&
+                  data?.health.host_resources?.disk_total_gb != null
+                    ? `${data.health.host_resources.disk_used_gb.toFixed(2)} / ${data.health.host_resources.disk_total_gb.toFixed(2)} GB`
+                    : "-"}
+                </p>
+              </article>
+            </div>
           </section>
 
           <section className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">

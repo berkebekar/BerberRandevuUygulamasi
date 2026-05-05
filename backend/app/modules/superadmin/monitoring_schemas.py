@@ -23,9 +23,20 @@ class ServiceHealthItem(BaseModel):
     meta: dict | None = None
 
 
+class HostResourceUsage(BaseModel):
+    cpu_percent: float | None = None
+    ram_percent: float | None = None
+    disk_percent: float | None = None
+    ram_used_mb: float | None = None
+    ram_total_mb: float | None = None
+    disk_used_gb: float | None = None
+    disk_total_gb: float | None = None
+
+
 class MonitoringHealthResponse(BaseModel):
     checked_at: datetime
     services: list[ServiceHealthItem]
+    host_resources: HostResourceUsage | None = None
 
 
 class UptimeSummaryItem(BaseModel):

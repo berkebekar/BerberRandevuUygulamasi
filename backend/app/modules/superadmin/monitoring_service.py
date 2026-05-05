@@ -4,16 +4,20 @@ superadmin/monitoring_service.py - Monitoring ve logging endpoint servisleri.
 
 from __future__ import annotations
 
+import asyncio
 import math
+import shutil
 import time
 import uuid
 from collections import defaultdict
 from datetime import date, datetime, time as dt_time, timedelta, timezone
 
+import httpx
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models.activity_log import ActivityLog
 from app.models.error_log import ErrorLog
 from app.models.uptime_check import UptimeCheck
@@ -23,6 +27,7 @@ from app.modules.superadmin.monitoring_schemas import (
     ErrorLogDetailResponse,
     ErrorLogListItem,
     ErrorLogListResponse,
+    HostResourceUsage,
     MonitoringHealthResponse,
     MonitoringUptimeResponse,
     PaginationMeta,
@@ -31,6 +36,8 @@ from app.modules.superadmin.monitoring_schemas import (
     UptimeSeriesPoint,
     UptimeSummaryItem,
 )
+
+_CPU_SAMPLE_DELAY_SECONDS = 0.12
 
 
 def _window_bounds(date_from: date | None, date_to: date | None) -> tuple[datetime | None, datetime | None]:
@@ -62,6 +69,121 @@ def _safe_meta(meta: dict | None) -> dict | None:
     return clean
 
 
+def _read_cpu_times_linux() -> tuple[int, int] | None:
+    try:
+        with open("/proc/stat", "r", encoding="utf-8") as f:
+            line = f.readline().strip()
+    except (FileNotFoundError, PermissionError, OSError):
+        return None
+    parts = line.split()
+    if len(parts) < 5 or parts[0] != "cpu":
+        return None
+    try:
+        values = [int(v) for v in parts[1:]]
+    except ValueError:
+        return None
+    idle = values[3] + (values[4] if len(values) > 4 else 0)
+    total = sum(values)
+    return total, idle
+
+
+async def _measure_cpu_percent_linux() -> float | None:
+    first = _read_cpu_times_linux()
+    if first is None:
+        return None
+    await asyncio.sleep(_CPU_SAMPLE_DELAY_SECONDS)
+    second = _read_cpu_times_linux()
+    if second is None:
+        return None
+    total_delta = second[0] - first[0]
+    idle_delta = second[1] - first[1]
+    if total_delta <= 0:
+        return None
+    busy_ratio = 1 - (idle_delta / total_delta)
+    return round(max(0.0, min(100.0, busy_ratio * 100)), 2)
+
+
+def _read_ram_usage_linux() -> tuple[float, float, float] | None:
+    mem_total_kb: int | None = None
+    mem_available_kb: int | None = None
+    try:
+        with open("/proc/meminfo", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    mem_total_kb = int(line.split()[1])
+                elif line.startswith("MemAvailable:"):
+                    mem_available_kb = int(line.split()[1])
+                if mem_total_kb is not None and mem_available_kb is not None:
+                    break
+    except (FileNotFoundError, PermissionError, OSError, ValueError):
+        return None
+    if not mem_total_kb or mem_available_kb is None or mem_total_kb <= 0:
+        return None
+    used_kb = max(0, mem_total_kb - mem_available_kb)
+    percent = round((used_kb / mem_total_kb) * 100, 2)
+    return (
+        percent,
+        round(used_kb / 1024, 2),
+        round(mem_total_kb / 1024, 2),
+    )
+
+
+def _read_disk_usage(path: str = "/") -> tuple[float, float, float] | None:
+    try:
+        disk = shutil.disk_usage(path)
+    except (FileNotFoundError, PermissionError, OSError):
+        return None
+    if disk.total <= 0:
+        return None
+    percent = round((disk.used / disk.total) * 100, 2)
+    used_gb = round(disk.used / (1024 ** 3), 2)
+    total_gb = round(disk.total / (1024 ** 3), 2)
+    return percent, used_gb, total_gb
+
+
+def _resolve_frontend_health_url() -> str:
+    settings = get_settings()
+    raw = (settings.frontend_healthcheck_url or "").strip()
+    if raw:
+        return raw
+    app_domain = (settings.app_domain or "").strip()
+    allowed_subdomains = [s.strip() for s in (settings.allowed_subdomains or "").split(",") if s.strip()]
+    if app_domain and allowed_subdomains:
+        return f"https://{allowed_subdomains[0]}.{app_domain}"
+    return "http://localhost:3000"
+
+
+async def _check_frontend_health() -> tuple[str, float | None, datetime, dict | None]:
+    checked_at = datetime.now(timezone.utc)
+    url = _resolve_frontend_health_url()
+    started = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=4.0, follow_redirects=True) as client:
+            response = await client.get(url)
+        response_ms = round((time.perf_counter() - started) * 1000, 2)
+        status = "operational" if 200 <= response.status_code < 400 else "down"
+        meta = {"url": url, "http_status": response.status_code}
+        return status, response_ms, checked_at, meta
+    except Exception as exc:
+        meta = {"url": url, "error": str(exc)}
+        return "unknown", None, checked_at, meta
+
+
+async def _collect_host_resources() -> HostResourceUsage:
+    cpu_percent = await _measure_cpu_percent_linux()
+    ram = _read_ram_usage_linux()
+    disk = _read_disk_usage("/")
+    return HostResourceUsage(
+        cpu_percent=cpu_percent,
+        ram_percent=ram[0] if ram else None,
+        disk_percent=disk[0] if disk else None,
+        ram_used_mb=ram[1] if ram else None,
+        ram_total_mb=ram[2] if ram else None,
+        disk_used_gb=disk[1] if disk else None,
+        disk_total_gb=disk[2] if disk else None,
+    )
+
+
 async def get_monitoring_health(db: AsyncSession) -> MonitoringHealthResponse:
     checked_at = datetime.now(timezone.utc)
     backend_started = time.perf_counter()
@@ -77,14 +199,8 @@ async def get_monitoring_health(db: AsyncSession) -> MonitoringHealthResponse:
         db_meta = {"error": str(exc)}
     db_ms = (time.perf_counter() - db_started) * 1000
 
-    frontend_result = await db.execute(
-        select(UptimeCheck)
-        .where(UptimeCheck.service_name == "frontend")
-        .order_by(UptimeCheck.checked_at.desc())
-        .limit(1)
-    )
-    frontend_last = frontend_result.scalar_one_or_none()
-    frontend_status = frontend_last.status if frontend_last else "unknown"
+    frontend_status, frontend_response_ms, frontend_checked_at, frontend_meta = await _check_frontend_health()
+    host_resources = await _collect_host_resources()
 
     return MonitoringHealthResponse(
         checked_at=checked_at,
@@ -106,11 +222,12 @@ async def get_monitoring_health(db: AsyncSession) -> MonitoringHealthResponse:
             ServiceHealthItem(
                 name="frontend",
                 status=frontend_status,
-                response_ms=frontend_last.response_ms if frontend_last else None,
-                last_checked_at=frontend_last.checked_at if frontend_last else None,
-                meta=frontend_last.meta_json if frontend_last else None,
+                response_ms=frontend_response_ms,
+                last_checked_at=frontend_checked_at,
+                meta=frontend_meta,
             ),
         ],
+        host_resources=host_resources,
     )
 
 

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     super_admin_session_secret: str = ""
     super_admin_cookie_name: str = "superadmin_session"
     superadmin_stats_cache_ttl_seconds: int = 30
+    frontend_healthcheck_url: str = ""
 
     # Redis — konuşma state yönetimi için (WhatsApp botu)
     redis_url: str = "redis://localhost:6379/0"

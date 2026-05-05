@@ -60,6 +60,7 @@ npm run build
 - `ENV` (`development` / `production`)
 - `APP_DOMAIN`
 - `ALLOWED_SUBDOMAINS`
+- `FRONTEND_HEALTHCHECK_URL` (opsiyonel, super admin monitoring frontend health check hedefi)
 - `SUPER_ADMIN_SESSION_SECRET` (opsiyonel)
 - `SUPER_ADMIN_COOKIE_NAME` (opsiyonel)
 
