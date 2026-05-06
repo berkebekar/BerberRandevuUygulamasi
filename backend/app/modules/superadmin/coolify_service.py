@@ -125,13 +125,6 @@ def _build_frontend_labels(app_uuid: str, domains_value: str, app_domain: str) -
             f"traefik.http.routers.{https_router}.tls=true",
             f"traefik.http.services.{http_router}.loadbalancer.server.port=3000",
             f"traefik.http.services.{https_router}.loadbalancer.server.port=3000",
-            "caddy_0.encode=zstd gzip",
-            "caddy_0.handle_path.0_reverse_proxy={{upstreams 3000}}",
-            "caddy_0.handle_path=/*",
-            "caddy_0.header=-Server",
-            "caddy_0.try_files={path} /index.html /index.php",
-            f"caddy_0={domains_value}",
-            "caddy_ingress_network=coolify",
         ]
     )
 
@@ -172,10 +165,13 @@ async def ensure_tenant_frontend_domain(subdomain: str) -> CoolifyTenantSyncResu
         patch_payload = {
             "domains": next_domains,
             "custom_labels": labels,
+            "is_container_label_escape_enabled": True,
             "instant_deploy": settings.coolify_instant_deploy_on_tenant_create,
             "force_domain_override": True,
         }
         patch_response = await client.patch(f"applications/{app_uuid}", json=patch_payload)
+        if patch_response.is_error:
+            logger.error("Coolify frontend domain sync rejected: %s", patch_response.text)
         patch_response.raise_for_status()
 
     logger.info("Coolify frontend domain synced for tenant %s", subdomain)
