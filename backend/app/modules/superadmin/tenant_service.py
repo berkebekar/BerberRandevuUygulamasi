@@ -2,6 +2,7 @@
 superadmin/tenant_service.py - Tenant management business logic.
 """
 
+import logging
 import math
 import re
 import uuid
@@ -22,6 +23,7 @@ from app.models.enums import BookingStatus, TenantStatus
 from app.models.super_admin import SuperAdmin
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.modules.superadmin.coolify_service import ensure_tenant_frontend_domain
 from app.modules.superadmin.tenant_schemas import (
     TenantAdminSummary,
     TenantCreateRequest,
@@ -40,6 +42,7 @@ from app.modules.superadmin.tenant_schemas import (
 
 TZ = ZoneInfo("Europe/Istanbul")
 _SUBDOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
+logger = logging.getLogger(__name__)
 
 
 def _normalize_subdomain(subdomain: str) -> str:
@@ -356,6 +359,11 @@ async def create_tenant(
         if mapped_error is not None:
             raise mapped_error
         raise
+
+    try:
+        await ensure_tenant_frontend_domain(tenant.subdomain)
+    except Exception:
+        logger.exception("Coolify frontend domain sync failed for tenant %s", tenant.subdomain)
 
     return TenantCreateResponse(
         tenant=_tenant_item(tenant, user_count=0, booking_count=0),

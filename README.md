@@ -61,6 +61,10 @@ npm run build
 - `APP_DOMAIN`
 - `ALLOWED_SUBDOMAINS`
 - `FRONTEND_HEALTHCHECK_URL` (opsiyonel, super admin monitoring frontend health check hedefi)
+- `COOLIFY_API_URL` (opsiyonel, tenant olusunca frontend domain/SSL otomasyonu icin)
+- `COOLIFY_API_TOKEN` (opsiyonel)
+- `COOLIFY_FRONTEND_APP_UUID` (opsiyonel)
+- `COOLIFY_INSTANT_DEPLOY_ON_TENANT_CREATE` (opsiyonel, varsayilan `true`)
 - `SUPER_ADMIN_SESSION_SECRET` (opsiyonel)
 - `SUPER_ADMIN_COOKIE_NAME` (opsiyonel)
 

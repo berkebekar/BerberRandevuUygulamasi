@@ -19,6 +19,7 @@ from app.main import app
 from app.models.activity_log import ActivityLog
 from app.models.barber_profile import BarberProfile
 from app.models.enums import TenantStatus
+from app.modules.superadmin.coolify_service import _build_frontend_labels, _merge_domains
 from app.modules.superadmin.tenant_schemas import TenantCreateRequest
 from app.modules.superadmin.tenant_service import create_tenant, update_tenant
 
@@ -174,7 +175,7 @@ async def test_tenant_detail_not_found_404():
 
 
 @pytest.mark.asyncio
-async def test_create_tenant_service_transaction_success():
+async def test_create_tenant_service_transaction_success(monkeypatch):
     super_admin = _override_super_admin()
     body = TenantCreateRequest(
         subdomain="acme-shop",
@@ -215,14 +216,40 @@ async def test_create_tenant_service_transaction_success():
     session.refresh = AsyncMock(side_effect=_refresh)
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
+    coolify_sync = AsyncMock()
+    monkeypatch.setattr("app.modules.superadmin.tenant_service.ensure_tenant_frontend_domain", coolify_sync)
 
     result = await create_tenant(session, super_admin, body)
 
     assert result.tenant.subdomain == "acme-shop"
     assert result.admin.email == "owner@acme.com"
     assert session.commit.await_count == 1
+    coolify_sync.assert_awaited_once_with("acme-shop")
     assert any(isinstance(obj, ActivityLog) for obj in added_objects)
     assert any(isinstance(obj, BarberProfile) for obj in added_objects)
+
+
+def test_coolify_domain_merge_removes_wildcard_and_adds_tenant():
+    domains, changed = _merge_domains(
+        "https://*.bbsoft.com.tr, https://berber.bbsoft.com.tr",
+        "https://cagataycevirgen.bbsoft.com.tr",
+    )
+
+    assert changed is True
+    assert domains == "https://berber.bbsoft.com.tr,https://cagataycevirgen.bbsoft.com.tr"
+
+
+def test_coolify_frontend_labels_use_explicit_hosts_and_skip_api():
+    labels = _build_frontend_labels(
+        "frontend123",
+        "https://berber.bbsoft.com.tr,https://api.bbsoft.com.tr,https://demo.bbsoft.com.tr",
+        "bbsoft.com.tr",
+    )
+
+    assert "Host(`berber.bbsoft.com.tr`)" in labels
+    assert "Host(`demo.bbsoft.com.tr`)" in labels
+    assert "Host(`api.bbsoft.com.tr`)" not in labels
+    assert "tls.certresolver=letsencrypt" in labels
 
 
 @pytest.mark.asyncio
