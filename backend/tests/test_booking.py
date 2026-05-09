@@ -832,26 +832,18 @@ async def test_admin_iptal_200():
     confirmed_booking = _make_booking(yarin_slot)
     confirmed_booking.id = booking_id
 
-    user = _make_user()
-
     # execute() #1: Booking sorgula
-    # execute() #2: User sorgula (telefon için)
     session = _make_mock_session(
         _make_db_result(confirmed_booking),  # Booking bulundu
-        _make_db_result(user),               # User bulundu (telefon için)
     )
 
-    # Service artık (booking, user_phone) tuple döndürüyor
-    booking, user_phone = await booking_service.cancel_booking_admin(
+    booking = await booking_service.cancel_booking_admin(
         session, TEST_TENANT_ID, booking_id
     )
 
     # Randevu iptal edilmiş olmalı
     assert booking.status == BookingStatus.cancelled
     assert booking.cancelled_by == CancelledBy.admin
-
-    # user_phone: notification background task için döndürülmüş olmalı
-    assert user_phone == user.phone
 
     # NotificationLog artık bu service'de oluşturulmuyor — add() çağrılmamış olmalı
     session.add.assert_not_called()

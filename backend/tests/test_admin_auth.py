@@ -127,15 +127,12 @@ async def _override_tenant_id():
 # ─── Testler ──────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_ikinci_admin_kaydi_409():
+async def test_admin_register_endpoint_removed_404():
     """
-    Bu tenant'ta zaten admin varsa ikinci kayıt isteği 409 döndürmeli.
-    DB'de execute() admin bulursa → service 409 fırlatır.
+    Admin kaydi artik superadmin tenant create akisi ile yapilir.
+    Eski public register endpoint'i kapali kalmali.
     """
-    existing_admin = _make_admin()
-
-    # İlk execute (admin var mı?): admin döndür → 409 bekliyoruz
-    session = _make_mock_session(_make_db_result(existing_admin))
+    session = _make_mock_session(_make_db_result(None))
 
     async def override_db():
         yield session
@@ -149,14 +146,14 @@ async def test_ikinci_admin_kaydi_409():
             json={"email": "berber@test.com", "phone": "5559876543", "password": "sifre1234"},
         )
 
-    assert r.status_code == 409
-    assert r.json() == {"error": "admin_already_exists"}
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_admin_password_login_devre_disi_403():
+async def test_admin_password_login_endpoint_removed_404():
     """
-    Admin password login endpoint'i güvenlik politikası gereği devre dışı olmalı.
+    Admin password login endpoint'i guvenlik politikasi geregi kapali kalmali.
+    Admin girisi OTP akisi uzerinden yapilir.
     """
     session = _make_mock_session(_make_db_result(None))
 
@@ -172,8 +169,7 @@ async def test_admin_password_login_devre_disi_403():
             json={"email": "berber@test.com", "password": "yanlis_sifre"},
         )
 
-    assert r.status_code == 403
-    assert r.json() == {"error": "otp_required"}
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
