@@ -239,13 +239,31 @@ def test_coolify_domain_merge_removes_wildcard_and_adds_tenant():
     assert domains == "https://berber.bbsoft.com.tr,https://cagataycevirgen.bbsoft.com.tr"
 
 
+def test_coolify_domain_merge_keeps_platform_root_domains():
+    domains, changed = _merge_domains(
+        "https://berber.bbsoft.com.tr",
+        "https://cagataycevirgen.bbsoft.com.tr",
+        extra_domains=["https://bbsoft.com.tr", "https://www.bbsoft.com.tr"],
+    )
+
+    assert changed is True
+    assert domains == (
+        "https://berber.bbsoft.com.tr,"
+        "https://bbsoft.com.tr,"
+        "https://www.bbsoft.com.tr,"
+        "https://cagataycevirgen.bbsoft.com.tr"
+    )
+
+
 def test_coolify_frontend_labels_use_explicit_hosts_and_skip_api():
     labels = _build_frontend_labels(
         "frontend123",
-        "https://berber.bbsoft.com.tr,https://api.bbsoft.com.tr,https://demo.bbsoft.com.tr",
+        "https://bbsoft.com.tr,https://www.bbsoft.com.tr,https://berber.bbsoft.com.tr,https://api.bbsoft.com.tr,https://demo.bbsoft.com.tr",
         "bbsoft.com.tr",
     )
 
+    assert "Host(`bbsoft.com.tr`)" in labels
+    assert "Host(`www.bbsoft.com.tr`)" in labels
     assert "Host(`berber.bbsoft.com.tr`)" in labels
     assert "Host(`demo.bbsoft.com.tr`)" in labels
     assert "Host(`api.bbsoft.com.tr`)" not in labels

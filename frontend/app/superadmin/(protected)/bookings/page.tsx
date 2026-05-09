@@ -86,20 +86,17 @@ export default function SuperAdminBookingsPage() {
 
   // Tenant listesini bir kez çek (filtre dropdown'u için)
   useEffect(() => {
-    superAdminGet<{ items: Array<{ id: string; name: string; first_name?: string; last_name?: string }> }>(
-      "/api/v1/superadmin/tenants?page=1&page_size=200"
+    superAdminGet<{ items: Array<{ id: string; name: string }> }>(
+      "/api/v1/superadmin/tenants?page=1&page_size=100"
     )
       .then((res) => {
-        setTenants(
-          res.items.map((t) => {
-            const fn = (t.first_name ?? "").trim()
-            const ln = (t.last_name ?? "").trim()
-            const display = fn || ln ? `${fn} ${ln}`.trim() : t.name
-            return { id: t.id, name: display }
-          })
-        )
+        setTenants(res.items.map((tenant) => ({ id: tenant.id, name: tenant.name })))
       })
-      .catch(() => {})
+      .catch((err: unknown) => {
+        if (err instanceof SuperAdminApiError) setError(err.message)
+        else if (err instanceof Error) setError(err.message)
+        else setError("Tenant filtresi yuklenemedi.")
+      })
   }, [])
 
   const fetchBookings = useCallback(async () => {

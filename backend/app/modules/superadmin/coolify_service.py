@@ -34,6 +34,13 @@ def _tenant_domain(subdomain: str, app_domain: str) -> str:
     return f"https://{subdomain.strip().lower()}.{app_domain.strip().lower()}"
 
 
+def _platform_frontend_domains(app_domain: str) -> list[str]:
+    domain = app_domain.strip().lower()
+    if not domain:
+        return []
+    return [f"https://{domain}", f"https://www.{domain}"]
+
+
 def _split_domains(value: str | None) -> list[str]:
     if not value:
         return []
@@ -54,7 +61,11 @@ def _is_valid_specific_domain(domain: str) -> bool:
     return True
 
 
-def _merge_domains(current_value: str | None, tenant_domain: str) -> tuple[str, bool]:
+def _merge_domains(
+    current_value: str | None,
+    tenant_domain: str,
+    extra_domains: list[str] | None = None,
+) -> tuple[str, bool]:
     seen: set[str] = set()
     domains: list[str] = []
     for domain in _split_domains(current_value):
@@ -66,12 +77,18 @@ def _merge_domains(current_value: str | None, tenant_domain: str) -> tuple[str, 
         seen.add(key)
         domains.append(domain)
 
-    tenant_key = tenant_domain.lower()
-    if tenant_key in seen:
-        return ",".join(domains), False
+    changed = False
+    for domain in [*(extra_domains or []), tenant_domain]:
+        if not _is_valid_specific_domain(domain):
+            continue
+        key = domain.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        domains.append(domain)
+        changed = True
 
-    domains.append(tenant_domain)
-    return ",".join(domains), True
+    return ",".join(domains), changed
 
 
 def _hostnames_for_frontend(domains_value: str, app_domain: str) -> list[str]:
@@ -85,7 +102,7 @@ def _hostnames_for_frontend(domains_value: str, app_domain: str) -> list[str]:
             continue
         if hostname == f"api.{app_domain}":
             continue
-        if not hostname.endswith(f".{app_domain}"):
+        if hostname != app_domain and not hostname.endswith(f".{app_domain}"):
             continue
         if "*" in hostname or hostname in seen:
             continue
@@ -157,7 +174,11 @@ async def ensure_tenant_frontend_domain(subdomain: str) -> CoolifyTenantSyncResu
         application = response.json()
 
         current_domains = application.get("fqdn") or application.get("domains") or ""
-        next_domains, changed = _merge_domains(current_domains, domain)
+        next_domains, changed = _merge_domains(
+            current_domains,
+            domain,
+            extra_domains=_platform_frontend_domains(settings.app_domain),
+        )
         if not changed:
             return CoolifyTenantSyncResult(enabled=True, domain=domain, updated=False, reason="already_present")
 
