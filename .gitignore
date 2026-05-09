@@ -27,4 +27,5 @@ Thumbs.db
 
 # Test artifacts
 frontend/test-results/
+frontend/tsconfig.tsbuildinfo
 frontend/tsconfig.typecheck.tsbuildinfo
