@@ -33,6 +33,35 @@ export function isSubdomainValid(value: string): boolean {
   return /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/.test(value)
 }
 
+function normalizeConfiguredDomain(value: string | undefined): string {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .split("/")[0]
+    .split(":")[0]
+}
+
+function resolveAppDomain(currentHostname: string): string {
+  const configuredDomain =
+    normalizeConfiguredDomain(process.env.NEXT_PUBLIC_APP_DOMAIN) ||
+    normalizeConfiguredDomain(process.env.NEXT_PUBLIC_SUPERADMIN_HOST)
+
+  if (configuredDomain) {
+    return configuredDomain.startsWith("www.") ? configuredDomain.slice(4) : configuredDomain
+  }
+
+  if (currentHostname === "bbsoft.com.tr" || currentHostname.endsWith(".bbsoft.com.tr")) {
+    return "bbsoft.com.tr"
+  }
+
+  if (currentHostname.startsWith("www.")) {
+    return currentHostname.slice(4)
+  }
+
+  return currentHostname
+}
+
 export function buildTenantAdminUrl(subdomain: string): string {
   if (typeof window === "undefined") {
     return "/admin"
@@ -41,19 +70,12 @@ export function buildTenantAdminUrl(subdomain: string): string {
   const current = new URL(window.location.href)
   const [hostnameOnly] = current.host.split(":")
   const port = current.port ? `:${current.port}` : ""
-  const hostParts = hostnameOnly.split(".")
-  const firstPart = hostParts[0] ?? ""
 
   let targetHost: string
-  if (hostnameOnly === "localhost" || hostParts.length === 1) {
+  if (hostnameOnly === "localhost" || hostnameOnly === "127.0.0.1") {
     targetHost = `${subdomain}.localhost${port}`
   } else {
-    hostParts[0] = subdomain
-    if (firstPart === "tenantadmin" && hostParts.length >= 2) {
-      targetHost = `${subdomain}.${hostParts.slice(1).join(".")}${port}`
-    } else {
-      targetHost = `${hostParts.join(".")}${port}`
-    }
+    targetHost = `${subdomain}.${resolveAppDomain(hostnameOnly)}`
   }
 
   return `${current.protocol}//${targetHost}/admin`

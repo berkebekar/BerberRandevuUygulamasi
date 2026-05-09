@@ -33,6 +33,35 @@ export function formatUserName(firstName: string, lastName: string): string {
   return `${firstName} ${lastName}`.trim()
 }
 
+function normalizeConfiguredDomain(value: string | undefined): string {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .split("/")[0]
+    .split(":")[0]
+}
+
+function resolveAppDomain(currentHostname: string): string {
+  const configuredDomain =
+    normalizeConfiguredDomain(process.env.NEXT_PUBLIC_APP_DOMAIN) ||
+    normalizeConfiguredDomain(process.env.NEXT_PUBLIC_SUPERADMIN_HOST)
+
+  if (configuredDomain) {
+    return configuredDomain.startsWith("www.") ? configuredDomain.slice(4) : configuredDomain
+  }
+
+  if (currentHostname === "bbsoft.com.tr" || currentHostname.endsWith(".bbsoft.com.tr")) {
+    return "bbsoft.com.tr"
+  }
+
+  if (currentHostname.startsWith("www.")) {
+    return currentHostname.slice(4)
+  }
+
+  return currentHostname
+}
+
 export function buildTenantUserUrl(tenant: SuperAdminTenantSummary): string {
   if (typeof window === "undefined") {
     return "/"
@@ -40,19 +69,12 @@ export function buildTenantUserUrl(tenant: SuperAdminTenantSummary): string {
   const current = new URL(window.location.href)
   const [hostnameOnly] = current.host.split(":")
   const port = current.port ? `:${current.port}` : ""
-  const parts = hostnameOnly.split(".")
-  const firstPart = parts[0] ?? ""
 
   let targetHost: string
-  if (hostnameOnly === "localhost" || parts.length === 1) {
+  if (hostnameOnly === "localhost" || hostnameOnly === "127.0.0.1") {
     targetHost = `${tenant.subdomain}.localhost${port}`
   } else {
-    parts[0] = tenant.subdomain
-    if (firstPart === "tenantadmin" && parts.length >= 2) {
-      targetHost = `${tenant.subdomain}.${parts.slice(1).join(".")}${port}`
-    } else {
-      targetHost = `${parts.join(".")}${port}`
-    }
+    targetHost = `${tenant.subdomain}.${resolveAppDomain(hostnameOnly)}`
   }
 
   return `${current.protocol}//${targetHost}/`
