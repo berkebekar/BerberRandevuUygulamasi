@@ -22,7 +22,10 @@ logger = logging.getLogger(__name__)
 class CoolifyTenantSyncResult:
     enabled: bool
     domain: str | None = None
+    domains: list[str] | None = None
     updated: bool = False
+    deploy_requested: bool = False
+    deployment_uuid: str | None = None
     reason: str | None = None
 
 
@@ -32,6 +35,18 @@ def _clean_base_url(value: str) -> str:
 
 def _tenant_domain(subdomain: str, app_domain: str) -> str:
     return f"https://{subdomain.strip().lower()}.{app_domain.strip().lower()}"
+
+
+def _tenant_domains(subdomains: list[str], app_domain: str) -> list[str]:
+    domains: list[str] = []
+    seen: set[str] = set()
+    for subdomain in subdomains:
+        clean = subdomain.strip().lower()
+        if not clean or clean in seen:
+            continue
+        seen.add(clean)
+        domains.append(_tenant_domain(clean, app_domain))
+    return domains
 
 
 def _platform_frontend_domains(app_domain: str) -> list[str]:
@@ -89,6 +104,26 @@ def _merge_domains(
         changed = True
 
     return ",".join(domains), changed
+
+
+def _build_domains_value(domains: list[str]) -> str:
+    seen: set[str] = set()
+    clean_domains: list[str] = []
+    for domain in domains:
+        if not _is_valid_specific_domain(domain):
+            continue
+        key = domain.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        clean_domains.append(domain)
+    return ",".join(clean_domains)
+
+
+def _domains_changed(current_value: str | None, next_value: str) -> bool:
+    current = [domain.lower() for domain in _split_domains(current_value) if _is_valid_specific_domain(domain)]
+    next_domains = [domain.lower() for domain in _split_domains(next_value)]
+    return current != next_domains
 
 
 def _hostnames_for_frontend(domains_value: str, app_domain: str) -> list[str]:
@@ -155,10 +190,24 @@ def _is_configured(settings: Settings) -> bool:
     )
 
 
+def _missing_config(settings: Settings) -> list[str]:
+    missing: list[str] = []
+    if not _clean_base_url(settings.coolify_api_url):
+        missing.append("COOLIFY_API_URL")
+    if not settings.coolify_api_token.strip():
+        missing.append("COOLIFY_API_TOKEN")
+    if not settings.coolify_frontend_app_uuid.strip():
+        missing.append("COOLIFY_FRONTEND_APP_UUID")
+    if not settings.app_domain.strip():
+        missing.append("APP_DOMAIN")
+    return missing
+
+
 async def ensure_tenant_frontend_domain(subdomain: str) -> CoolifyTenantSyncResult:
     settings = get_settings()
     if not _is_configured(settings):
-        return CoolifyTenantSyncResult(enabled=False, reason="coolify_not_configured")
+        missing = ",".join(_missing_config(settings))
+        return CoolifyTenantSyncResult(enabled=False, reason=f"coolify_not_configured:{missing}")
 
     app_uuid = settings.coolify_frontend_app_uuid.strip()
     api_url = _clean_base_url(settings.coolify_api_url)
@@ -180,7 +229,13 @@ async def ensure_tenant_frontend_domain(subdomain: str) -> CoolifyTenantSyncResu
             extra_domains=_platform_frontend_domains(settings.app_domain),
         )
         if not changed:
-            return CoolifyTenantSyncResult(enabled=True, domain=domain, updated=False, reason="already_present")
+            return CoolifyTenantSyncResult(
+                enabled=True,
+                domain=domain,
+                domains=_split_domains(next_domains),
+                updated=False,
+                reason="already_present",
+            )
 
         labels = _build_frontend_labels(app_uuid, next_domains, settings.app_domain)
         patch_payload = {
@@ -195,5 +250,84 @@ async def ensure_tenant_frontend_domain(subdomain: str) -> CoolifyTenantSyncResu
             logger.error("Coolify frontend domain sync rejected: %s", patch_response.text)
         patch_response.raise_for_status()
 
+        deploy_requested = False
+        deployment_uuid = None
+        if settings.coolify_instant_deploy_on_tenant_create:
+            start_response = await client.post(
+                f"applications/{app_uuid}/start",
+                params={"force": "false", "instant_deploy": "true"},
+            )
+            if start_response.is_error:
+                logger.error("Coolify frontend deploy request rejected: %s", start_response.text)
+            start_response.raise_for_status()
+            deploy_requested = True
+            deployment_uuid = start_response.json().get("deployment_uuid")
+
     logger.info("Coolify frontend domain synced for tenant %s", subdomain)
-    return CoolifyTenantSyncResult(enabled=True, domain=domain, updated=True)
+    return CoolifyTenantSyncResult(
+        enabled=True,
+        domain=domain,
+        domains=_split_domains(next_domains),
+        updated=True,
+        deploy_requested=deploy_requested,
+        deployment_uuid=deployment_uuid,
+    )
+
+
+async def sync_tenant_frontend_domains(subdomains: list[str]) -> CoolifyTenantSyncResult:
+    settings = get_settings()
+    if not _is_configured(settings):
+        missing = ",".join(_missing_config(settings))
+        return CoolifyTenantSyncResult(enabled=False, reason=f"coolify_not_configured:{missing}", domains=[])
+
+    app_uuid = settings.coolify_frontend_app_uuid.strip()
+    api_url = _clean_base_url(settings.coolify_api_url)
+    tenant_domains = _tenant_domains(subdomains, settings.app_domain)
+    next_domains = _build_domains_value([*_platform_frontend_domains(settings.app_domain), *tenant_domains])
+    headers = {
+        "Authorization": f"Bearer {settings.coolify_api_token.strip()}",
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(base_url=api_url, headers=headers, timeout=15.0) as client:
+        response = await client.get(f"applications/{app_uuid}")
+        response.raise_for_status()
+        application = response.json()
+        current_domains = application.get("fqdn") or application.get("domains") or ""
+        changed = _domains_changed(current_domains, next_domains)
+
+        labels = _build_frontend_labels(app_uuid, next_domains, settings.app_domain)
+        patch_payload = {
+            "domains": next_domains,
+            "custom_labels": labels,
+            "is_container_label_escape_enabled": True,
+            "instant_deploy": settings.coolify_instant_deploy_on_tenant_create,
+            "force_domain_override": True,
+        }
+        patch_response = await client.patch(f"applications/{app_uuid}", json=patch_payload)
+        if patch_response.is_error:
+            logger.error("Coolify frontend full domain sync rejected: %s", patch_response.text)
+        patch_response.raise_for_status()
+
+        deploy_requested = False
+        deployment_uuid = None
+        if settings.coolify_instant_deploy_on_tenant_create:
+            start_response = await client.post(
+                f"applications/{app_uuid}/start",
+                params={"force": "false", "instant_deploy": "true"},
+            )
+            if start_response.is_error:
+                logger.error("Coolify frontend deploy request rejected: %s", start_response.text)
+            start_response.raise_for_status()
+            deploy_requested = True
+            deployment_uuid = start_response.json().get("deployment_uuid")
+
+    logger.info("Coolify frontend domains synced for %d tenants", len(tenant_domains))
+    return CoolifyTenantSyncResult(
+        enabled=True,
+        domains=_split_domains(next_domains),
+        updated=changed,
+        deploy_requested=deploy_requested,
+        deployment_uuid=deployment_uuid,
+        reason="synced",
+    )

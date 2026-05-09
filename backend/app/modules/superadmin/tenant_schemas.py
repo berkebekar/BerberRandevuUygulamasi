@@ -95,9 +95,22 @@ class TenantCreateRequest(BaseModel):
     defaults: TenantDefaultsInput | None = None
 
 
+class TenantDomainSyncResponse(BaseModel):
+    enabled: bool
+    updated: bool = False
+    deploy_requested: bool = False
+    deployment_uuid: str | None = None
+    reason: str | None = None
+    domain: str | None = None
+    domains: list[str] = Field(default_factory=list)
+    tenant_count: int = 0
+    error: str | None = None
+
+
 class TenantCreateResponse(BaseModel):
     tenant: TenantListItem
     admin: TenantAdminSummary
+    domain_sync: TenantDomainSyncResponse | None = None
 
 
 class TenantUpdateRequest(BaseModel):

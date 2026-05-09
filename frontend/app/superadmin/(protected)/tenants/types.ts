@@ -42,6 +42,18 @@ export type TenantDetailResponse = {
   }
 }
 
+export type TenantDomainSyncResponse = {
+  enabled: boolean
+  updated: boolean
+  deploy_requested: boolean
+  deployment_uuid: string | null
+  reason: string | null
+  domain: string | null
+  domains: string[]
+  tenant_count: number
+  error: string | null
+}
+
 export type TenantCreateRequest = {
   subdomain: string
   name: string

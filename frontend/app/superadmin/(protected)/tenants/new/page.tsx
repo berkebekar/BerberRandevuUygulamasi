@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 
 import { SuperAdminApiError, superAdminGet, superAdminPost } from "@/lib/superadmin-api"
 
-import type { TenantCreateRequest, TenantListResponse } from "../types"
+import type { TenantCreateRequest, TenantDomainSyncResponse, TenantListResponse } from "../types"
 import { isSubdomainValid } from "../utils"
 
 const TR_PHONE_REGEX = /^\+90\d{10}$/
@@ -124,8 +124,22 @@ export default function SuperAdminNewTenantPage() {
           weekly_closed_days: weeklyClosedDays,
         },
       }
-      const response = await superAdminPost<{ tenant: { id: string } }>("/api/v1/superadmin/tenants", payload)
-      setSuccess("Tenant basariyla olusturuldu. Detay sayfasina yonlendiriliyorsunuz.")
+      const response = await superAdminPost<{ tenant: { id: string }; domain_sync?: TenantDomainSyncResponse | null }>(
+        "/api/v1/superadmin/tenants",
+        payload
+      )
+      const sync = response.domain_sync
+      if (!sync) {
+        setSuccess("Tenant basariyla olusturuldu. Domain sync sonucu alinamadi.")
+      } else if (!sync.enabled) {
+        setSuccess(`Tenant basariyla olusturuldu. Coolify otomasyonu kapali veya eksik: ${sync.reason ?? "ayar eksik"}.`)
+      } else if (sync.error) {
+        setSuccess(`Tenant basariyla olusturuldu ancak Coolify domain sync basarisiz: ${sync.error}`)
+      } else if (sync.deploy_requested) {
+        setSuccess("Tenant basariyla olusturuldu. Domain eklendi ve deploy istegi gonderildi.")
+      } else {
+        setSuccess("Tenant basariyla olusturuldu. Domain eklendi.")
+      }
       window.setTimeout(() => router.push(`/superadmin/tenants/${response.tenant.id}`), 700)
     } catch (err: unknown) {
       if (err instanceof SuperAdminApiError) setError(err.message)

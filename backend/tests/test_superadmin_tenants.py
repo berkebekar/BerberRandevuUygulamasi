@@ -19,9 +19,9 @@ from app.main import app
 from app.models.activity_log import ActivityLog
 from app.models.barber_profile import BarberProfile
 from app.models.enums import TenantStatus
-from app.modules.superadmin.coolify_service import _build_frontend_labels, _merge_domains
+from app.modules.superadmin.coolify_service import CoolifyTenantSyncResult, _build_frontend_labels, _merge_domains
 from app.modules.superadmin.tenant_schemas import TenantCreateRequest
-from app.modules.superadmin.tenant_service import create_tenant, hard_delete_tenant, update_tenant
+from app.modules.superadmin.tenant_service import create_tenant, hard_delete_tenant, sync_active_tenant_frontend_domains, update_tenant
 
 
 def _make_db_result(
@@ -216,13 +216,26 @@ async def test_create_tenant_service_transaction_success(monkeypatch):
     session.refresh = AsyncMock(side_effect=_refresh)
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
-    coolify_sync = AsyncMock()
+    coolify_sync = AsyncMock(
+        return_value=CoolifyTenantSyncResult(
+            enabled=True,
+            domain="https://acme-shop.bbsoft.com.tr",
+            domains=["https://acme-shop.bbsoft.com.tr"],
+            updated=True,
+            deploy_requested=True,
+            deployment_uuid="deploy123",
+        )
+    )
     monkeypatch.setattr("app.modules.superadmin.tenant_service.ensure_tenant_frontend_domain", coolify_sync)
 
     result = await create_tenant(session, super_admin, body)
 
     assert result.tenant.subdomain == "acme-shop"
     assert result.admin.email == "owner@acme.com"
+    assert result.domain_sync is not None
+    assert result.domain_sync.updated is True
+    assert result.domain_sync.deploy_requested is True
+    assert result.domain_sync.deployment_uuid == "deploy123"
     assert session.commit.await_count == 1
     coolify_sync.assert_awaited_once_with("acme-shop")
     assert any(isinstance(obj, ActivityLog) for obj in added_objects)
@@ -268,6 +281,40 @@ def test_coolify_frontend_labels_use_explicit_hosts_and_skip_api():
     assert "Host(`demo.bbsoft.com.tr`)" in labels
     assert "Host(`api.bbsoft.com.tr`)" not in labels
     assert "tls.certresolver=letsencrypt" in labels
+
+
+@pytest.mark.asyncio
+async def test_sync_active_tenant_frontend_domains_uses_active_tenants(monkeypatch):
+    super_admin = _override_super_admin()
+    session = AsyncMock()
+    session.add = MagicMock()
+    subdomain_result = _make_db_result(all_value=[("berber",), ("berkebekar",)])
+    session.execute = AsyncMock(return_value=subdomain_result)
+    session.commit = AsyncMock()
+    coolify_sync = AsyncMock(
+        return_value=CoolifyTenantSyncResult(
+            enabled=True,
+            domains=[
+                "https://bbsoft.com.tr",
+                "https://www.bbsoft.com.tr",
+                "https://berber.bbsoft.com.tr",
+                "https://berkebekar.bbsoft.com.tr",
+            ],
+            updated=True,
+            deploy_requested=True,
+            deployment_uuid="deploy456",
+            reason="synced",
+        )
+    )
+    monkeypatch.setattr("app.modules.superadmin.tenant_service.sync_tenant_frontend_domains", coolify_sync)
+
+    result = await sync_active_tenant_frontend_domains(session, super_admin)
+
+    coolify_sync.assert_awaited_once_with(["berber", "berkebekar"])
+    assert result.tenant_count == 2
+    assert result.deploy_requested is True
+    assert result.deployment_uuid == "deploy456"
+    assert session.commit.await_count == 1
 
 
 @pytest.mark.asyncio
