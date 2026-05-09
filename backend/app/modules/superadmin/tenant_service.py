@@ -10,7 +10,7 @@ from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import asc, desc, func, or_, select
+from sqlalchemy import asc, delete, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,10 +19,16 @@ from app.models.activity_log import ActivityLog
 from app.models.admin import Admin
 from app.models.barber_profile import BarberProfile
 from app.models.booking import Booking
+from app.models.day_override import DayOverride
 from app.models.enums import BookingStatus, TenantStatus
+from app.models.error_log import ErrorLog
+from app.models.otp_record import OTPRecord
+from app.models.slot_block import SlotBlock
 from app.models.super_admin import SuperAdmin
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.models.wa_contact_log import WaContactLog
+from app.models.wa_error_log import WaErrorLog
 from app.modules.superadmin.coolify_service import ensure_tenant_frontend_domain
 from app.modules.superadmin.tenant_schemas import (
     TenantAdminSummary,
@@ -31,6 +37,7 @@ from app.modules.superadmin.tenant_schemas import (
     TenantDefaultsInput,
     TenantDetailResponse,
     TenantDetailStats,
+    TenantHardDeleteResponse,
     TenantListItem,
     TenantListPagination,
     TenantListQuery,
@@ -490,3 +497,40 @@ async def soft_delete_tenant(
         await db.commit()
 
     return TenantStatusUpdateResponse(id=tenant.id, status=tenant.status, is_active=tenant.is_active)
+
+
+async def hard_delete_tenant(
+    db: AsyncSession,
+    super_admin: SuperAdmin,
+    tenant_id: uuid.UUID,
+) -> TenantHardDeleteResponse:
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(404, {"error": "tenant_not_found"})
+
+    await db.execute(delete(Booking).where(Booking.tenant_id == tenant.id))
+    await db.execute(delete(OTPRecord).where(OTPRecord.tenant_id == tenant.id))
+    await db.execute(delete(SlotBlock).where(SlotBlock.tenant_id == tenant.id))
+    await db.execute(delete(DayOverride).where(DayOverride.tenant_id == tenant.id))
+    await db.execute(delete(WaContactLog).where(WaContactLog.tenant_id == tenant.id))
+    await db.execute(delete(WaErrorLog).where(WaErrorLog.tenant_id == tenant.id))
+    await db.execute(delete(ErrorLog).where(ErrorLog.tenant_id == tenant.id))
+    await db.execute(delete(ActivityLog).where(ActivityLog.tenant_id == tenant.id))
+    await db.execute(delete(User).where(User.tenant_id == tenant.id))
+    await db.execute(delete(Admin).where(Admin.tenant_id == tenant.id))
+    await db.execute(delete(BarberProfile).where(BarberProfile.tenant_id == tenant.id))
+    await db.execute(delete(Tenant).where(Tenant.id == tenant.id))
+
+    db.add(
+        ActivityLog(
+            super_admin_id=super_admin.id,
+            action_type="tenant_hard_deleted",
+            entity_type="tenant",
+            entity_id=str(tenant.id),
+            tenant_id=None,
+            metadata_json=None,
+        )
+    )
+    await db.commit()
+    return TenantHardDeleteResponse(id=tenant.id, message="tenant_hard_deleted")

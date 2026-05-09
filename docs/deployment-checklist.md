@@ -21,6 +21,7 @@ Backend:
 Frontend:
 - `BACKEND_URL`
 - `NEXT_PUBLIC_API_URL` (optional)
+- `NEXT_PUBLIC_SUPERADMIN_HOST=bbsoft.com.tr`
 
 ## Runtime Checks
 
@@ -28,4 +29,6 @@ Frontend:
 - Tenant host routing works (`tenant_not_found` for invalid subdomain)
 - Auth cookie domain/secure/samesite are correct
 - Admin dashboard loads and can block/unblock slots
-- Super admin login and tenant list endpoints work
+- `https://bbsoft.com.tr/superadmin` opens the super admin login
+- Tenant hosts return 404 for `/superadmin`
+- Super admin login and tenant list endpoints work from `bbsoft.com.tr`

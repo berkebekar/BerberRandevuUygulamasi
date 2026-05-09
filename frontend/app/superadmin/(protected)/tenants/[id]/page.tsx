@@ -34,6 +34,7 @@ export default function SuperAdminTenantDetailPage() {
   const [saving, setSaving] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [hardDeleteConfirmOpen, setHardDeleteConfirmOpen] = useState(false)
   const [statusReason, setStatusReason] = useState("")
   const [copied, setCopied] = useState(false)
 
@@ -141,12 +142,30 @@ export default function SuperAdminTenantDetailPage() {
     try {
       await superAdminDelete(`/api/v1/superadmin/tenants/${tenant.id}`)
       setDeleteConfirmOpen(false)
-      setMessage("Tenant soft delete olarak isaretlendi.")
+      setMessage("Tenant silindi olarak isaretlendi.")
       await fetchTenantDetail()
     } catch (err: unknown) {
       if (err instanceof SuperAdminApiError) setError(err.message)
       else if (err instanceof Error) setError(err.message)
       else setError("Tenant silinemedi.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleHardDelete() {
+    if (!tenant) return
+    setSaving(true)
+    setError("")
+    setMessage("")
+    try {
+      await superAdminDelete(`/api/v1/superadmin/tenants/${tenant.id}/hard`)
+      setHardDeleteConfirmOpen(false)
+      router.push("/superadmin/tenants")
+    } catch (err: unknown) {
+      if (err instanceof SuperAdminApiError) setError(err.message)
+      else if (err instanceof Error) setError(err.message)
+      else setError("Tenant kalici olarak silinemedi.")
     } finally {
       setSaving(false)
     }
@@ -292,7 +311,15 @@ export default function SuperAdminTenantDetailPage() {
             disabled={saving || tenant.status === "deleted"}
             className="rounded border border-red-500/50 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Soft Delete
+            Silindi Olarak Isaretle
+          </button>
+          <button
+            type="button"
+            onClick={() => setHardDeleteConfirmOpen(true)}
+            disabled={saving}
+            className="rounded bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Kalici Olarak Sil
           </button>
         </div>
 
@@ -373,8 +400,10 @@ export default function SuperAdminTenantDetailPage() {
       {deleteConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-            <h3 className="text-base font-semibold text-zinc-100">Tenant Soft Delete</h3>
-            <p className="mt-2 text-sm text-zinc-400">Bu islem tenant durumunu silinmis olarak isaretler. Devam edilsin mi?</p>
+            <h3 className="text-base font-semibold text-zinc-100">Tenant Silindi Olarak Isaretle</h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Bu islem tenanti yayindan kaldirir. Veriler silinmez ancak tenant subdomaini artik calismaz.
+            </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
@@ -389,7 +418,36 @@ export default function SuperAdminTenantDetailPage() {
                 disabled={saving}
                 className="rounded border border-red-500/50 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10 disabled:opacity-60"
               >
-                {saving ? "Siliniyor..." : "Soft Delete"}
+                {saving ? "Isaretleniyor..." : "Silindi Olarak Isaretle"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hardDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl border border-red-500/50 bg-zinc-900 p-4">
+            <h3 className="text-base font-semibold text-red-100">Tenant Kalici Olarak Sil</h3>
+            <p className="mt-2 text-sm text-zinc-300">
+              Bu islem tenanti ve bu tenanta bagli admin, kullanici, randevu, ayar, log ve WhatsApp kayitlarini
+              database kaydindan tamamen siler. Bu islem geri alinamaz.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setHardDeleteConfirmOpen(false)}
+                className="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+              >
+                Iptal
+              </button>
+              <button
+                type="button"
+                onClick={handleHardDelete}
+                disabled={saving}
+                className="rounded bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-60"
+              >
+                {saving ? "Siliniyor..." : "Kalici Olarak Sil"}
               </button>
             </div>
           </div>

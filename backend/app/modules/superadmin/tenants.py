@@ -17,6 +17,7 @@ from app.modules.superadmin.tenant_schemas import (
     TenantCreateRequest,
     TenantCreateResponse,
     TenantDetailResponse,
+    TenantHardDeleteResponse,
     TenantListQuery,
     TenantListResponse,
     TenantStatusUpdateRequest,
@@ -26,6 +27,7 @@ from app.modules.superadmin.tenant_schemas import (
 from app.modules.superadmin.tenant_service import (
     create_tenant,
     get_tenant_detail,
+    hard_delete_tenant,
     list_tenants,
     soft_delete_tenant,
     update_tenant,
@@ -110,3 +112,12 @@ async def super_admin_delete_tenant(
     super_admin: SuperAdmin = Depends(get_current_super_admin),
 ):
     return await soft_delete_tenant(db, super_admin, tenant_id)
+
+
+@router.delete("/{tenant_id}/hard", response_model=TenantHardDeleteResponse, status_code=200)
+async def super_admin_hard_delete_tenant(
+    tenant_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    super_admin: SuperAdmin = Depends(get_current_super_admin),
+):
+    return await hard_delete_tenant(db, super_admin, tenant_id)

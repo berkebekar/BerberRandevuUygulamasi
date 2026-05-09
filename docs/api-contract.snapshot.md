@@ -14,6 +14,11 @@ Bu dosya davranis korunumu icin referans snapshot'tir.
 - `/api/v1/notifications` (router var, endpoint yok)
 - `/api/v1/superadmin/*`
 
+## Super Admin Tenant Mutations
+
+- `DELETE /api/v1/superadmin/tenants/{tenant_id}` soft delete yapar; tenant kaydini `deleted` durumuna alir.
+- `DELETE /api/v1/superadmin/tenants/{tenant_id}/hard` hard delete yapar; tenant ve bagli kayitlari kalici olarak siler.
+
 ## Error Code Snapshot
 
 Ortak kullanilan error kodlari:

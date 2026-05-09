@@ -117,3 +117,7 @@ class TenantStatusUpdateResponse(BaseModel):
     status: TenantStatus
     is_active: bool
 
+
+class TenantHardDeleteResponse(BaseModel):
+    id: uuid.UUID
+    message: Literal["tenant_hard_deleted"]

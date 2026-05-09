@@ -71,3 +71,4 @@ npm run build
 Öne çıkan frontend değişkenleri:
 - `NEXT_PUBLIC_API_URL` (opsiyonel)
 - `BACKEND_URL` (rewrite hedefi)
+- `NEXT_PUBLIC_SUPERADMIN_HOST` (opsiyonel, varsayılan `bbsoft.com.tr`; super admin panel hostu)

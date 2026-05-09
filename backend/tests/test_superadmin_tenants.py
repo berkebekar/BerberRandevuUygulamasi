@@ -21,7 +21,7 @@ from app.models.barber_profile import BarberProfile
 from app.models.enums import TenantStatus
 from app.modules.superadmin.coolify_service import _build_frontend_labels, _merge_domains
 from app.modules.superadmin.tenant_schemas import TenantCreateRequest
-from app.modules.superadmin.tenant_service import create_tenant, update_tenant
+from app.modules.superadmin.tenant_service import create_tenant, hard_delete_tenant, update_tenant
 
 
 def _make_db_result(
@@ -398,3 +398,31 @@ async def test_delete_tenant_idempotent_when_already_deleted():
     assert response.status_code == 200
     assert response.json()["status"] == "deleted"
     session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_tenant_removes_related_records_and_logs():
+    super_admin = _override_super_admin()
+    tenant = SimpleNamespace(
+        id=uuid.uuid4(),
+        subdomain="delete-me",
+        name="Delete Me",
+        status=TenantStatus.deleted,
+        is_active=False,
+    )
+    session = AsyncMock()
+    session.execute = AsyncMock(return_value=_make_db_result(scalar_or_none=tenant))
+    added_objects: list[object] = []
+    session.add = MagicMock(side_effect=added_objects.append)
+    session.commit = AsyncMock()
+
+    result = await hard_delete_tenant(session, super_admin, tenant.id)
+
+    assert result.id == tenant.id
+    assert result.message == "tenant_hard_deleted"
+    assert session.execute.await_count == 13
+    assert session.commit.await_count == 1
+    assert len(added_objects) == 1
+    assert isinstance(added_objects[0], ActivityLog)
+    assert added_objects[0].action_type == "tenant_hard_deleted"
+    assert added_objects[0].tenant_id is None
