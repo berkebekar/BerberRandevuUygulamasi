@@ -7,6 +7,7 @@ frontend app's domain and Host labels in sync with the tenant list so each
 tenant gets its own Let's Encrypt certificate automatically.
 """
 
+import base64
 import logging
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -181,6 +182,18 @@ def _build_frontend_labels(app_uuid: str, domains_value: str, app_domain: str) -
     )
 
 
+def _encode_custom_labels(labels: str) -> str:
+    return base64.b64encode(labels.encode("utf-8")).decode("ascii")
+
+
+def _raise_for_status(response: httpx.Response, action: str) -> None:
+    if not response.is_error:
+        return
+    body = response.text.strip()
+    logger.error("Coolify %s rejected: %s", action, body)
+    raise RuntimeError(f"Coolify {action} failed: {response.status_code} {body[:500]}")
+
+
 def _is_configured(settings: Settings) -> bool:
     return bool(
         _clean_base_url(settings.coolify_api_url)
@@ -240,15 +253,13 @@ async def ensure_tenant_frontend_domain(subdomain: str) -> CoolifyTenantSyncResu
         labels = _build_frontend_labels(app_uuid, next_domains, settings.app_domain)
         patch_payload = {
             "domains": next_domains,
-            "custom_labels": labels,
+            "custom_labels": _encode_custom_labels(labels),
             "is_container_label_escape_enabled": True,
             "instant_deploy": settings.coolify_instant_deploy_on_tenant_create,
             "force_domain_override": True,
         }
         patch_response = await client.patch(f"applications/{app_uuid}", json=patch_payload)
-        if patch_response.is_error:
-            logger.error("Coolify frontend domain sync rejected: %s", patch_response.text)
-        patch_response.raise_for_status()
+        _raise_for_status(patch_response, "frontend domain sync")
 
         deploy_requested = False
         deployment_uuid = None
@@ -257,9 +268,7 @@ async def ensure_tenant_frontend_domain(subdomain: str) -> CoolifyTenantSyncResu
                 f"applications/{app_uuid}/start",
                 params={"force": "false", "instant_deploy": "true"},
             )
-            if start_response.is_error:
-                logger.error("Coolify frontend deploy request rejected: %s", start_response.text)
-            start_response.raise_for_status()
+            _raise_for_status(start_response, "frontend deploy request")
             deploy_requested = True
             deployment_uuid = start_response.json().get("deployment_uuid")
 
@@ -299,15 +308,13 @@ async def sync_tenant_frontend_domains(subdomains: list[str]) -> CoolifyTenantSy
         labels = _build_frontend_labels(app_uuid, next_domains, settings.app_domain)
         patch_payload = {
             "domains": next_domains,
-            "custom_labels": labels,
+            "custom_labels": _encode_custom_labels(labels),
             "is_container_label_escape_enabled": True,
             "instant_deploy": settings.coolify_instant_deploy_on_tenant_create,
             "force_domain_override": True,
         }
         patch_response = await client.patch(f"applications/{app_uuid}", json=patch_payload)
-        if patch_response.is_error:
-            logger.error("Coolify frontend full domain sync rejected: %s", patch_response.text)
-        patch_response.raise_for_status()
+        _raise_for_status(patch_response, "frontend full domain sync")
 
         deploy_requested = False
         deployment_uuid = None
@@ -316,9 +323,7 @@ async def sync_tenant_frontend_domains(subdomains: list[str]) -> CoolifyTenantSy
                 f"applications/{app_uuid}/start",
                 params={"force": "false", "instant_deploy": "true"},
             )
-            if start_response.is_error:
-                logger.error("Coolify frontend deploy request rejected: %s", start_response.text)
-            start_response.raise_for_status()
+            _raise_for_status(start_response, "frontend deploy request")
             deploy_requested = True
             deployment_uuid = start_response.json().get("deployment_uuid")
 

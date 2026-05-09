@@ -130,17 +130,23 @@ export default function SuperAdminNewTenantPage() {
       )
       const sync = response.domain_sync
       if (!sync) {
-        setSuccess("Tenant basariyla olusturuldu. Domain sync sonucu alinamadi.")
-      } else if (!sync.enabled) {
-        setSuccess(`Tenant basariyla olusturuldu. Coolify otomasyonu kapali veya eksik: ${sync.reason ?? "ayar eksik"}.`)
-      } else if (sync.error) {
-        setSuccess(`Tenant basariyla olusturuldu ancak Coolify domain sync basarisiz: ${sync.error}`)
-      } else if (sync.deploy_requested) {
+        setError("Tenant olusturuldu ancak domain sync sonucu alinamadi. Tenant detayina gitmeden once Coolify ayarlarini kontrol edin.")
+        return
+      }
+      if (!sync.enabled) {
+        setError(`Tenant olusturuldu ancak Coolify otomasyonu kapali veya eksik: ${sync.reason ?? "ayar eksik"}.`)
+        return
+      }
+      if (sync.error) {
+        setError(`Tenant olusturuldu ancak Coolify domain sync basarisiz: ${sync.error}`)
+        return
+      }
+      if (sync.deploy_requested) {
         setSuccess("Tenant basariyla olusturuldu. Domain eklendi ve deploy istegi gonderildi.")
       } else {
         setSuccess("Tenant basariyla olusturuldu. Domain eklendi.")
       }
-      window.setTimeout(() => router.push(`/superadmin/tenants/${response.tenant.id}`), 700)
+      window.setTimeout(() => router.push(`/superadmin/tenants/${response.tenant.id}`), 2500)
     } catch (err: unknown) {
       if (err instanceof SuperAdminApiError) setError(err.message)
       else if (err instanceof Error) setError(err.message)
