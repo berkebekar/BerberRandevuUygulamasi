@@ -79,7 +79,7 @@ async def list_bookings(
 
     rows = (
         await db.execute(
-            base_stmt.order_by(Booking.slot_time.desc())
+            base_stmt.order_by(Booking.created_at.desc(), Booking.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

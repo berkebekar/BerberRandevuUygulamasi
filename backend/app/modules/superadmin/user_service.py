@@ -8,7 +8,7 @@ from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, Request, Response
-from sqlalchemy import asc, desc, func, or_, select
+from sqlalchemy import asc, delete, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -28,6 +28,7 @@ from app.modules.superadmin.user_schemas import (
     SuperAdminUserBookingHistoryItem,
     SuperAdminUserBookingHistoryPagination,
     SuperAdminUserDetailResponse,
+    SuperAdminUserHardDeleteResponse,
     SuperAdminUserListItem,
     SuperAdminUserListPagination,
     SuperAdminUserListQuery,
@@ -330,6 +331,34 @@ async def soft_delete_user(
     )
     await db.commit()
     return SuperAdminUserStatusResponse(id=user.id, status=user.status, is_blocked=user.is_blocked)
+
+
+async def hard_delete_user(
+    db: AsyncSession,
+    super_admin: SuperAdmin,
+    user_id: uuid.UUID,
+) -> SuperAdminUserHardDeleteResponse:
+    user = await _get_user_or_404(db, user_id)
+    previous_status = user.status.value
+
+    await db.execute(delete(Booking).where(Booking.user_id == user.id))
+    await db.execute(
+        delete(OTPRecord).where(
+            OTPRecord.tenant_id == user.tenant_id,
+            OTPRecord.phone == user.phone,
+            OTPRecord.role == OTPRole.user,
+        )
+    )
+    await db.execute(delete(User).where(User.id == user.id))
+    await _log_activity(
+        db,
+        super_admin=super_admin,
+        action_type="user_hard_deleted",
+        user=user,
+        metadata_json={"previous_status": previous_status},
+    )
+    await db.commit()
+    return SuperAdminUserHardDeleteResponse(id=user.id, message="user_hard_deleted")
 
 
 async def restore_user(

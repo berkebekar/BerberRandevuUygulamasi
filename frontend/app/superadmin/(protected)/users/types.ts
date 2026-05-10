@@ -66,3 +66,8 @@ export type SuperAdminUserDetailResponse = {
   }
   otp_requests: SuperAdminUserOTPItem[]
 }
+
+export type SuperAdminUserHardDeleteResponse = {
+  id: string
+  message: "user_hard_deleted"
+}

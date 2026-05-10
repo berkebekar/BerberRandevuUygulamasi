@@ -107,3 +107,7 @@ class SuperAdminUserStatusResponse(BaseModel):
     status: UserStatus
     is_blocked: bool
 
+
+class SuperAdminUserHardDeleteResponse(BaseModel):
+    id: uuid.UUID
+    message: Literal["user_hard_deleted"]

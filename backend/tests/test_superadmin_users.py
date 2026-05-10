@@ -16,9 +16,11 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_super_admin
 from app.core.security import create_token_with_secret, decode_token, hash_password
 from app.main import app
+from app.models.activity_log import ActivityLog
 from app.models.enums import OTPRole, UserStatus
 from app.modules.auth import service as auth_service
 from app.modules.booking.router import create_booking as create_booking_endpoint
+from app.modules.superadmin.user_service import hard_delete_user
 
 
 def _make_db_result(*, scalar_or_none=None, scalar_value=None, all_value=None, one_or_none_value=None):
@@ -164,6 +166,34 @@ async def test_superadmin_user_block_deleted_returns_409():
 
     assert response.status_code == 409
     assert response.json() == {"error": "user_deleted"}
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_user_removes_related_records_and_logs():
+    super_admin = _override_super_admin()
+    user = SimpleNamespace(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        phone="+905551112233",
+        status=UserStatus.deleted,
+        is_blocked=False,
+    )
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[_make_db_result(scalar_or_none=user), None, None, None])
+    added_objects: list[object] = []
+    session.add = MagicMock(side_effect=added_objects.append)
+    session.commit = AsyncMock()
+
+    result = await hard_delete_user(session, super_admin, user.id)
+
+    assert result.id == user.id
+    assert result.message == "user_hard_deleted"
+    assert session.execute.await_count == 4
+    assert session.commit.await_count == 1
+    assert len(added_objects) == 1
+    assert isinstance(added_objects[0], ActivityLog)
+    assert added_objects[0].action_type == "user_hard_deleted"
+    assert added_objects[0].entity_id == str(user.id)
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,14 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import ActionConfirmSheet from "@/components/ActionConfirmSheet"
 import { SuperAdminApiError, superAdminDelete, superAdminGet, superAdminPost, superAdminPut } from "@/lib/superadmin-api"
 
-import type { SuperAdminTenantSummary, SuperAdminUserDetailResponse, SuperAdminUserListItem, SuperAdminUserListResponse, UserStatus } from "./types"
+import type {
+  SuperAdminTenantSummary,
+  SuperAdminUserDetailResponse,
+  SuperAdminUserHardDeleteResponse,
+  SuperAdminUserListItem,
+  SuperAdminUserListResponse,
+  UserStatus,
+} from "./types"
 import { buildTenantUserUrl, formatDateTime, formatUserName, getStatusBadgeClass, getStatusLabel } from "./utils"
 
 type SortKey = "created_at" | "phone" | "first_name" | "last_name" | "booking_count" | "last_booking_at"
@@ -66,6 +73,7 @@ export default function SuperAdminUsersPage() {
   const [detailError, setDetailError] = useState("")
 
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
+  const [hardDeleteTarget, setHardDeleteTarget] = useState<SuperAdminUserDetailResponse | null>(null)
   const [blockReason, setBlockReason] = useState("")
   const [actionLoading, setActionLoading] = useState(false)
   const [impersonatingId, setImpersonatingId] = useState<string | null>(null)
@@ -228,6 +236,27 @@ export default function SuperAdminUsersPage() {
       if (err instanceof SuperAdminApiError) setError(err.message)
       else if (err instanceof Error) setError(err.message)
       else setError("Kullanici geri yuklenemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function handleHardDelete() {
+    if (!hardDeleteTarget) return
+    setActionLoading(true)
+    setError("")
+    setDetailError("")
+    setMessage("")
+    try {
+      await superAdminDelete<SuperAdminUserHardDeleteResponse>(`/api/v1/superadmin/users/${hardDeleteTarget.id}/hard`)
+      setMessage("Kullanici kalici olarak silindi.")
+      setHardDeleteTarget(null)
+      closeDetail()
+      await fetchUsers()
+    } catch (err: unknown) {
+      if (err instanceof SuperAdminApiError) setDetailError(err.message)
+      else if (err instanceof Error) setDetailError(err.message)
+      else setDetailError("Kullanici kalici olarak silinemedi.")
     } finally {
       setActionLoading(false)
     }
@@ -538,6 +567,21 @@ export default function SuperAdminUsersPage() {
                   </div>
                 </section>
 
+                <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-red-100">Kalici Silme</h3>
+                    <p className="mt-1 text-sm text-red-200/80">User, booking gecmisi ve user OTP kayitlari DB&apos;den silinir.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setHardDeleteTarget(detailData)}
+                    disabled={actionLoading}
+                    className="rounded border border-red-500/60 px-3 py-2 text-sm font-semibold text-red-100 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Hard Delete
+                  </button>
+                </section>
+
                 <section className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
                   <h3 className="text-sm font-semibold text-zinc-100">Booking Gecmisi</h3>
                   {detailData.bookings.items.length === 0 ? (
@@ -607,6 +651,24 @@ export default function SuperAdminUsersPage() {
           </div>
         </div>
       )}
+
+      <ActionConfirmSheet
+        open={hardDeleteTarget !== null}
+        title="Kullaniciyi Kalici Olarak Sil"
+        description={
+          hardDeleteTarget
+            ? `${formatUserName(hardDeleteTarget.first_name, hardDeleteTarget.last_name)} DB'den kalici olarak silinecek.`
+            : ""
+        }
+        confirmText="Hard Delete"
+        confirmTone="danger"
+        isLoading={actionLoading}
+        onCancel={() => {
+          if (actionLoading) return
+          setHardDeleteTarget(null)
+        }}
+        onConfirm={handleHardDelete}
+      />
     </div>
   )
 }

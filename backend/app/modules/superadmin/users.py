@@ -16,6 +16,7 @@ from app.models.super_admin import SuperAdmin
 from app.modules.superadmin.user_schemas import (
     SuperAdminUserBlockRequest,
     SuperAdminUserDetailResponse,
+    SuperAdminUserHardDeleteResponse,
     SuperAdminUserListQuery,
     SuperAdminUserListResponse,
     SuperAdminUserStatusResponse,
@@ -23,6 +24,7 @@ from app.modules.superadmin.user_schemas import (
 from app.modules.superadmin.user_service import (
     block_user,
     get_user_detail,
+    hard_delete_user,
     list_users,
     restore_user,
     soft_delete_user,
@@ -113,6 +115,15 @@ async def super_admin_soft_delete_user(
     super_admin: SuperAdmin = Depends(get_current_super_admin),
 ):
     return await soft_delete_user(db, super_admin, user_id)
+
+
+@router.delete("/{user_id}/hard", response_model=SuperAdminUserHardDeleteResponse, status_code=200)
+async def super_admin_hard_delete_user(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    super_admin: SuperAdmin = Depends(get_current_super_admin),
+):
+    return await hard_delete_user(db, super_admin, user_id)
 
 
 @router.post("/{user_id}/impersonate", status_code=status.HTTP_200_OK)
