@@ -98,6 +98,7 @@ async def test_list_tenants_success_with_pagination():
         id=uuid.uuid4(),
         subdomain="acme",
         name="Acme",
+        address="Acme Mah. No: 1",
         status=TenantStatus.active,
         is_active=True,
         created_at=datetime.now(timezone.utc),
@@ -106,6 +107,7 @@ async def test_list_tenants_success_with_pagination():
         id=uuid.uuid4(),
         subdomain="demo",
         name="Demo",
+        address="Demo Cad. No: 2",
         status=TenantStatus.inactive,
         is_active=False,
         created_at=datetime.now(timezone.utc),
@@ -180,6 +182,7 @@ async def test_create_tenant_service_transaction_success(monkeypatch):
     body = TenantCreateRequest(
         subdomain="acme-shop",
         name="Acme Shop",
+        address="Acme Mah. Randevu Sok. No: 1",
         admin_first_name="Ali",
         admin_last_name="Veli",
         admin_phone="+905551112233",
@@ -231,6 +234,7 @@ async def test_create_tenant_service_transaction_success(monkeypatch):
     result = await create_tenant(session, super_admin, body)
 
     assert result.tenant.subdomain == "acme-shop"
+    assert result.tenant.address == "Acme Mah. Randevu Sok. No: 1"
     assert result.admin.email == "owner@acme.com"
     assert result.domain_sync is not None
     assert result.domain_sync.updated is True
@@ -323,6 +327,7 @@ async def test_create_tenant_service_duplicate_subdomain_409():
     body = TenantCreateRequest(
         subdomain="acme",
         name="Acme Shop",
+        address="Acme Mah. No: 1",
         admin_first_name="Ali",
         admin_last_name="Veli",
         admin_phone="+905551112233",
@@ -346,6 +351,7 @@ async def test_update_deleted_tenant_returns_409():
         id=uuid.uuid4(),
         subdomain="old",
         name="Old",
+        address="Old Mah. No: 1",
         status=TenantStatus.deleted,
         is_active=False,
         created_at=datetime.now(timezone.utc),
@@ -374,6 +380,7 @@ async def test_update_tenant_commit_integrity_error_maps_to_409():
         id=uuid.uuid4(),
         subdomain="acme",
         name="Acme",
+        address="Acme Mah. No: 1",
         status=TenantStatus.active,
         is_active=True,
         created_at=datetime.now(timezone.utc),
@@ -404,7 +411,7 @@ async def test_update_tenant_commit_integrity_error_maps_to_409():
             session,
             _override_super_admin(),
             tenant.id,
-            SimpleNamespace(subdomain=None, name=None, admin_phone=None, admin_email="OWNER@ACME.COM"),
+            SimpleNamespace(subdomain=None, name=None, address=None, admin_phone=None, admin_email="OWNER@ACME.COM"),
         )
 
     assert exc_info.value.status_code == 409

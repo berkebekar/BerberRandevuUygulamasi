@@ -8,8 +8,13 @@ import type { Metadata } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Berber Randevu",
-  description: "Tek berber randevu sistemi",
+  title: "bbsoft",
+  description: "BBSoft randevu sistemi",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 }
 
 export default function RootLayout({

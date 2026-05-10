@@ -13,6 +13,7 @@ test("tenant create flow", async ({ request }) => {
     data: {
       subdomain,
       name: `E2E Tenant ${suffix}`,
+      address: `E2E Mah. Test Sok. No: ${String(suffix).slice(-3)}`,
       admin_first_name: "E2E",
       admin_last_name: "Admin",
       admin_phone: `+90555${String(suffix).slice(-7)}`,

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bbGradient" x1="22" y1="18" x2="110" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#42c7ff" />
+      <stop offset="1" stop-color="#1599ee" />
+    </linearGradient>
+  </defs>
+  <text
+    x="64"
+    y="88"
+    fill="url(#bbGradient)"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="82"
+    font-weight="900"
+    text-anchor="middle"
+    letter-spacing="-8"
+  >bb</text>
+</svg>

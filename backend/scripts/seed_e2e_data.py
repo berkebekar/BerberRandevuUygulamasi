@@ -47,6 +47,7 @@ async def _ensure_super_admin(db) -> tuple[str, str]:
 async def _ensure_tenant_and_admin(db) -> tuple[Tenant, Admin]:
     subdomain = os.getenv("E2E_TENANT_SUBDOMAIN", "e2e-tenant")
     tenant_name = os.getenv("E2E_TENANT_NAME", "E2E Tenant")
+    tenant_address = os.getenv("E2E_TENANT_ADDRESS", "E2E Mah. Test Sok. No: 1")
 
     tenant_result = await db.execute(select(Tenant).where(Tenant.subdomain == subdomain))
     tenant = tenant_result.scalar_one_or_none()
@@ -54,6 +55,7 @@ async def _ensure_tenant_and_admin(db) -> tuple[Tenant, Admin]:
         tenant = Tenant(
             subdomain=subdomain,
             name=tenant_name,
+            address=tenant_address,
             status=TenantStatus.active,
             is_active=True,
         )
@@ -61,6 +63,7 @@ async def _ensure_tenant_and_admin(db) -> tuple[Tenant, Admin]:
         await db.flush()
     else:
         tenant.name = tenant_name
+        tenant.address = tenant_address
         tenant.status = TenantStatus.active
         tenant.is_active = True
 

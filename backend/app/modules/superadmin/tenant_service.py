@@ -161,6 +161,7 @@ def _tenant_item(tenant: Tenant, user_count: int, booking_count: int) -> TenantL
         id=tenant.id,
         subdomain=tenant.subdomain,
         name=tenant.name,
+        address=tenant.address,
         status=tenant.status,
         is_active=tenant.is_active,
         created_at=tenant.created_at,
@@ -321,6 +322,7 @@ async def get_tenant_detail(db: AsyncSession, tenant_id: uuid.UUID) -> TenantDet
         id=tenant.id,
         subdomain=tenant.subdomain,
         name=tenant.name,
+        address=tenant.address,
         status=tenant.status,
         is_active=tenant.is_active,
         created_at=tenant.created_at,
@@ -359,6 +361,7 @@ async def create_tenant(
     tenant = Tenant(
         subdomain=subdomain,
         name=body.name.strip(),
+        address=body.address.strip(),
         is_active=True,
         status=TenantStatus.active,
     )
@@ -494,6 +497,9 @@ async def update_tenant(
 
     if body.name is not None:
         tenant.name = body.name.strip()
+
+    if body.address is not None:
+        tenant.address = body.address.strip()
 
     if admin is not None and body.admin_email is not None:
         normalized_email = _normalize_email(body.admin_email)

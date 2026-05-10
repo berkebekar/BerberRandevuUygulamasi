@@ -4,6 +4,7 @@ export type TenantListItem = {
   id: string
   subdomain: string
   name: string
+  address: string | null
   status: TenantStatus
   is_active: boolean
   created_at: string
@@ -25,6 +26,7 @@ export type TenantDetailResponse = {
   id: string
   subdomain: string
   name: string
+  address: string | null
   status: TenantStatus
   is_active: boolean
   created_at: string
@@ -57,6 +59,7 @@ export type TenantDomainSyncResponse = {
 export type TenantCreateRequest = {
   subdomain: string
   name: string
+  address: string
   admin_first_name: string
   admin_last_name: string
   admin_phone: string

@@ -8,12 +8,15 @@ from starlette.requests import Request
 
 from app.core.database import get_db
 from app.models.tenant import Tenant
+from app.models.admin import Admin
 
 router = APIRouter(prefix="/tenant", tags=["tenant"])
 
 
 class TenantInfoResponse(BaseModel):
     name: str
+    phone: str | None = None
+    address: str | None = None
 
 
 @router.get("/info", response_model=TenantInfoResponse)
@@ -40,4 +43,11 @@ async def get_tenant_info(
     else:
         display_name = tenant.name
 
-    return TenantInfoResponse(name=display_name)
+    admin_result = await db.execute(select(Admin).where(Admin.tenant_id == tenant.id))
+    admin = admin_result.scalar_one_or_none()
+
+    return TenantInfoResponse(
+        name=display_name,
+        phone=admin.phone if admin else None,
+        address=tenant.address,
+    )

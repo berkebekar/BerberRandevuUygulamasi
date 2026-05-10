@@ -16,6 +16,7 @@ export default function SuperAdminNewTenantPage() {
 
   const [subdomain, setSubdomain] = useState("")
   const [name, setName] = useState("")
+  const [address, setAddress] = useState("")
   const [adminFirstName, setAdminFirstName] = useState("")
   const [adminLastName, setAdminLastName] = useState("")
   const [adminPhone, setAdminPhone] = useState("")
@@ -90,6 +91,7 @@ export default function SuperAdminNewTenantPage() {
     if (!canCheckSubdomain) return "Gecerli bir subdomain girin."
     if (subdomainAvailable === false) return "Subdomain musait degil."
     if (name.trim().length < 2) return "Isletme adi en az 2 karakter olmali."
+    if (address.trim().length < 5) return "Adres en az 5 karakter olmali."
     if (adminFirstName.trim().length < 2 || adminLastName.trim().length < 2) return "Admin ad soyad bilgisi zorunlu."
     if (!TR_PHONE_REGEX.test(adminPhone.trim())) return "Admin telefon +90XXXXXXXXXX formatinda olmali."
     if (!adminEmail.includes("@")) return "Gecerli admin email girin."
@@ -113,6 +115,7 @@ export default function SuperAdminNewTenantPage() {
       const payload: TenantCreateRequest = {
         subdomain: normalizedSubdomain,
         name: name.trim(),
+        address: address.trim(),
         admin_first_name: adminFirstName.trim(),
         admin_last_name: adminLastName.trim(),
         admin_phone: adminPhone.trim(),
@@ -193,6 +196,15 @@ export default function SuperAdminNewTenantPage() {
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-zinc-300">Adres</label>
+            <textarea
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              rows={3}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none"
             />
           </div>

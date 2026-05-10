@@ -18,6 +18,7 @@ import { buildTenantAdminUrl, formatTenantDate, getTenantStatusBadgeClass, getTe
 type EditableFields = {
   subdomain: string
   name: string
+  address: string
   admin_phone: string
   admin_email: string
 }
@@ -49,6 +50,7 @@ export default function SuperAdminTenantDetailPage() {
   const [editValues, setEditValues] = useState<EditableFields>({
     subdomain: "",
     name: "",
+    address: "",
     admin_phone: "",
     admin_email: "",
   })
@@ -62,6 +64,7 @@ export default function SuperAdminTenantDetailPage() {
       setEditValues({
         subdomain: data.subdomain,
         name: data.name,
+        address: data.address ?? "",
         admin_phone: data.admin?.phone ?? "",
         admin_email: data.admin?.email ?? "",
       })
@@ -96,6 +99,7 @@ export default function SuperAdminTenantDetailPage() {
       const payload = {
         subdomain: editValues.subdomain.trim(),
         name: editValues.name.trim(),
+        address: editValues.address.trim(),
         admin_phone: editValues.admin_phone.trim() || undefined,
         admin_email: editValues.admin_email.trim() || undefined,
       }
@@ -256,6 +260,7 @@ export default function SuperAdminTenantDetailPage() {
         <div className="mt-3 grid gap-2 text-sm text-zinc-300">
           <p>Email: {tenant.admin?.email ?? "-"}</p>
           <p>Telefon: {tenant.admin?.phone ?? "-"}</p>
+          <p>Adres: {tenant.address ?? "-"}</p>
           <p>Kayit: {formatTenantDate(tenant.created_at)}</p>
         </div>
       </section>
@@ -361,6 +366,13 @@ export default function SuperAdminTenantDetailPage() {
                 value={editValues.name}
                 onChange={(event) => setEditValues((prev) => ({ ...prev, name: event.target.value }))}
                 placeholder="Isletme adi"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none"
+              />
+              <textarea
+                value={editValues.address}
+                onChange={(event) => setEditValues((prev) => ({ ...prev, address: event.target.value }))}
+                placeholder="Adres"
+                rows={3}
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none"
               />
               <input
