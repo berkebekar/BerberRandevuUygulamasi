@@ -3,10 +3,20 @@
 .env.*.local
 
 # Python
+.venv/
 backend/.venv/
+venv/
+ENV/
 **/__pycache__/
 **/*.pyc
+**/*.pyo
+**/*.pyd
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/.mypy_cache/
 
 # Node/Next
 node_modules/
