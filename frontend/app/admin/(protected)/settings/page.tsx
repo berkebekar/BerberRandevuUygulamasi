@@ -417,35 +417,24 @@ export default function AdminSettingsPage() {
       </div>
 
       <div className="px-4 pt-6 space-y-4 max-w-sm mx-auto">
-        <div className="space-y-2">
-          {[
-            { key: "business" as const, label: "İşletme Ayarları" },
-            { key: "personal" as const, label: "Kişisel Ayarlar" },
-            { key: "whatsapp" as const, label: "Whatsapp Bot Ayarları" },
-          ].map((section) => {
-            const isActive = activeSection === section.key
-            return (
-              <button
-                key={section.key}
-                type="button"
-                onClick={() => setActiveSection(isActive ? null : section.key)}
-                className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                  isActive
-                    ? "border-zinc-500 bg-zinc-800 text-zinc-100"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"
-                }`}
-              >
-                <span>{section.label}</span>
-                <span aria-hidden="true">{isActive ? "-" : "+"}</span>
-              </button>
-            )
-          })}
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveSection(activeSection === "business" ? null : "business")}
+          className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
+            activeSection === "business"
+              ? "border-zinc-500 bg-zinc-800 text-zinc-100"
+              : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"
+          }`}
+        >
+          <span>İşletme Ayarları</span>
+          <span aria-hidden="true">{activeSection === "business" ? "-" : "+"}</span>
+        </button>
 
         {activeSection === "business" && (
           <>
             <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
               <h2 className="text-sm font-semibold text-zinc-200">Isletme Bilgileri</h2>
+              <p className="text-xs text-zinc-400">Musterilerin iletisim alaninda gorecegi isletme adi ve adresi.</p>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">Isletme Adi</label>
                 <input
@@ -468,6 +457,7 @@ export default function AdminSettingsPage() {
 
             <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3 overflow-hidden">
               <h2 className="text-sm font-semibold text-zinc-200">Calisma Saatleri</h2>
+              <p className="text-xs text-zinc-400">Randevu alinabilecek gunluk baslangic ve bitis saatlerini belirler.</p>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">Baslangic</label>
                 <input
@@ -490,6 +480,7 @@ export default function AdminSettingsPage() {
 
             <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
               <h2 className="text-sm font-semibold text-zinc-200">Randevu Suresi</h2>
+              <p className="text-xs text-zinc-400">Her randevu slotunun kac dakika surecegini belirler.</p>
               <label className="block text-xs font-medium text-zinc-400 mb-1">Sure secin</label>
               <select
                 value={slotDuration}
@@ -506,6 +497,7 @@ export default function AdminSettingsPage() {
 
             <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
               <h2 className="text-sm font-semibold text-zinc-200">Ileri Tarih Limiti</h2>
+              <p className="text-xs text-zinc-400">Musterilerin kac gun sonrasina kadar randevu alabilecegini belirler.</p>
               <label className="block text-xs font-medium text-zinc-400 mb-1">
                 Kac gun sonrasina kadar randevu alinabilir?
               </label>
@@ -658,10 +650,24 @@ export default function AdminSettingsPage() {
           </>
         )}
 
+        <button
+          type="button"
+          onClick={() => setActiveSection(activeSection === "personal" ? null : "personal")}
+          className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
+            activeSection === "personal"
+              ? "border-zinc-500 bg-zinc-800 text-zinc-100"
+              : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"
+          }`}
+        >
+          <span>Kişisel Ayarlar</span>
+          <span aria-hidden="true">{activeSection === "personal" ? "-" : "+"}</span>
+        </button>
+
         {activeSection === "personal" && (
           <>
             <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
               <h2 className="text-sm font-semibold text-zinc-200">Kisisel Bilgiler</h2>
+              <p className="text-xs text-zinc-400">Ad ve soyad musterilere gorunen berber adi olarak kullanilir.</p>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">Ad</label>
                 <input
@@ -710,6 +716,19 @@ export default function AdminSettingsPage() {
             </button>
           </>
         )}
+
+        <button
+          type="button"
+          onClick={() => setActiveSection(activeSection === "whatsapp" ? null : "whatsapp")}
+          className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
+            activeSection === "whatsapp"
+              ? "border-zinc-500 bg-zinc-800 text-zinc-100"
+              : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"
+          }`}
+        >
+          <span>Whatsapp Bot Ayarları</span>
+          <span aria-hidden="true">{activeSection === "whatsapp" ? "-" : "+"}</span>
+        </button>
 
         {activeSection === "whatsapp" && (
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-2">
