@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
 
@@ -111,43 +111,28 @@ export default function AdminStatisticsPage() {
   const today = todayInIstanbulIso()
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
-  const [appliedStart, setAppliedStart] = useState(today)
-  const [appliedEnd, setAppliedEnd] = useState(today)
   const [stats, setStats] = useState<RangeStatisticsResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  useEffect(() => {
-    let active = true
-    async function load() {
-      setLoading(true)
-      setError("")
-      try {
-        const data = await apiFetch<RangeStatisticsResponse>(
-          `/api/v1/admin/statistics/range?start_date=${appliedStart}&end_date=${appliedEnd}`
-        )
-        if (!active) return
-        setStats(data)
-      } catch (err: unknown) {
-        if (!active) return
-        setStats(null)
-        setError(err instanceof Error ? err.message : "Istatistikler yuklenemedi.")
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-    load()
-    return () => { active = false }
-  }, [appliedStart, appliedEnd])
-
-  function handleApply() {
+  async function handleApply() {
     if (endDate < startDate) {
       setError("Bitis tarihi baslangic tarihinden once olamaz.")
       return
     }
+    setLoading(true)
     setError("")
-    setAppliedStart(startDate)
-    setAppliedEnd(endDate)
+    try {
+      const data = await apiFetch<RangeStatisticsResponse>(
+        `/api/v1/admin/statistics/range?start_date=${startDate}&end_date=${endDate}`
+      )
+      setStats(data)
+    } catch (err: unknown) {
+      setStats(null)
+      setError(err instanceof Error ? err.message : "Istatistikler yuklenemedi.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -209,6 +194,12 @@ export default function AdminStatisticsPage() {
         {loading && (
           <div className="text-sm text-zinc-400 bg-zinc-900 rounded-xl border border-zinc-800 p-4">
             Istatistikler yukleniyor...
+          </div>
+        )}
+
+        {!loading && !stats && !error && (
+          <div className="text-sm text-zinc-400 bg-zinc-900 rounded-xl border border-zinc-800 p-4">
+            Istatistikleri gormek icin tarih araligini secip Uygula butonuna basin.
           </div>
         )}
 
