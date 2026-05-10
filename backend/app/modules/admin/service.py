@@ -10,15 +10,69 @@ from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.admin import Admin
 from app.models.booking import Booking
+from app.models.tenant import Tenant
 from app.models.user import User
+from app.modules.admin.schemas import AdminProfileUpdateRequest
 from app.modules.booking import service as booking_service
 from app.modules.schedule import service as schedule_service
 
 TZ = ZoneInfo("Europe/Istanbul")
+
+
+async def get_profile(db: AsyncSession, admin: Admin) -> dict:
+    """Adminin profil ve isletme bilgilerini dondurur."""
+    result = await db.execute(select(Tenant).where(Tenant.id == admin.tenant_id))
+    tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(404, {"error": "tenant_not_found"})
+
+    return {
+        "first_name": tenant.first_name,
+        "last_name": tenant.last_name,
+        "business_name": tenant.name,
+        "business_address": tenant.address,
+        "phone": admin.phone,
+        "email": admin.email,
+    }
+
+
+async def update_profile(
+    db: AsyncSession,
+    admin: Admin,
+    body: AdminProfileUpdateRequest,
+) -> dict:
+    """Adminin guncelleyebilecegi profil alanlarini kaydeder."""
+    result = await db.execute(select(Tenant).where(Tenant.id == admin.tenant_id))
+    tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(404, {"error": "tenant_not_found"})
+
+    if body.first_name is not None:
+        tenant.first_name = body.first_name.strip()
+    if body.last_name is not None:
+        tenant.last_name = body.last_name.strip()
+    if body.business_name is not None:
+        tenant.name = body.business_name.strip()
+    if body.business_address is not None:
+        tenant.address = body.business_address.strip()
+
+    await db.commit()
+    await db.refresh(tenant)
+
+    return {
+        "first_name": tenant.first_name,
+        "last_name": tenant.last_name,
+        "business_name": tenant.name,
+        "business_address": tenant.address,
+        "phone": admin.phone,
+        "email": admin.email,
+    }
 
 
 def _to_local_tz(dt: datetime) -> datetime:

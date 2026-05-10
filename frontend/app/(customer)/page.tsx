@@ -296,7 +296,6 @@ export default function HomePage() {
             <h1 className="text-lg font-bold text-zinc-100">
               {profile ? `Hoşgeldin ${profile.first_name} ${profile.last_name}` : "Hoşgeldin"}
             </h1>
-            <p className="text-xs text-zinc-400">Lütfen randevu almak için bir gün ve bir saat Seçin</p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -546,15 +545,14 @@ function ContactSheet({
   const address = contact?.address || "-"
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
         type="button"
         aria-label="Kapat"
         className="absolute inset-0 bg-black/70"
         onClick={onClose}
       />
-      <div className="absolute bottom-0 left-0 right-0 mx-auto max-w-lg rounded-t-2xl border-t border-zinc-800 bg-zinc-900 p-4">
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-zinc-700" />
+      <div className="relative w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-4 shadow-2xl shadow-black/40">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-base font-semibold text-zinc-100">İletişim</h3>
           <button type="button" onClick={onClose} className="text-sm text-zinc-400 hover:text-zinc-200">
@@ -566,8 +564,11 @@ function ContactSheet({
             type="button"
             onClick={() => copyValue("phone", contact?.phone)}
             disabled={!contact?.phone}
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-left text-sm text-zinc-200 disabled:cursor-default disabled:opacity-70"
+            className="relative w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 pr-10 text-left text-sm text-zinc-200 disabled:cursor-default disabled:opacity-70"
           >
+            <span className="absolute right-3 top-3 text-base" aria-hidden="true">
+              📋
+            </span>
             <span className="block text-xs text-zinc-500">Berber No</span>
             <span className="mt-1 block break-all font-medium">{phone}</span>
             {copiedField === "phone" && <span className="mt-1 block text-xs text-emerald-300">Kopyalandı!</span>}
@@ -576,8 +577,11 @@ function ContactSheet({
             type="button"
             onClick={() => copyValue("address", contact?.address)}
             disabled={!contact?.address}
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-left text-sm text-zinc-200 disabled:cursor-default disabled:opacity-70"
+            className="relative w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 pr-10 text-left text-sm text-zinc-200 disabled:cursor-default disabled:opacity-70"
           >
+            <span className="absolute right-3 top-3 text-base" aria-hidden="true">
+              📋
+            </span>
             <span className="block text-xs text-zinc-500">Adres</span>
             <span className="mt-1 block break-words font-medium">{address}</span>
             {copiedField === "address" && <span className="mt-1 block text-xs text-emerald-300">Kopyalandı!</span>}
@@ -589,7 +593,7 @@ function ContactSheet({
           rel="noreferrer"
           className="mt-4 block text-center text-sm font-medium text-zinc-300 hover:text-white"
         >
-          bbsoft.com.tr
+          Bu hizmet için detaylı bilgi almak için web sitemizi ziyaret edin bbsoft.com.tr
         </a>
       </div>
     </div>

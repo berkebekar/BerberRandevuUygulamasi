@@ -19,6 +19,8 @@ from app.core.dependencies import get_current_admin
 from app.models.admin import Admin
 from app.modules.admin import service as admin_service
 from app.modules.admin.schemas import (
+    AdminProfileResponse,
+    AdminProfileUpdateRequest,
     AdminOverviewResponse,
     AdminRangeStatisticsResponse,
     AdminStatisticsResponse,
@@ -26,6 +28,27 @@ from app.modules.admin.schemas import (
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.get("/profile", response_model=AdminProfileResponse)
+async def get_profile(
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    """Admin profil ve isletme iletisim bilgilerini dondurur."""
+    data = await admin_service.get_profile(db, admin)
+    return AdminProfileResponse(**data)
+
+
+@router.patch("/profile", response_model=AdminProfileResponse)
+async def update_profile(
+    body: AdminProfileUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    """Adminin duzenleyebilecegi profil bilgilerini gunceller."""
+    data = await admin_service.update_profile(db, admin, body)
+    return AdminProfileResponse(**data)
 
 
 @router.get("/dashboard", response_model=DashboardResponse)

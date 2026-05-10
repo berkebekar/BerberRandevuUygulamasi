@@ -372,7 +372,6 @@ export default function AdminDashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-zinc-100">Admin Paneli</h1>
-            <p className="text-xs text-zinc-400">Gunluk ozet ve randevular</p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -778,5 +777,4 @@ export default function AdminDashboardPage() {
     </>
   )
 }
-
 

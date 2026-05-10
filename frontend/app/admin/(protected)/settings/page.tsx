@@ -24,6 +24,17 @@ type DayOverride = {
   slot_duration_minutes: number | null
 }
 
+type AdminProfile = {
+  first_name: string | null
+  last_name: string | null
+  business_name: string
+  business_address: string | null
+  phone: string
+  email: string
+}
+
+type SettingsSection = "business" | "personal" | "whatsapp"
+
 const WEEK_DAYS = [
   { label: "Pzt", value: 0 },
   { label: "Sal", value: 1 },
@@ -69,9 +80,17 @@ export default function AdminSettingsPage() {
   const [closeLoading, setCloseLoading] = useState(false)
 
   // UI state
+  const [activeSection, setActiveSection] = useState<SettingsSection | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [profileLoading, setProfileLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [businessName, setBusinessName] = useState("")
+  const [businessAddress, setBusinessAddress] = useState("")
+  const [adminPhone, setAdminPhone] = useState("")
+  const [adminEmail, setAdminEmail] = useState("")
   const generalDefaultsRef = useRef({
     slotDuration: 30,
     workStart: "09:00",
@@ -137,6 +156,28 @@ export default function AdminSettingsPage() {
   }, [])
 
   useEffect(() => {
+    async function loadProfile() {
+      setProfileLoading(true)
+      setError("")
+      try {
+        const data = await apiFetch<AdminProfile>("/api/v1/admin/profile")
+        setFirstName(data.first_name ?? "")
+        setLastName(data.last_name ?? "")
+        setBusinessName(data.business_name ?? "")
+        setBusinessAddress(data.business_address ?? "")
+        setAdminPhone(data.phone ?? "")
+        setAdminEmail(data.email ?? "")
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Profil bilgileri yuklenemedi.")
+      } finally {
+        setProfileLoading(false)
+      }
+    }
+
+    loadProfile()
+  }, [])
+
+  useEffect(() => {
     async function loadSpecialDay() {
       if (!specialDate) return
       setSpecialLoading(true)
@@ -193,6 +234,14 @@ export default function AdminSettingsPage() {
   }, [closeDate])
 
   async function handleSaveSettings() {
+    if (!businessName.trim()) {
+      setError("Isletme adi zorunludur.")
+      return
+    }
+    if (!businessAddress.trim()) {
+      setError("Isletme adresi zorunludur.")
+      return
+    }
     if (!workStart || !workEnd) {
       setError("Baslangic ve bitis saatleri zorunludur.")
       return
@@ -202,6 +251,15 @@ export default function AdminSettingsPage() {
     setError("")
     setSuccess("")
     try {
+      const profile = await apiFetch<AdminProfile>("/api/v1/admin/profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          business_name: businessName,
+          business_address: businessAddress,
+        }),
+      })
+      setBusinessName(profile.business_name ?? "")
+      setBusinessAddress(profile.business_address ?? "")
       await apiPut("/api/v1/admin/schedule/settings", {
         slot_duration_minutes: slotDuration,
         work_start_time: workStart,
@@ -219,6 +277,37 @@ export default function AdminSettingsPage() {
       setError(err instanceof Error ? err.message : "Kaydetme basarisiz.")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function handleSavePersonalSettings() {
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("Ad ve soyad zorunludur.")
+      return
+    }
+
+    setProfileLoading(true)
+    setError("")
+    setSuccess("")
+    try {
+      const profile = await apiFetch<AdminProfile>("/api/v1/admin/profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          first_name: firstName,
+          last_name: lastName,
+        }),
+      })
+      setFirstName(profile.first_name ?? "")
+      setLastName(profile.last_name ?? "")
+      setBusinessName(profile.business_name ?? "")
+      setBusinessAddress(profile.business_address ?? "")
+      setAdminPhone(profile.phone ?? "")
+      setAdminEmail(profile.email ?? "")
+      setSuccess("Kisisel ayarlar kaydedildi.")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Kisisel ayarlar kaydedilemedi.")
+    } finally {
+      setProfileLoading(false)
     }
   }
 
@@ -328,187 +417,306 @@ export default function AdminSettingsPage() {
       </div>
 
       <div className="px-4 pt-6 space-y-4 max-w-sm mx-auto">
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3 overflow-hidden">
-          <h2 className="text-sm font-semibold text-zinc-200">Calisma Saatleri</h2>
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Baslangic</label>
-            <input
-              type="time"
-              value={workStart}
-              onChange={(e) => setWorkStart(e.target.value)}
-              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Bitis</label>
-            <input
-              type="time"
-              value={workEnd}
-              onChange={(e) => setWorkEnd(e.target.value)}
-              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
-            />
-          </div>
+        <div className="space-y-2">
+          {[
+            { key: "business" as const, label: "İşletme Ayarları" },
+            { key: "personal" as const, label: "Kişisel Ayarlar" },
+            { key: "whatsapp" as const, label: "Whatsapp Bot Ayarları" },
+          ].map((section) => {
+            const isActive = activeSection === section.key
+            return (
+              <button
+                key={section.key}
+                type="button"
+                onClick={() => setActiveSection(isActive ? null : section.key)}
+                className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                  isActive
+                    ? "border-zinc-500 bg-zinc-800 text-zinc-100"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"
+                }`}
+              >
+                <span>{section.label}</span>
+                <span aria-hidden="true">{isActive ? "-" : "+"}</span>
+              </button>
+            )
+          })}
         </div>
 
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-200">Randevu Suresi</h2>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">Sure secin</label>
-          <select
-            value={slotDuration}
-            onChange={(e) => setSlotDuration(Number(e.target.value))}
-            className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
-          >
-            {DURATION_OPTIONS.map((value) => (
-              <option key={value} value={value}>
-                {value} dk
-              </option>
-            ))}
-          </select>
-        </div>
+        {activeSection === "business" && (
+          <>
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+              <h2 className="text-sm font-semibold text-zinc-200">Isletme Bilgileri</h2>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Isletme Adi</label>
+                <input
+                  type="text"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900 text-zinc-100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Adres</label>
+                <textarea
+                  value={businessAddress}
+                  onChange={(e) => setBusinessAddress(e.target.value)}
+                  rows={3}
+                  className="block w-full max-w-full min-w-0 resize-none appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900 text-zinc-100"
+                />
+              </div>
+            </div>
 
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-200">Ileri Tarih Limiti</h2>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">
-            Kac gun sonrasina kadar randevu alinabilir?
-          </label>
-          <select
-            value={maxBookingDaysAhead}
-            onChange={(e) => setMaxBookingDaysAhead(Number(e.target.value))}
-            className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
-          >
-            {Array.from({ length: 60 }, (_, i) => i + 1).map((value) => (
-              <option key={value} value={value}>
-                {value} gun
-              </option>
-            ))}
-          </select>
-        </div>
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3 overflow-hidden">
+              <h2 className="text-sm font-semibold text-zinc-200">Calisma Saatleri</h2>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Baslangic</label>
+                <input
+                  type="time"
+                  value={workStart}
+                  onChange={(e) => setWorkStart(e.target.value)}
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Bitis</label>
+                <input
+                  type="time"
+                  value={workEnd}
+                  onChange={(e) => setWorkEnd(e.target.value)}
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
+                />
+              </div>
+            </div>
 
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-200">Ozel Gun</h2>
-          <p className="text-xs text-zinc-400">Secili tarihte calisma saati ve slot suresi ayri yonetilir.</p>
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Tarih</label>
-            <input
-              type="date"
-              value={specialDate}
-              min={todayIso}
-              max={maxSpecialDate}
-              onChange={(e) => setSpecialDate(e.target.value)}
-              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Baslangic</label>
-            <input
-              type="time"
-              value={specialWorkStart}
-              onChange={(e) => setSpecialWorkStart(e.target.value)}
-              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Bitis</label>
-            <input
-              type="time"
-              value={specialWorkEnd}
-              onChange={(e) => setSpecialWorkEnd(e.target.value)}
-              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">
-              Ozel Gun Slot Suresi
-            </label>
-            <select
-              value={specialSlotDuration}
-              onChange={(e) => setSpecialSlotDuration(Number(e.target.value))}
-              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
-            >
-              {DURATION_OPTIONS.map((value) => (
-                <option key={value} value={value}>
-                  {value} dk
-                </option>
-              ))}
-            </select>
-          </div>
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+              <h2 className="text-sm font-semibold text-zinc-200">Randevu Suresi</h2>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Sure secin</label>
+              <select
+                value={slotDuration}
+                onChange={(e) => setSlotDuration(Number(e.target.value))}
+                className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
+              >
+                {DURATION_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {value} dk
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={handleSaveSpecialDay}
-              disabled={specialLoading}
-              className="w-full py-2.5 bg-zinc-100 text-zinc-950 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
-            >
-              {specialLoading ? "Kaydediliyor..." : "Ozel Gunu Kaydet"}
-            </button>
-            <button
-              onClick={handleDeleteSpecialDay}
-              disabled={specialLoading || !specialExists}
-              className="w-full py-2.5 bg-zinc-800 text-zinc-200 rounded-lg font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700 transition-colors"
-            >
-              Ozel Gunu Sil
-            </button>
-          </div>
-        </div>
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+              <h2 className="text-sm font-semibold text-zinc-200">Ileri Tarih Limiti</h2>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">
+                Kac gun sonrasina kadar randevu alinabilir?
+              </label>
+              <select
+                value={maxBookingDaysAhead}
+                onChange={(e) => setMaxBookingDaysAhead(Number(e.target.value))}
+                className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
+              >
+                {Array.from({ length: 60 }, (_, i) => i + 1).map((value) => (
+                  <option key={value} value={value}>
+                    {value} gun
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-200">Gun Kapatma</h2>
-          <p className="text-xs text-zinc-400">Secili tarihi tamamen kapatir; istenirse tekrar acilir.</p>
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Tarih</label>
-            <input
-              type="date"
-              value={closeDate}
-              min={todayIso}
-              max={maxSpecialDate}
-              onChange={(e) => setCloseDate(e.target.value)}
-              className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={handleCloseDay}
-              disabled={closeLoading}
-              className="w-full py-2.5 bg-zinc-100 text-zinc-950 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
-            >
-              {closeLoading ? "Kaydediliyor..." : "Gunu Kapat"}
-            </button>
-            <button
-              onClick={handleOpenClosedDay}
-              disabled={closeLoading || !closeExists}
-              className="w-full py-2.5 bg-zinc-800 text-zinc-200 rounded-lg font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700 transition-colors"
-            >
-              Kapatmayi Kaldir
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-200">Izin Gunleri</h2>
-          <p className="text-xs text-zinc-400">
-            Berberin calismadigi haftanin gunlerini secin. Bu gunlerde slotlar kapali gorunur.
-          </p>
-          <div className="grid grid-cols-4 gap-2">
-            {WEEK_DAYS.map((day) => {
-              const isActive = closedDays.includes(day.value)
-              return (
-                <button
-                  key={day.value}
-                  type="button"
-                  aria-pressed={isActive}
-                  onClick={() => toggleDay(day.value)}
-                  className={`px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
-                    isActive
-                      ? "bg-emerald-500 text-zinc-950 border-emerald-400"
-                      : "bg-zinc-950 text-zinc-300 border-zinc-800 hover:border-zinc-500"
-                  }`}
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+              <h2 className="text-sm font-semibold text-zinc-200">Ozel Gun</h2>
+              <p className="text-xs text-zinc-400">Secili tarihte calisma saati ve slot suresi ayri yonetilir.</p>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Tarih</label>
+                <input
+                  type="date"
+                  value={specialDate}
+                  min={todayIso}
+                  max={maxSpecialDate}
+                  onChange={(e) => setSpecialDate(e.target.value)}
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Baslangic</label>
+                <input
+                  type="time"
+                  value={specialWorkStart}
+                  onChange={(e) => setSpecialWorkStart(e.target.value)}
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Bitis</label>
+                <input
+                  type="time"
+                  value={specialWorkEnd}
+                  onChange={(e) => setSpecialWorkEnd(e.target.value)}
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">
+                  Ozel Gun Slot Suresi
+                </label>
+                <select
+                  value={specialSlotDuration}
+                  onChange={(e) => setSpecialSlotDuration(Number(e.target.value))}
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
                 >
-                  {day.label}
+                  {DURATION_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {value} dk
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleSaveSpecialDay}
+                  disabled={specialLoading}
+                  className="w-full py-2.5 bg-zinc-100 text-zinc-950 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
+                >
+                  {specialLoading ? "Kaydediliyor..." : "Ozel Gunu Kaydet"}
                 </button>
-              )
-            })}
+                <button
+                  onClick={handleDeleteSpecialDay}
+                  disabled={specialLoading || !specialExists}
+                  className="w-full py-2.5 bg-zinc-800 text-zinc-200 rounded-lg font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700 transition-colors"
+                >
+                  Ozel Gunu Sil
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+              <h2 className="text-sm font-semibold text-zinc-200">Gun Kapatma</h2>
+              <p className="text-xs text-zinc-400">Secili tarihi tamamen kapatir; istenirse tekrar acilir.</p>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Tarih</label>
+                <input
+                  type="date"
+                  value={closeDate}
+                  min={todayIso}
+                  max={maxSpecialDate}
+                  onChange={(e) => setCloseDate(e.target.value)}
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleCloseDay}
+                  disabled={closeLoading}
+                  className="w-full py-2.5 bg-zinc-100 text-zinc-950 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
+                >
+                  {closeLoading ? "Kaydediliyor..." : "Gunu Kapat"}
+                </button>
+                <button
+                  onClick={handleOpenClosedDay}
+                  disabled={closeLoading || !closeExists}
+                  className="w-full py-2.5 bg-zinc-800 text-zinc-200 rounded-lg font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700 transition-colors"
+                >
+                  Kapatmayi Kaldir
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+              <h2 className="text-sm font-semibold text-zinc-200">Izin Gunleri</h2>
+              <p className="text-xs text-zinc-400">
+                Berberin calismadigi haftanin gunlerini secin. Bu gunlerde slotlar kapali gorunur.
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {WEEK_DAYS.map((day) => {
+                  const isActive = closedDays.includes(day.value)
+                  return (
+                    <button
+                      key={day.value}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => toggleDay(day.value)}
+                      className={`px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
+                        isActive
+                          ? "bg-emerald-500 text-zinc-950 border-emerald-400"
+                          : "bg-zinc-950 text-zinc-300 border-zinc-800 hover:border-zinc-500"
+                      }`}
+                    >
+                      {day.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveSettings}
+              disabled={isLoading}
+              className="w-full py-3 bg-zinc-100 text-zinc-950 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
+            >
+              {isLoading ? "Kaydediliyor..." : "Isletme Ayarlarini Kaydet"}
+            </button>
+          </>
+        )}
+
+        {activeSection === "personal" && (
+          <>
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
+              <h2 className="text-sm font-semibold text-zinc-200">Kisisel Bilgiler</h2>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Ad</label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900 text-zinc-100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Soyad</label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900 text-zinc-100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Numara</label>
+                <input
+                  type="text"
+                  value={adminPhone}
+                  readOnly
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-800 rounded-lg text-base outline-none bg-zinc-950 text-zinc-400"
+                />
+                <p className="mt-1 text-xs text-amber-300">Numaranızı değiştirmek için yetkiliyle iletişime geçin.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">E-posta</label>
+                <input
+                  type="email"
+                  value={adminEmail}
+                  readOnly
+                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-800 rounded-lg text-base outline-none bg-zinc-950 text-zinc-400"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleSavePersonalSettings}
+              disabled={profileLoading}
+              className="w-full py-3 bg-zinc-100 text-zinc-950 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
+            >
+              {profileLoading ? "Kaydediliyor..." : "Kisisel Ayarlari Kaydet"}
+            </button>
+          </>
+        )}
+
+        {activeSection === "whatsapp" && (
+          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-2">
+            <h2 className="text-sm font-semibold text-zinc-200">Whatsapp Bot Ayarları</h2>
+            <p className="text-xs text-zinc-400">Bu alana Whatsapp bot ozellikleri eklenecek.</p>
           </div>
-        </div>
+        )}
 
         {error && (
           <div className="text-sm text-red-300 bg-red-500/10 rounded-lg px-3 py-2">{error}</div>
@@ -518,14 +726,6 @@ export default function AdminSettingsPage() {
             {success}
           </div>
         )}
-
-        <button
-          onClick={handleSaveSettings}
-          disabled={isLoading}
-          className="w-full py-3 bg-zinc-100 text-zinc-950 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
-        >
-          {isLoading ? "Kaydediliyor..." : "Genel Ayarlari Kaydet"}
-        </button>
       </div>
     </div>
   )

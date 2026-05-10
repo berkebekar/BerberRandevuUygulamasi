@@ -19,6 +19,7 @@ from app.main import app
 from app.models.activity_log import ActivityLog
 from app.models.barber_profile import BarberProfile
 from app.models.enums import TenantStatus
+from app.models.tenant import Tenant
 from app.modules.superadmin.coolify_service import CoolifyTenantSyncResult, _build_frontend_labels, _merge_domains
 from app.modules.superadmin.tenant_schemas import TenantCreateRequest
 from app.modules.superadmin.tenant_service import create_tenant, hard_delete_tenant, sync_active_tenant_frontend_domains, update_tenant
@@ -244,6 +245,9 @@ async def test_create_tenant_service_transaction_success(monkeypatch):
     coolify_sync.assert_awaited_once_with("acme-shop")
     assert any(isinstance(obj, ActivityLog) for obj in added_objects)
     assert any(isinstance(obj, BarberProfile) for obj in added_objects)
+    tenant = next(obj for obj in added_objects if isinstance(obj, Tenant))
+    assert tenant.first_name == "Ali"
+    assert tenant.last_name == "Veli"
 
 
 def test_coolify_domain_merge_removes_wildcard_and_adds_tenant():

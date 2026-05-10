@@ -25,6 +25,7 @@ from fastapi import HTTPException
 
 from app.models.enums import BookingStatus, CancelledBy
 from app.modules.admin import service as admin_service
+from app.modules.admin.schemas import AdminProfileUpdateRequest
 from app.modules.schedule.schemas import SlotStatus
 
 TZ = ZoneInfo("Europe/Istanbul")
@@ -110,6 +111,72 @@ def _make_mock_db_for_dashboard(rows: list) -> AsyncMock:
 
 
 # ─── Dashboard Testleri ───────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_admin_profile_returns_tenant_and_admin_details():
+    tenant = SimpleNamespace(
+        id=TEST_TENANT_ID,
+        first_name="Berke",
+        last_name="Bekar",
+        name="Berber Bekar",
+        address="Acme Mah. No: 1",
+    )
+    admin = SimpleNamespace(
+        tenant_id=TEST_TENANT_ID,
+        phone="+905551112233",
+        email="owner@example.com",
+    )
+    session = AsyncMock()
+    session.execute = AsyncMock(return_value=_make_db_result(tenant))
+
+    result = await admin_service.get_profile(session, admin)
+
+    assert result["first_name"] == "Berke"
+    assert result["last_name"] == "Bekar"
+    assert result["business_name"] == "Berber Bekar"
+    assert result["business_address"] == "Acme Mah. No: 1"
+    assert result["phone"] == "+905551112233"
+    assert result["email"] == "owner@example.com"
+
+
+@pytest.mark.asyncio
+async def test_admin_profile_update_changes_editable_tenant_fields_only():
+    tenant = SimpleNamespace(
+        id=TEST_TENANT_ID,
+        first_name="Eski",
+        last_name="Isim",
+        name="Eski Isletme",
+        address="Eski Adres",
+    )
+    admin = SimpleNamespace(
+        tenant_id=TEST_TENANT_ID,
+        phone="+905551112233",
+        email="owner@example.com",
+    )
+    session = AsyncMock()
+    session.execute = AsyncMock(return_value=_make_db_result(tenant))
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+
+    result = await admin_service.update_profile(
+        session,
+        admin,
+        AdminProfileUpdateRequest(
+            first_name="Berke",
+            last_name="Bekar",
+            business_name="Yeni Isletme",
+            business_address="Yeni Mah. No: 2",
+        ),
+    )
+
+    assert tenant.first_name == "Berke"
+    assert tenant.last_name == "Bekar"
+    assert tenant.name == "Yeni Isletme"
+    assert tenant.address == "Yeni Mah. No: 2"
+    assert result["phone"] == "+905551112233"
+    assert result["email"] == "owner@example.com"
+    session.commit.assert_awaited_once()
+
 
 @pytest.mark.asyncio
 async def test_dashboard_booking_list_correct():
@@ -406,4 +473,3 @@ async def test_statistics_returns_expected_summaries(monkeypatch):
 
     assert result["weekly_summary"]["total_bookings"] == 4
     assert result["monthly_summary"]["total_bookings"] == 5
-

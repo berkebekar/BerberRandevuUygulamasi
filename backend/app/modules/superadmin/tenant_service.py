@@ -362,6 +362,8 @@ async def create_tenant(
         subdomain=subdomain,
         name=body.name.strip(),
         address=body.address.strip(),
+        first_name=body.admin_first_name.strip(),
+        last_name=body.admin_last_name.strip(),
         is_active=True,
         status=TenantStatus.active,
     )

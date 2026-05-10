@@ -8,10 +8,40 @@ Business logic yoktur; sadece veri dogrulama ve serilestirme yapilir.
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.enums import BookingStatus, CancelledBy
 from app.modules.schedule.schemas import SlotStatus
+
+
+class AdminProfileResponse(BaseModel):
+    """Adminin kendi profil ve isletme iletisim bilgileri."""
+
+    first_name: str | None = None
+    last_name: str | None = None
+    business_name: str
+    business_address: str | None = None
+    phone: str
+    email: str
+
+
+class AdminProfileUpdateRequest(BaseModel):
+    """Adminin guncelleyebilecegi profil alanlari."""
+
+    first_name: str | None = Field(default=None, min_length=2, max_length=100)
+    last_name: str | None = Field(default=None, min_length=2, max_length=100)
+    business_name: str | None = Field(default=None, min_length=2, max_length=255)
+    business_address: str | None = Field(default=None, min_length=5, max_length=500)
+
+    @field_validator("first_name", "last_name", "business_name", "business_address")
+    @classmethod
+    def strip_required_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("field_required")
+        return stripped
 
 
 class DashboardBookingItem(BaseModel):
