@@ -301,15 +301,14 @@ export default function AuthPage() {
           )}
 
         </div>
-        <div className="mt-5 text-center text-xs text-zinc-500">
-          <p>Bir BBSoft ürünü</p>
+        <div className="mt-5 text-center text-xs">
           <a
             href="https://bbsoft.com.tr"
             target="_blank"
             rel="noreferrer"
             className="mt-1 inline-block text-zinc-300 underline underline-offset-4 hover:text-white"
           >
-            Bize ulaşın
+            Bu ürün için bize ulaşın
           </a>
         </div>
       </div>
