@@ -21,8 +21,8 @@ export default function SuperAdminProtectedLayout({
 }) {
   return (
     <SuperAdminProtectedRoute>
-      <div className="grid min-h-[100dvh] grid-cols-1 md:grid-cols-[250px_1fr]">
-        <aside className="border-b border-zinc-800 bg-zinc-900/80 px-4 py-5 md:border-b-0 md:border-r">
+      <div className="grid min-h-[100dvh] min-w-0 grid-cols-1 overflow-x-hidden md:grid-cols-[250px_minmax(0,1fr)]">
+        <aside className="min-w-0 border-b border-zinc-800 bg-zinc-900/80 px-4 py-5 md:border-b-0 md:border-r">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Super Admin</p>
           <nav className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-1">
             {MENU_ITEMS.map((item) => (
@@ -37,7 +37,7 @@ export default function SuperAdminProtectedLayout({
           </nav>
         </aside>
 
-        <main className="flex min-h-0 flex-col">
+        <main className="flex min-h-0 min-w-0 flex-col">
           <header className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/60 px-4 py-3">
             <div>
               <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Platform Console</p>
@@ -45,7 +45,7 @@ export default function SuperAdminProtectedLayout({
             </div>
             <SuperAdminLogoutButton />
           </header>
-          <section className="flex-1 px-4 py-5">{children}</section>
+          <section className="min-w-0 flex-1 overflow-x-hidden px-4 py-5">{children}</section>
         </main>
       </div>
     </SuperAdminProtectedRoute>
