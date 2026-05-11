@@ -43,12 +43,14 @@ function normalizeConfiguredDomain(value: string | undefined): string {
 }
 
 function resolveAppDomain(currentHostname: string): string {
-  const configuredDomain =
-    normalizeConfiguredDomain(process.env.NEXT_PUBLIC_APP_DOMAIN) ||
-    normalizeConfiguredDomain(process.env.NEXT_PUBLIC_SUPERADMIN_HOST)
+  const configuredDomain = normalizeConfiguredDomain(process.env.NEXT_PUBLIC_APP_DOMAIN)
 
   if (configuredDomain) {
     return configuredDomain.startsWith("www.") ? configuredDomain.slice(4) : configuredDomain
+  }
+
+  if (currentHostname.startsWith("superadmin.")) {
+    return currentHostname.slice("superadmin.".length)
   }
 
   if (currentHostname === "bbsoft.com.tr" || currentHostname.endsWith(".bbsoft.com.tr")) {

@@ -16,18 +16,17 @@ function normalizeConfiguredHost(value: string | undefined): string {
     .split(":")[0]
 }
 
-const RESERVED_SUBDOMAINS = new Set(["api", "admin", "mail", "smtp", "pop", "ftp"])
+const RESERVED_SUBDOMAINS = new Set(["api", "admin", "mail", "smtp", "pop", "ftp", "superadmin"])
 
-function configuredPlatformHost(): string {
+function configuredAppDomain(): string {
   return (
-    normalizeConfiguredHost(process.env.NEXT_PUBLIC_SUPERADMIN_HOST) ||
     normalizeConfiguredHost(process.env.NEXT_PUBLIC_APP_DOMAIN) ||
     "bbsoft.com.tr"
   )
 }
 
 function isPlatformHost(host: string): boolean {
-  const configuredHost = configuredPlatformHost()
+  const configuredHost = configuredAppDomain()
   const wwwHost = configuredHost.startsWith("www.") ? configuredHost : `www.${configuredHost}`
 
   if (host === configuredHost || host === wwwHost) {
@@ -38,7 +37,7 @@ function isPlatformHost(host: string): boolean {
 }
 
 function isReservedSubdomain(host: string): boolean {
-  const configuredHost = configuredPlatformHost()
+  const configuredHost = configuredAppDomain()
   if (!host.endsWith(`.${configuredHost}`)) {
     return false
   }
@@ -67,8 +66,7 @@ function isCustomerApiRoute(pathname: string): boolean {
 function isSuperAdminHost(host: string): boolean {
   const configuredHost =
     normalizeConfiguredHost(process.env.NEXT_PUBLIC_SUPERADMIN_HOST) ||
-    normalizeConfiguredHost(process.env.NEXT_PUBLIC_APP_DOMAIN) ||
-    "bbsoft.com.tr"
+    `superadmin.${configuredAppDomain()}`
 
   if (host === configuredHost) {
     return true
@@ -92,7 +90,7 @@ export function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-tenant-host", host)
 
-  if (isReservedSubdomain(host)) {
+  if (isReservedSubdomain(host) && !isSuperAdminHost(host)) {
     return new NextResponse("Not Found", { status: 404 })
   }
 
@@ -104,6 +102,24 @@ export function middleware(request: NextRequest) {
     }
 
     if (isCustomerRoute(pathname) || isCustomerApiRoute(pathname)) {
+      return new NextResponse("Not Found", { status: 404 })
+    }
+
+    return NextResponse.next({ request: { headers: requestHeaders } })
+  }
+
+  if (isSuperAdminHost(host)) {
+    if (pathname === "/") {
+      const url = request.nextUrl.clone()
+      url.pathname = "/superadmin"
+      return NextResponse.redirect(url)
+    }
+
+    if (isCustomerRoute(pathname) || isCustomerApiRoute(pathname)) {
+      return new NextResponse("Not Found", { status: 404 })
+    }
+
+    if (pathname === "/platform" || pathname.startsWith("/platform/")) {
       return new NextResponse("Not Found", { status: 404 })
     }
 

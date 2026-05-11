@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     env: str = "development"
     super_admin_session_secret: str = ""
     super_admin_cookie_name: str = "superadmin_session"
+    superadmin_host: str = ""
     superadmin_stats_cache_ttl_seconds: int = 30
     frontend_healthcheck_url: str = ""
     coolify_api_url: str = ""

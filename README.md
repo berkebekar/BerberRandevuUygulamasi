@@ -58,17 +58,19 @@ npm run build
 - `DATABASE_URL`
 - `SECRET_KEY`
 - `ENV` (`development` / `production`)
-- `APP_DOMAIN`
+- `APP_DOMAIN` (tenant taban domaini; or. `bbsoft.com.tr`)
 - `ALLOWED_SUBDOMAINS`
 - `FRONTEND_HEALTHCHECK_URL` (opsiyonel, super admin monitoring frontend health check hedefi)
 - `COOLIFY_API_URL` (opsiyonel, tenant olusunca frontend domain/SSL otomasyonu icin)
 - `COOLIFY_API_TOKEN` (opsiyonel)
 - `COOLIFY_FRONTEND_APP_UUID` (opsiyonel)
 - `COOLIFY_INSTANT_DEPLOY_ON_TENANT_CREATE` (opsiyonel, varsayilan `true`)
+- `SUPERADMIN_HOST` (opsiyonel, varsayilan `superadmin.{APP_DOMAIN}`)
 - `SUPER_ADMIN_SESSION_SECRET` (opsiyonel)
 - `SUPER_ADMIN_COOKIE_NAME` (opsiyonel)
 
 Öne çıkan frontend değişkenleri:
 - `NEXT_PUBLIC_API_URL` (opsiyonel)
 - `BACKEND_URL` (rewrite hedefi)
-- `NEXT_PUBLIC_SUPERADMIN_HOST` (opsiyonel, varsayılan `bbsoft.com.tr`; super admin panel hostu)
+- `NEXT_PUBLIC_APP_DOMAIN` (tenant taban domaini; or. `bbsoft.com.tr`)
+- `NEXT_PUBLIC_SUPERADMIN_HOST` (opsiyonel, varsayilan `superadmin.bbsoft.com.tr`; super admin panel hostu)

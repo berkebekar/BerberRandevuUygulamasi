@@ -50,11 +50,19 @@ def _tenant_domains(subdomains: list[str], app_domain: str) -> list[str]:
     return domains
 
 
-def _platform_frontend_domains(app_domain: str) -> list[str]:
+def _superadmin_frontend_domain(app_domain: str, superadmin_host: str = "") -> str | None:
     domain = app_domain.strip().lower()
-    if not domain:
-        return []
-    return [f"https://{domain}", f"https://www.{domain}"]
+    host = superadmin_host.strip().lower().removeprefix("http://").removeprefix("https://").split("/")[0]
+    if host:
+        return f"https://{host}"
+    if domain:
+        return f"https://superadmin.{domain}"
+    return None
+
+
+def _platform_frontend_domains(app_domain: str, superadmin_host: str = "") -> list[str]:
+    domain = _superadmin_frontend_domain(app_domain, superadmin_host)
+    return [domain] if domain else []
 
 
 def _split_domains(value: str | None) -> list[str]:
@@ -239,7 +247,7 @@ async def ensure_tenant_frontend_domain(subdomain: str) -> CoolifyTenantSyncResu
         next_domains, changed = _merge_domains(
             current_domains,
             domain,
-            extra_domains=_platform_frontend_domains(settings.app_domain),
+            extra_domains=_platform_frontend_domains(settings.app_domain, settings.superadmin_host),
         )
         if not changed:
             return CoolifyTenantSyncResult(
@@ -292,7 +300,9 @@ async def sync_tenant_frontend_domains(subdomains: list[str]) -> CoolifyTenantSy
     app_uuid = settings.coolify_frontend_app_uuid.strip()
     api_url = _clean_base_url(settings.coolify_api_url)
     tenant_domains = _tenant_domains(subdomains, settings.app_domain)
-    next_domains = _build_domains_value([*_platform_frontend_domains(settings.app_domain), *tenant_domains])
+    next_domains = _build_domains_value(
+        [*_platform_frontend_domains(settings.app_domain, settings.superadmin_host), *tenant_domains]
+    )
     headers = {
         "Authorization": f"Bearer {settings.coolify_api_token.strip()}",
         "Accept": "application/json",
