@@ -27,7 +27,12 @@ from app.modules.superadmin.coolify_service import (
     _platform_frontend_domains,
 )
 from app.modules.superadmin.tenant_schemas import TenantCreateRequest
-from app.modules.superadmin.tenant_service import create_tenant, hard_delete_tenant, sync_active_tenant_frontend_domains, update_tenant
+from app.modules.superadmin.tenant_service import (
+    create_tenant,
+    hard_delete_tenant,
+    sync_active_tenant_frontend_domains,
+    update_tenant,
+)
 
 
 def _make_db_result(
@@ -184,6 +189,9 @@ async def test_tenant_detail_not_found_404():
 
 @pytest.mark.asyncio
 async def test_create_tenant_service_transaction_success(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "tenant_domain_strategy", "wildcard")
+    monkeypatch.setattr(settings, "app_domain", "bbsoft.com.tr")
     super_admin = _override_super_admin()
     body = TenantCreateRequest(
         subdomain="acme-shop",
@@ -243,16 +251,84 @@ async def test_create_tenant_service_transaction_success(monkeypatch):
     assert result.tenant.address == "Acme Mah. Randevu Sok. No: 1"
     assert result.admin.email == "owner@acme.com"
     assert result.domain_sync is not None
-    assert result.domain_sync.updated is True
-    assert result.domain_sync.deploy_requested is True
-    assert result.domain_sync.deployment_uuid == "deploy123"
+    assert result.domain_sync.updated is False
+    assert result.domain_sync.deploy_requested is False
+    assert result.domain_sync.deployment_uuid is None
+    assert result.domain_sync.reason == "wildcard_domain_strategy"
+    assert result.domain_sync.domain == "https://acme-shop.bbsoft.com.tr"
     assert session.commit.await_count == 1
-    coolify_sync.assert_awaited_once_with("acme-shop")
+    coolify_sync.assert_not_awaited()
     assert any(isinstance(obj, ActivityLog) for obj in added_objects)
     assert any(isinstance(obj, BarberProfile) for obj in added_objects)
     tenant = next(obj for obj in added_objects if isinstance(obj, Tenant))
     assert tenant.first_name == "Ali"
     assert tenant.last_name == "Veli"
+
+
+@pytest.mark.asyncio
+async def test_create_tenant_coolify_strategy_still_syncs_domain(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "tenant_domain_strategy", "coolify")
+    super_admin = _override_super_admin()
+    body = TenantCreateRequest(
+        subdomain="coolify-shop",
+        name="Coolify Shop",
+        address="Coolify Mah. Randevu Sok. No: 1",
+        admin_first_name="Ali",
+        admin_last_name="Veli",
+        admin_phone="+905551112244",
+        admin_email="owner@coolify.com",
+    )
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _make_db_result(scalar_or_none=None),
+            _make_db_result(scalar_or_none=None),
+            _make_db_result(scalar_or_none=None),
+        ]
+    )
+    added_objects: list[object] = []
+
+    def _add(obj):
+        added_objects.append(obj)
+
+    async def _flush():
+        for obj in added_objects:
+            if getattr(obj, "id", None) is None:
+                obj.id = uuid.uuid4()
+            if hasattr(obj, "created_at") and getattr(obj, "created_at", None) is None:
+                obj.created_at = datetime.now(timezone.utc)
+
+    async def _refresh(obj):
+        if getattr(obj, "id", None) is None:
+            obj.id = uuid.uuid4()
+        if hasattr(obj, "created_at") and getattr(obj, "created_at", None) is None:
+            obj.created_at = datetime.now(timezone.utc)
+
+    session.add = MagicMock(side_effect=_add)
+    session.flush = AsyncMock(side_effect=_flush)
+    session.refresh = AsyncMock(side_effect=_refresh)
+    session.commit = AsyncMock()
+    session.rollback = AsyncMock()
+    coolify_sync = AsyncMock(
+        return_value=CoolifyTenantSyncResult(
+            enabled=True,
+            domain="https://coolify-shop.bbsoft.com.tr",
+            domains=["https://coolify-shop.bbsoft.com.tr"],
+            updated=True,
+            deploy_requested=True,
+            deployment_uuid="deploy123",
+        )
+    )
+    monkeypatch.setattr("app.modules.superadmin.tenant_service.ensure_tenant_frontend_domain", coolify_sync)
+
+    result = await create_tenant(session, super_admin, body)
+
+    assert result.domain_sync is not None
+    assert result.domain_sync.updated is True
+    assert result.domain_sync.deploy_requested is True
+    assert result.domain_sync.deployment_uuid == "deploy123"
+    coolify_sync.assert_awaited_once_with("coolify-shop")
 
 
 def test_coolify_domain_merge_removes_wildcard_and_adds_tenant():
@@ -300,7 +376,29 @@ def test_coolify_frontend_labels_use_explicit_hosts_and_skip_api():
 
 
 @pytest.mark.asyncio
-async def test_sync_active_tenant_frontend_domains_uses_active_tenants(monkeypatch):
+async def test_sync_active_tenant_frontend_domains_skips_coolify_in_wildcard_strategy(monkeypatch):
+    super_admin = _override_super_admin()
+    session = AsyncMock()
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+    coolify_sync = AsyncMock()
+    monkeypatch.setattr("app.modules.superadmin.tenant_service.sync_tenant_frontend_domains", coolify_sync)
+
+    result = await sync_active_tenant_frontend_domains(session, super_admin)
+
+    coolify_sync.assert_not_awaited()
+    session.execute.assert_not_called()
+    assert result.enabled is True
+    assert result.updated is False
+    assert result.deploy_requested is False
+    assert result.reason == "wildcard_domain_strategy"
+    assert session.commit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_active_tenant_frontend_domains_uses_active_tenants_in_coolify_strategy(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "tenant_domain_strategy", "coolify")
     super_admin = _override_super_admin()
     session = AsyncMock()
     session.add = MagicMock()

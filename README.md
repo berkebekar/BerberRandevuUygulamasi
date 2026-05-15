@@ -65,6 +65,7 @@ npm run build
 - `COOLIFY_API_TOKEN` (opsiyonel)
 - `COOLIFY_FRONTEND_APP_UUID` (opsiyonel)
 - `COOLIFY_INSTANT_DEPLOY_ON_TENANT_CREATE` (opsiyonel, varsayilan `true`)
+- `TENANT_DOMAIN_STRATEGY` (`wildcard` / `coolify`; varsayilan `wildcard`)
 - `SUPERADMIN_HOST` (opsiyonel, varsayilan `superadmin.{APP_DOMAIN}`)
 - `SUPER_ADMIN_SESSION_SECRET` (opsiyonel)
 - `SUPER_ADMIN_COOKIE_NAME` (opsiyonel)

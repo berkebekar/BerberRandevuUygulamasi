@@ -132,19 +132,13 @@ export default function SuperAdminNewTenantPage() {
         payload
       )
       const sync = response.domain_sync
-      if (!sync) {
-        setError("Tenant olusturuldu ancak domain sync sonucu alinamadi. Tenant detayina gitmeden once Coolify ayarlarini kontrol edin.")
-        return
-      }
-      if (!sync.enabled) {
-        setError(`Tenant olusturuldu ancak Coolify otomasyonu kapali veya eksik: ${sync.reason ?? "ayar eksik"}.`)
-        return
-      }
-      if (sync.error) {
-        setError(`Tenant olusturuldu ancak Coolify domain sync basarisiz: ${sync.error}`)
-        return
-      }
-      if (sync.deploy_requested) {
+      if (!sync || sync.reason === "wildcard_domain_strategy") {
+        setSuccess("Tenant basariyla olusturuldu. Wildcard domain routing ile deploy beklemeden erisilebilir.")
+      } else if (!sync.enabled) {
+        setSuccess("Tenant basariyla olusturuldu. Coolify domain otomasyonu kapali; wildcard/manual routing ayarlarini kontrol edin.")
+      } else if (sync.error) {
+        setSuccess("Tenant basariyla olusturuldu. Manuel domain sync gerekiyorsa tenant listesinden baslatabilirsiniz.")
+      } else if (sync.deploy_requested) {
         setSuccess("Tenant basariyla olusturuldu. Domain eklendi ve deploy istegi gonderildi.")
       } else {
         setSuccess("Tenant basariyla olusturuldu. Domain eklendi.")

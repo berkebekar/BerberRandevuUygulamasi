@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     coolify_api_token: str = ""
     coolify_frontend_app_uuid: str = ""
     coolify_instant_deploy_on_tenant_create: bool = True
+    tenant_domain_strategy: str = "wildcard"
 
     # Redis — konuşma state yönetimi için (WhatsApp botu)
     redis_url: str = "redis://localhost:6379/0"

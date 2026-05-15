@@ -131,6 +131,9 @@ export default function SuperAdminTenantsPage() {
   }
 
   function buildDomainSyncMessage(result: TenantDomainSyncResponse): string {
+    if (result.reason === "wildcard_domain_strategy") {
+      return "Wildcard domain stratejisi aktif. Tenant domainleri proxy tarafinda yakalanir; Coolify domain sync gerekmez."
+    }
     if (!result.enabled) {
       return `Coolify otomasyonu kapali veya eksik ayar var: ${result.reason ?? "coolify_not_configured"}`
     }
@@ -177,7 +180,7 @@ export default function SuperAdminTenantsPage() {
             disabled={syncingDomains}
             className="rounded-lg border border-zinc-700 px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {syncingDomains ? "Senkronize ediliyor..." : "Domainleri Senkronize Et"}
+            {syncingDomains ? "Senkronize ediliyor..." : "Manuel Coolify Domain Sync"}
           </button>
           <Link
             href="/superadmin/tenants/new"

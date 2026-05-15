@@ -14,6 +14,7 @@ from sqlalchemy import asc, delete, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.phone import normalize_tr_phone
 from app.models.activity_log import ActivityLog
 from app.models.admin import Admin
@@ -139,7 +140,30 @@ def _domain_sync_response(
     )
 
 
+def _wildcard_domain_response(subdomain: str) -> TenantDomainSyncResponse:
+    settings = get_settings()
+    domain = None
+    app_domain = settings.app_domain.strip().lower()
+    if app_domain:
+        domain = f"https://{subdomain.strip().lower()}.{app_domain}"
+
+    return TenantDomainSyncResponse(
+        enabled=True,
+        updated=False,
+        deploy_requested=False,
+        reason="wildcard_domain_strategy",
+        domain=domain,
+        domains=[domain] if domain else [],
+        tenant_count=1,
+        error=None,
+    )
+
+
 async def _sync_created_tenant_domain(subdomain: str) -> TenantDomainSyncResponse:
+    settings = get_settings()
+    if settings.tenant_domain_strategy.strip().lower() == "wildcard":
+        return _wildcard_domain_response(subdomain)
+
     try:
         result = await ensure_tenant_frontend_domain(subdomain)
         return _domain_sync_response(result, tenant_count=1)
@@ -410,7 +434,7 @@ async def create_tenant(
         await db.rollback()
         mapped_error = _map_integrity_error_to_http(exc)
         if mapped_error is not None:
-            raise mapped_error
+            raise mapped_error from exc
         raise
 
     domain_sync = await _sync_created_tenant_domain(tenant.subdomain)
@@ -431,6 +455,30 @@ async def sync_active_tenant_frontend_domains(
     db: AsyncSession,
     super_admin: SuperAdmin,
 ) -> TenantDomainSyncResponse:
+    settings = get_settings()
+    if settings.tenant_domain_strategy.strip().lower() == "wildcard":
+        response = TenantDomainSyncResponse(
+            enabled=True,
+            updated=False,
+            deploy_requested=False,
+            reason="wildcard_domain_strategy",
+            domains=[],
+            tenant_count=0,
+            error=None,
+        )
+        await _log_activity(
+            db,
+            super_admin=super_admin,
+            action_type="tenant_domains_sync_skipped",
+            tenant_id=None,
+            metadata={
+                "reason": response.reason,
+                "deploy_requested": response.deploy_requested,
+            },
+        )
+        await db.commit()
+        return response
+
     subdomain_rows = await db.execute(
         select(Tenant.subdomain)
         .where(Tenant.status == TenantStatus.active, Tenant.is_active.is_(True))
@@ -534,7 +582,7 @@ async def update_tenant(
         await db.rollback()
         mapped_error = _map_integrity_error_to_http(exc)
         if mapped_error is not None:
-            raise mapped_error
+            raise mapped_error from exc
         raise
     return await get_tenant_detail(db, tenant.id)
 
