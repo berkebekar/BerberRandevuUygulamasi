@@ -12,8 +12,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PhoneInput, OTPInput } from "@/components"
-import { apiFetch, apiPost } from "@/lib/api"
+import { PhoneInput, OTPInput, TenantUnavailable } from "@/components"
+import { apiFetch, apiPost, isTenantAccessError } from "@/lib/api"
 
 // Formun hangi aşamada olduğunu temsil eder
 type Step = "phone" | "otp" | "register"
@@ -36,6 +36,8 @@ export default function AuthPage() {
 
   // Tenant adı
   const [tenantName, setTenantName] = useState<string | null>(null)
+  const [tenantError, setTenantError] = useState("")
+  const [isTenantLoading, setIsTenantLoading] = useState(true)
 
   // OTP tekrar gönderme için geri sayım (saniye)
   const [countdown, setCountdown] = useState(0)
@@ -45,8 +47,12 @@ export default function AuthPage() {
       try {
         const data = await apiFetch<{ name: string }>("/api/v1/tenant/info")
         setTenantName(data.name)
-      } catch {
-        // fallback: başlık gösterilmez
+      } catch (err: unknown) {
+        if (isTenantAccessError(err)) {
+          setTenantError(err.message)
+        }
+      } finally {
+        setIsTenantLoading(false)
       }
     }
     loadTenantInfo()
@@ -64,6 +70,8 @@ export default function AuthPage() {
    * Aşama 1: Telefon numarasını backend'e gönder, OTP SMS'i iste.
    */
   async function handleSendOtp() {
+    if (tenantError) return
+
     if (!TR_PHONE_REGEX.test(phone)) {
       setError("Lütfen geçerli bir telefon numarası girin.")
       return
@@ -148,6 +156,8 @@ export default function AuthPage() {
    * OTP kodunu tekrar gönder — 60sn dolmadan bu buton disabled
    */
   async function handleResendOtp() {
+    if (tenantError) return
+
     if (countdown > 0) return
     setError("")
     setIsLoading(true)
@@ -159,6 +169,18 @@ export default function AuthPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (isTenantLoading) {
+    return (
+      <div className="min-h-[100dvh] bg-zinc-950 px-4 py-6 flex items-center justify-center">
+        <p className="text-sm text-zinc-500">Yukleniyor...</p>
+      </div>
+    )
+  }
+
+  if (tenantError) {
+    return <TenantUnavailable message={tenantError} />
   }
 
   return (

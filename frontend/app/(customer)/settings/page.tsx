@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { apiFetch } from "@/lib/api"
+import { TenantUnavailable } from "@/components"
+import { apiFetch, isTenantAccessError } from "@/lib/api"
 
 type UserMe = {
   first_name: string
@@ -15,6 +16,7 @@ export default function CustomerSettingsPage() {
   const [lastName, setLastName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [tenantError, setTenantError] = useState("")
   const [success, setSuccess] = useState("")
 
   useEffect(() => {
@@ -24,6 +26,10 @@ export default function CustomerSettingsPage() {
         setFirstName(data.first_name)
         setLastName(data.last_name)
       } catch (err: unknown) {
+        if (isTenantAccessError(err)) {
+          setTenantError(err.message)
+          return
+        }
         setError(err instanceof Error ? err.message : "Profil yuklenemedi.")
       }
     }
@@ -47,10 +53,18 @@ export default function CustomerSettingsPage() {
       })
       setSuccess("Bilgiler guncellendi.")
     } catch (err: unknown) {
+      if (isTenantAccessError(err)) {
+        setTenantError(err.message)
+        return
+      }
       setError(err instanceof Error ? err.message : "Kaydetme basarisiz.")
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (tenantError) {
+    return <TenantUnavailable message={tenantError} />
   }
 
   return (

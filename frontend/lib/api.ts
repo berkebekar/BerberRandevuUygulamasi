@@ -75,6 +75,27 @@ type ParsedApiError = {
   payload?: Record<string, unknown>
 }
 
+export type ApiError = Error & {
+  status?: number
+  errorCode?: string
+  payload?: Record<string, unknown>
+}
+
+const TENANT_ACCESS_ERROR_CODES = new Set([
+  "tenant_not_found",
+  "tenant_inactive",
+  "tenant_deleted",
+  "tenant_required",
+])
+
+export function isTenantAccessError(err: unknown): err is ApiError {
+  return (
+    err instanceof Error &&
+    typeof (err as ApiError).errorCode === "string" &&
+    TENANT_ACCESS_ERROR_CODES.has((err as ApiError).errorCode ?? "")
+  )
+}
+
 async function parseError(res: Response): Promise<ParsedApiError> {
   try {
     const data = (await res.json()) as Record<string, unknown>
@@ -133,11 +154,7 @@ export async function apiFetch<T = unknown>(
         window.location.href = target
       }
     }
-    const err = new Error(parsedError.message) as Error & {
-      status: number
-      errorCode?: string
-      payload?: Record<string, unknown>
-    }
+    const err = new Error(parsedError.message) as ApiError
     err.status = res.status
     err.errorCode = parsedError.errorCode
     err.payload = parsedError.payload

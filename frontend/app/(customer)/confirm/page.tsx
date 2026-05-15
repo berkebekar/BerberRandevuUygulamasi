@@ -11,14 +11,9 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ActionConfirmSheet, BookingCard } from "@/components"
-import { apiPost } from "@/lib/api"
-
-type ApiError = Error & {
-  status?: number
-  errorCode?: string
-  payload?: Record<string, unknown>
-}
+import { ActionConfirmSheet, BookingCard, TenantUnavailable } from "@/components"
+import { apiPost, isTenantAccessError } from "@/lib/api"
+import type { ApiError } from "@/lib/api"
 
 export default function ConfirmPage() {
   const router = useRouter()
@@ -27,6 +22,7 @@ export default function ConfirmPage() {
   const [slotTime, setSlotTime] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [tenantError, setTenantError] = useState("")
   const [isAdditionalConfirmOpen, setIsAdditionalConfirmOpen] = useState(false)
   const [sameDayBookingCount, setSameDayBookingCount] = useState(1)
 
@@ -67,6 +63,10 @@ export default function ConfirmPage() {
       setIsAdditionalConfirmOpen(false)
       setIsSuccess(true)
     } catch (err: unknown) {
+      if (isTenantAccessError(err)) {
+        setTenantError(err.message)
+        return
+      }
       const apiError = err as ApiError
       if (apiError.errorCode === "additional_booking_confirmation_required") {
         const currentCount = Number(apiError.payload?.current_count)
@@ -94,6 +94,10 @@ export default function ConfirmPage() {
 
   async function handleConfirmAdditional() {
     await submitBooking(true)
+  }
+
+  if (tenantError) {
+    return <TenantUnavailable message={tenantError} />
   }
 
   // Slot bilgisi yüklenene kadar boş ekran göster

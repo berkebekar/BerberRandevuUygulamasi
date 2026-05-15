@@ -18,7 +18,7 @@ type UseAdminOverviewResult = {
 
 export function useAdminOverview(
   selectedDate: string,
-  onError: (message: string) => void
+  onError: (error: string | Error) => void
 ): UseAdminOverviewResult {
   const [maxBookingDaysAhead, setMaxBookingDaysAhead] = useState(14)
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
@@ -59,7 +59,7 @@ export function useAdminOverview(
         setDashboard(null)
         setSlots([])
         setBlockMap({})
-        onError(mapAdminError(err))
+        onError(err instanceof Error ? err : mapAdminError(err))
       } finally {
         if (!silent) {
           setDashboardLoading(false)

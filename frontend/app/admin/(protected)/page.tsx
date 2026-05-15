@@ -10,10 +10,10 @@
 
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ActionConfirmSheet, AdminSlotGrid, PhoneInput } from "@/components"
-import { apiDelete, apiPost, apiPut } from "@/lib/api"
+import { ActionConfirmSheet, AdminSlotGrid, PhoneInput, TenantUnavailable } from "@/components"
+import { apiDelete, apiPost, apiPut, isTenantAccessError } from "@/lib/api"
 import { buildBookingDays } from "@/lib/bookingWindow"
 import type {
   ConfirmAction,
@@ -38,6 +38,7 @@ export default function AdminDashboardPage() {
 
   // Global hata mesaji
   const [error, setError] = useState("")
+  const [tenantError, setTenantError] = useState("")
   // Basarili islem sonrasi kisa bilgilendirme
   const [success, setSuccess] = useState("")
   // Kritik aksiyonlar once bu state'e yazilip sheet acilir
@@ -62,6 +63,14 @@ export default function AdminDashboardPage() {
   const [slotMenuOpen, setSlotMenuOpen] = useState(false)
   const slotMenuRef = useRef<HTMLDivElement | null>(null)
 
+  const handleOverviewError = useCallback((messageOrError: string | Error) => {
+    if (isTenantAccessError(messageOrError)) {
+      setTenantError(messageOrError.message)
+      return
+    }
+    setError(messageOrError instanceof Error ? mapAdminError(messageOrError) : messageOrError)
+  }, [])
+
   const {
     maxBookingDaysAhead: hookMaxDays,
     dashboard,
@@ -70,7 +79,7 @@ export default function AdminDashboardPage() {
     slotLoading,
     blockMap,
     fetchOverview,
-  } = useAdminOverview(selectedDate, setError)
+  } = useAdminOverview(selectedDate, handleOverviewError)
   const availableManualSlots = useMemo(
     () => slots.filter((slot) => slot.status === "available"),
     [slots]
@@ -248,6 +257,10 @@ export default function AdminDashboardPage() {
       setSuccess("Islem basariyla tamamlandi.")
       await fetchOverview(selectedDate)
     } catch (err: unknown) {
+      if (isTenantAccessError(err)) {
+        setTenantError(err.message)
+        return
+      }
       setError(mapAdminError(err))
       setPendingRescheduleBooking(null)
     } finally {
@@ -295,6 +308,10 @@ export default function AdminDashboardPage() {
       setSuccess("Islem basariyla tamamlandi.")
       await fetchOverview(selectedDate)
     } catch (err: unknown) {
+      if (isTenantAccessError(err)) {
+        setTenantError(err.message)
+        return
+      }
       setError(mapAdminError(err))
     } finally {
       setManualLoading(false)
@@ -358,10 +375,18 @@ export default function AdminDashboardPage() {
     } catch (err: unknown) {
       // Hata olursa sheet kapanir ve mesaj dashboard'da gorunur
       setPendingAction(null)
+      if (isTenantAccessError(err)) {
+        setTenantError(err.message)
+        return
+      }
       setError(mapAdminError(err))
     } finally {
       setConfirmLoading(false)
     }
+  }
+
+  if (tenantError) {
+    return <TenantUnavailable message={tenantError} />
   }
 
   return (
@@ -777,4 +802,3 @@ export default function AdminDashboardPage() {
     </>
   )
 }
-

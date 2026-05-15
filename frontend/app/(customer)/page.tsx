@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { ActionConfirmSheet, SlotGrid } from "@/components"
+import { ActionConfirmSheet, SlotGrid, TenantUnavailable } from "@/components"
 import type { Slot } from "@/components"
-import { apiDelete, apiFetch, apiPut } from "@/lib/api"
+import { apiDelete, apiFetch, apiPut, isTenantAccessError } from "@/lib/api"
 import { buildBookingDays } from "@/lib/bookingWindow"
 
 type UserMe = {
@@ -67,6 +67,7 @@ export default function HomePage() {
   const [slots, setSlots] = useState<Slot[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [tenantError, setTenantError] = useState("")
 
   const [profile, setProfile] = useState<UserMe | null>(null)
   const [tenantContact, setTenantContact] = useState<TenantContactInfo | null>(null)
@@ -106,6 +107,11 @@ export default function HomePage() {
       }))
       setSlots(normalized)
     } catch (err: unknown) {
+      if (isTenantAccessError(err)) {
+        setTenantError(err.message)
+        setSlots([])
+        return
+      }
       setError(err instanceof Error ? err.message : "Slotlar yuklenemedi.")
       setSlots([])
     } finally {
@@ -131,7 +137,10 @@ export default function HomePage() {
         status: "loaded",
         items: sortedUpcoming,
       })
-    } catch {
+    } catch (err: unknown) {
+      if (isTenantAccessError(err)) {
+        setTenantError(err.message)
+      }
       setProfile(null)
       setUpcomingBookings({ status: "error", items: [] })
     }
@@ -157,7 +166,10 @@ export default function HomePage() {
       try {
         const data = await apiFetch<TenantContactInfo>("/api/v1/tenant/info")
         setTenantContact(data)
-      } catch {
+      } catch (err: unknown) {
+        if (isTenantAccessError(err)) {
+          setTenantError(err.message)
+        }
         setTenantContact(null)
       }
     }
@@ -235,7 +247,11 @@ export default function HomePage() {
       setRescheduleSlots(available)
       setSelectedRescheduleSlot(null)
       setRescheduleStep("slot_select")
-    } catch {
+    } catch (err: unknown) {
+      if (isTenantAccessError(err)) {
+        setTenantError(err.message)
+        return
+      }
       setError("Musait saatler yuklenemedi.")
       setPendingRescheduleBooking(null)
     } finally {
@@ -286,6 +302,10 @@ export default function HomePage() {
     } finally {
       setCancelLoading(false)
     }
+  }
+
+  if (tenantError) {
+    return <TenantUnavailable message={tenantError} />
   }
 
   return (
