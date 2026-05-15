@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 
 import { SuperAdminApiError, superAdminGet, superAdminPost } from "@/lib/superadmin-api"
 
-import type { TenantDomainSyncResponse, TenantListResponse, TenantStatus } from "./types"
+import type { TenantListResponse, TenantStatus } from "./types"
 import { buildTenantAdminUrl, formatTenantDate, getTenantStatusBadgeClass, getTenantStatusLabel } from "./utils"
 
 const SORTABLE_COLUMNS = ["created_at", "name", "subdomain", "user_count", "booking_count"] as const
@@ -47,7 +47,6 @@ export default function SuperAdminTenantsPage() {
   const [sortBy, setSortBy] = useState<SortKey>("created_at")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [pendingImpersonateId, setPendingImpersonateId] = useState<string | null>(null)
-  const [syncingDomains, setSyncingDomains] = useState(false)
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -130,42 +129,6 @@ export default function SuperAdminTenantsPage() {
     }
   }
 
-  function buildDomainSyncMessage(result: TenantDomainSyncResponse): string {
-    if (result.reason === "wildcard_domain_strategy") {
-      return "Wildcard domain stratejisi aktif. Tenant domainleri proxy tarafinda yakalanir; Coolify domain sync gerekmez."
-    }
-    if (!result.enabled) {
-      return `Coolify otomasyonu kapali veya eksik ayar var: ${result.reason ?? "coolify_not_configured"}`
-    }
-    if (result.error) {
-      return `Coolify domain sync basarisiz: ${result.error}`
-    }
-    const deployText = result.deploy_requested ? "Deploy istegi gonderildi." : "Deploy istegi gonderilmedi."
-    return `${result.tenant_count} aktif tenant icin ${result.domains.length} domain senkronize edildi. ${deployText}`
-  }
-
-  async function handleSyncDomains() {
-    setSyncingDomains(true)
-    setError("")
-    setActionMessage("")
-    try {
-      const result = await superAdminPost<TenantDomainSyncResponse>("/api/v1/superadmin/tenants/sync-domains", {})
-      const message = buildDomainSyncMessage(result)
-      if (!result.enabled || result.error) setError(message)
-      else setActionMessage(message)
-    } catch (err: unknown) {
-      if (err instanceof SuperAdminApiError) {
-        setError(err.message)
-      } else if (err instanceof Error) {
-        setError(err.message)
-      } else {
-        setError("Coolify domain sync baslatilamadi.")
-      }
-    } finally {
-      setSyncingDomains(false)
-    }
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
@@ -174,14 +137,6 @@ export default function SuperAdminTenantsPage() {
           <p className="mt-1 text-sm text-zinc-400">Listele, filtrele, detay incele ve impersonation baslat.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleSyncDomains}
-            disabled={syncingDomains}
-            className="rounded-lg border border-zinc-700 px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {syncingDomains ? "Senkronize ediliyor..." : "Manuel Coolify Domain Sync"}
-          </button>
           <Link
             href="/superadmin/tenants/new"
             className="rounded-lg bg-zinc-100 px-3 py-2 text-sm font-semibold text-zinc-900 hover:bg-white"

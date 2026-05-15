@@ -2,7 +2,6 @@
 superadmin/tenant_service.py - Tenant management business logic.
 """
 
-import logging
 import math
 import re
 import uuid
@@ -30,11 +29,6 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.wa_contact_log import WaContactLog
 from app.models.wa_error_log import WaErrorLog
-from app.modules.superadmin.coolify_service import (
-    CoolifyTenantSyncResult,
-    ensure_tenant_frontend_domain,
-    sync_tenant_frontend_domains,
-)
 from app.modules.superadmin.tenant_schemas import (
     TenantAdminSummary,
     TenantCreateRequest,
@@ -55,7 +49,6 @@ from app.modules.superadmin.tenant_schemas import (
 
 TZ = ZoneInfo("Europe/Istanbul")
 _SUBDOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
-logger = logging.getLogger(__name__)
 
 
 def _normalize_subdomain(subdomain: str) -> str:
@@ -122,25 +115,8 @@ async def _log_activity(
 
 
 def _domain_sync_response(
-    result: CoolifyTenantSyncResult,
-    *,
-    tenant_count: int = 0,
-    error: str | None = None,
+    subdomain: str,
 ) -> TenantDomainSyncResponse:
-    return TenantDomainSyncResponse(
-        enabled=result.enabled,
-        updated=result.updated,
-        deploy_requested=result.deploy_requested,
-        deployment_uuid=result.deployment_uuid,
-        reason=result.reason,
-        domain=result.domain,
-        domains=result.domains or ([] if result.domain is None else [result.domain]),
-        tenant_count=tenant_count,
-        error=error,
-    )
-
-
-def _wildcard_domain_response(subdomain: str) -> TenantDomainSyncResponse:
     settings = get_settings()
     domain = None
     app_domain = settings.app_domain.strip().lower()
@@ -157,27 +133,6 @@ def _wildcard_domain_response(subdomain: str) -> TenantDomainSyncResponse:
         tenant_count=1,
         error=None,
     )
-
-
-async def _sync_created_tenant_domain(subdomain: str) -> TenantDomainSyncResponse:
-    settings = get_settings()
-    if settings.tenant_domain_strategy.strip().lower() == "wildcard":
-        return _wildcard_domain_response(subdomain)
-
-    try:
-        result = await ensure_tenant_frontend_domain(subdomain)
-        return _domain_sync_response(result, tenant_count=1)
-    except Exception as exc:
-        logger.exception("Coolify frontend domain sync failed for tenant %s", subdomain)
-        return TenantDomainSyncResponse(
-            enabled=True,
-            updated=False,
-            deploy_requested=False,
-            reason="coolify_sync_failed",
-            domain=None,
-            tenant_count=1,
-            error=str(exc),
-        )
 
 
 def _tenant_item(tenant: Tenant, user_count: int, booking_count: int) -> TenantListItem:
@@ -437,7 +392,7 @@ async def create_tenant(
             raise mapped_error from exc
         raise
 
-    domain_sync = await _sync_created_tenant_domain(tenant.subdomain)
+    domain_sync = _domain_sync_response(tenant.subdomain)
 
     return TenantCreateResponse(
         tenant=_tenant_item(tenant, user_count=0, booking_count=0),
@@ -449,75 +404,6 @@ async def create_tenant(
         ),
         domain_sync=domain_sync,
     )
-
-
-async def sync_active_tenant_frontend_domains(
-    db: AsyncSession,
-    super_admin: SuperAdmin,
-) -> TenantDomainSyncResponse:
-    settings = get_settings()
-    if settings.tenant_domain_strategy.strip().lower() == "wildcard":
-        response = TenantDomainSyncResponse(
-            enabled=True,
-            updated=False,
-            deploy_requested=False,
-            reason="wildcard_domain_strategy",
-            domains=[],
-            tenant_count=0,
-            error=None,
-        )
-        await _log_activity(
-            db,
-            super_admin=super_admin,
-            action_type="tenant_domains_sync_skipped",
-            tenant_id=None,
-            metadata={
-                "reason": response.reason,
-                "deploy_requested": response.deploy_requested,
-            },
-        )
-        await db.commit()
-        return response
-
-    subdomain_rows = await db.execute(
-        select(Tenant.subdomain)
-        .where(Tenant.status == TenantStatus.active, Tenant.is_active.is_(True))
-        .order_by(Tenant.subdomain)
-    )
-    subdomains = [row[0] for row in subdomain_rows.all()]
-
-    try:
-        result = await sync_tenant_frontend_domains(subdomains)
-        response = _domain_sync_response(result, tenant_count=len(subdomains))
-    except Exception as exc:
-        logger.exception("Coolify frontend full domain sync failed")
-        response = TenantDomainSyncResponse(
-            enabled=True,
-            updated=False,
-            deploy_requested=False,
-            reason="coolify_sync_failed",
-            tenant_count=len(subdomains),
-            error=str(exc),
-        )
-
-    await _log_activity(
-        db,
-        super_admin=super_admin,
-        action_type="tenant_domains_synced",
-        tenant_id=None,
-        metadata={
-            "enabled": response.enabled,
-            "updated": response.updated,
-            "deploy_requested": response.deploy_requested,
-            "deployment_uuid": response.deployment_uuid,
-            "reason": response.reason,
-            "tenant_count": response.tenant_count,
-            "domain_count": len(response.domains),
-            "error": response.error,
-        },
-    )
-    await db.commit()
-    return response
 
 
 async def update_tenant(

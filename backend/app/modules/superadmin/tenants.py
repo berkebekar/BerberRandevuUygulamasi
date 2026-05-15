@@ -17,7 +17,6 @@ from app.modules.superadmin.tenant_schemas import (
     TenantCreateRequest,
     TenantCreateResponse,
     TenantDetailResponse,
-    TenantDomainSyncResponse,
     TenantHardDeleteResponse,
     TenantListQuery,
     TenantListResponse,
@@ -31,7 +30,6 @@ from app.modules.superadmin.tenant_service import (
     hard_delete_tenant,
     list_tenants,
     soft_delete_tenant,
-    sync_active_tenant_frontend_domains,
     update_tenant,
     update_tenant_status,
 )
@@ -66,14 +64,6 @@ async def super_admin_list_tenants(
             sort_order=sort_order,
         ),
     )
-
-
-@router.post("/sync-domains", response_model=TenantDomainSyncResponse, status_code=200)
-async def super_admin_sync_tenant_domains(
-    db: AsyncSession = Depends(get_db),
-    super_admin: SuperAdmin = Depends(get_current_super_admin),
-):
-    return await sync_active_tenant_frontend_domains(db, super_admin)
 
 
 @router.get("/{tenant_id}", response_model=TenantDetailResponse, status_code=200)

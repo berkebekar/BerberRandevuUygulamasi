@@ -15,7 +15,6 @@ Backend:
 - `ENV=production`
 - `APP_DOMAIN`
 - `SUPERADMIN_HOST=superadmin.bbsoft.com.tr`
-- `TENANT_DOMAIN_STRATEGY=wildcard` when wildcard DNS/SSL routing is enabled
 - `ALLOWED_SUBDOMAINS`
 - `TWILIO_*` (if real SMS is enabled)
 - `SUPER_ADMIN_SESSION_SECRET` (recommended)
@@ -35,4 +34,4 @@ Frontend:
 - `https://superadmin.bbsoft.com.tr/superadmin` opens the super admin login
 - Tenant hosts return 404 for `/superadmin`
 - Super admin login and tenant list endpoints work from `superadmin.bbsoft.com.tr`
-- New tenant creation does not trigger a Coolify frontend deploy in wildcard mode
+- New tenant creation does not trigger a Coolify frontend deploy

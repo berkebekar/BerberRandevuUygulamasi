@@ -76,8 +76,6 @@ Production backend:
 ```env
 APP_DOMAIN=bbsoft.com.tr
 SUPERADMIN_HOST=superadmin.bbsoft.com.tr
-TENANT_DOMAIN_STRATEGY=wildcard
-COOLIFY_INSTANT_DEPLOY_ON_TENANT_CREATE=false
 ```
 
 Production frontend:

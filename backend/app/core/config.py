@@ -24,12 +24,6 @@ class Settings(BaseSettings):
     superadmin_host: str = ""
     superadmin_stats_cache_ttl_seconds: int = 30
     frontend_healthcheck_url: str = ""
-    coolify_api_url: str = ""
-    coolify_api_token: str = ""
-    coolify_frontend_app_uuid: str = ""
-    coolify_instant_deploy_on_tenant_create: bool = True
-    tenant_domain_strategy: str = "wildcard"
-
     # Redis — konuşma state yönetimi için (WhatsApp botu)
     redis_url: str = "redis://localhost:6379/0"
 
