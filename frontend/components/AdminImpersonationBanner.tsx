@@ -2,7 +2,17 @@
 
 import { useState } from "react"
 
-import { superAdminPost } from "@/lib/superadmin-api"
+import { apiPost } from "@/lib/api"
+
+function superAdminHomeUrl(): string {
+  const configuredDomain = (process.env.NEXT_PUBLIC_APP_DOMAIN ?? "bbsoft.com.tr")
+    .trim()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0]
+
+  return `https://superadmin.${configuredDomain}`
+}
 
 export default function AdminImpersonationBanner() {
   const [isExiting, setIsExiting] = useState(false)
@@ -12,8 +22,8 @@ export default function AdminImpersonationBanner() {
     setIsExiting(true)
     setError("")
     try {
-      await superAdminPost("/api/v1/superadmin/impersonate/exit", {})
-      window.location.assign("/superadmin")
+      await apiPost("/api/v1/superadmin/impersonate/exit", {})
+      window.location.assign(superAdminHomeUrl())
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message)

@@ -17,6 +17,7 @@ function normalizeConfiguredHost(value: string | undefined): string {
 }
 
 const RESERVED_SUBDOMAINS = new Set(["api", "admin", "mail", "smtp", "pop", "ftp", "superadmin"])
+const ALLOWED_SUPERADMIN_API_ROUTES = new Set(["/api/v1/superadmin/impersonate/exit"])
 
 function configuredAppDomain(): string {
   return (
@@ -60,19 +61,7 @@ function isCustomerRoute(pathname: string): boolean {
 }
 
 function isCustomerApiRoute(pathname: string): boolean {
-  return pathname === "/api/v1" || (pathname.startsWith("/api/v1/") && !isSuperAdminApiRoute(pathname))
-}
-
-function isSuperAdminHost(host: string): boolean {
-  const configuredHost =
-    normalizeConfiguredHost(process.env.NEXT_PUBLIC_SUPERADMIN_HOST) ||
-    `superadmin.${configuredAppDomain()}`
-
-  if (host === configuredHost) {
-    return true
-  }
-
-  return process.env.NODE_ENV !== "production" && (host === "localhost" || host === "127.0.0.1")
+  return pathname === "/api/v1" || pathname.startsWith("/api/v1/")
 }
 
 function isSuperAdminRoute(pathname: string): boolean {
@@ -83,6 +72,10 @@ function isSuperAdminApiRoute(pathname: string): boolean {
   return pathname === "/api/v1/superadmin" || pathname.startsWith("/api/v1/superadmin/")
 }
 
+function isAllowedSuperAdminApiRoute(pathname: string): boolean {
+  return ALLOWED_SUPERADMIN_API_ROUTES.has(pathname)
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const host = normalizeHost(request)
@@ -90,7 +83,7 @@ export function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-tenant-host", host)
 
-  if (isReservedSubdomain(host) && !isSuperAdminHost(host)) {
+  if (isReservedSubdomain(host)) {
     return new NextResponse("Not Found", { status: 404 })
   }
 
@@ -101,41 +94,19 @@ export function middleware(request: NextRequest) {
       return NextResponse.rewrite(url, { request: { headers: requestHeaders } })
     }
 
-    if (isCustomerRoute(pathname) || isCustomerApiRoute(pathname)) {
+    if (isCustomerRoute(pathname) || isSuperAdminRoute(pathname) || isCustomerApiRoute(pathname)) {
       return new NextResponse("Not Found", { status: 404 })
     }
 
     return NextResponse.next({ request: { headers: requestHeaders } })
   }
 
-  if (isSuperAdminHost(host)) {
-    if (pathname === "/") {
-      const url = request.nextUrl.clone()
-      url.pathname = "/superadmin"
-      return NextResponse.redirect(url)
-    }
-
-    if (isCustomerRoute(pathname) || isCustomerApiRoute(pathname)) {
-      return new NextResponse("Not Found", { status: 404 })
-    }
-
-    if (pathname === "/platform" || pathname.startsWith("/platform/")) {
-      return new NextResponse("Not Found", { status: 404 })
-    }
-
-    return NextResponse.next({ request: { headers: requestHeaders } })
+  if (isSuperAdminRoute(pathname) || (isSuperAdminApiRoute(pathname) && !isAllowedSuperAdminApiRoute(pathname))) {
+    return new NextResponse("Not Found", { status: 404 })
   }
 
-  if (!isSuperAdminHost(host)) {
-    if (isSuperAdminRoute(pathname) || isSuperAdminApiRoute(pathname)) {
-      return new NextResponse("Not Found", { status: 404 })
-    }
-
-    if (pathname === "/platform" || pathname.startsWith("/platform/")) {
-      return new NextResponse("Not Found", { status: 404 })
-    }
-
-    return NextResponse.next({ request: { headers: requestHeaders } })
+  if (pathname === "/platform" || pathname.startsWith("/platform/")) {
+    return new NextResponse("Not Found", { status: 404 })
   }
 
   return NextResponse.next({ request: { headers: requestHeaders } })
