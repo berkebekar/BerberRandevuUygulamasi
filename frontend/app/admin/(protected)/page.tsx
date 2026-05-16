@@ -400,7 +400,7 @@ export default function AdminDashboardPage() {
           </div>
           <button
             onClick={() => router.push("/admin/menu")}
-            className="inline-flex h-10 items-center rounded-lg border border-zinc-700 bg-zinc-100 px-4 text-sm font-bold text-zinc-950 shadow-sm transition-colors hover:bg-white active:scale-[0.99]"
+            className="inline-flex h-10 items-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-sm font-bold text-zinc-100 shadow-sm transition-colors hover:border-zinc-500 hover:bg-zinc-800 active:scale-[0.99]"
           >
             Menü
           </button>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { TenantUnavailable } from "@/components"
 import { apiFetch, isTenantAccessError } from "@/lib/api"
+import { BackToCustomerMenuButton } from "../BackToCustomerMenuButton"
 
 type UserMe = {
   first_name: string
@@ -71,12 +72,7 @@ export default function CustomerSettingsPage() {
     <div className="min-h-screen bg-zinc-950 pb-8">
       <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-4 sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push("/")}
-            className="text-zinc-400 hover:text-zinc-300 text-sm"
-          >
-            {"<- Geri"}
-          </button>
+          <BackToCustomerMenuButton />
           <h1 className="text-lg font-bold text-zinc-100">Ayarlar</h1>
         </div>
       </div>

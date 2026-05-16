@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
 import type { BookingHistoryResponse, BookingHistoryStatus } from "../types"
+import { BackToMenuButton } from "../BackToMenuButton"
 import { BookingHistoryList, SummaryCards, todayInIstanbulIso } from "../history-utils"
 
 const STATUS_OPTIONS: { value: BookingHistoryStatus; label: string }[] = [
@@ -47,14 +48,7 @@ export default function AdminBookingHistoryPage() {
     <div className="min-h-screen bg-zinc-950 pb-8">
       <div className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900 px-4 py-4">
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            aria-label="Menüye dön"
-            onClick={() => router.push("/admin/menu")}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-xl leading-none text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
-          >
-            ←
-          </button>
+          <BackToMenuButton />
           <h1 className="text-lg font-bold text-zinc-100">Randevu Geçmişim</h1>
         </div>
       </div>

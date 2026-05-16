@@ -179,7 +179,7 @@ async def get_linked_tenant_booking_history(
     data = await admin_service.get_linked_tenant_booking_history(
         db,
         owner_tenant_id=admin.tenant_id,
-        linked_tenant_id=uuid.UUID(linked_tenant_id),
+        linked_tenant_id=linked_tenant_id,
         start_date=start_date,
         end_date=end_date,
         status_filter=status_filter,

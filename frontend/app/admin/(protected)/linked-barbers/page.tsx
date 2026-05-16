@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
 import type { BookingHistoryResponse } from "../types"
+import { BackToMenuButton } from "../BackToMenuButton"
 import { BookingHistoryList, SummaryCards, todayInIstanbulIso } from "../history-utils"
 
 type LinkedTenant = {
@@ -36,7 +37,7 @@ export default function LinkedBarbersPage() {
   const [selectedTenantId, setSelectedTenantId] = useState("")
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
-  const [pageSize, setPageSize] = useState(10)
+  const pageSize = 10
   const [page, setPage] = useState(1)
   const [data, setData] = useState<BookingHistoryResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -81,14 +82,7 @@ export default function LinkedBarbersPage() {
     <div className="min-h-screen bg-zinc-950 pb-8">
       <div className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900 px-4 py-4">
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            aria-label="Menüye dön"
-            onClick={() => router.push("/admin/menu")}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-xl leading-none text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
-          >
-            ←
-          </button>
+          <BackToMenuButton />
           <h1 className="text-lg font-bold text-zinc-100">Çalışan Berberler</h1>
         </div>
       </div>
@@ -135,12 +129,6 @@ export default function LinkedBarbersPage() {
                   <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" />
                 </label>
               </div>
-              <label className="space-y-1 text-xs text-zinc-400">
-                Liste
-                <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100">
-                  {[10, 25, 50].map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </label>
               <button type="button" onClick={() => loadHistory(1)} disabled={loading} className="w-full rounded-lg bg-zinc-100 px-3 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-60">
                 {loading ? "Yukleniyor..." : "Uygula"}
               </button>

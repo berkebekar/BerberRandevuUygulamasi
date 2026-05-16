@@ -14,12 +14,6 @@ type UserMe = {
   phone: string
 }
 
-type TenantContactInfo = {
-  name: string
-  phone: string | null
-  address: string | null
-}
-
 type MyBooking = {
   id: string
   slot_time: string
@@ -70,8 +64,6 @@ export default function HomePage() {
   const [tenantError, setTenantError] = useState("")
 
   const [profile, setProfile] = useState<UserMe | null>(null)
-  const [tenantContact, setTenantContact] = useState<TenantContactInfo | null>(null)
-  const [contactOpen, setContactOpen] = useState(false)
   const [upcomingBookings, setUpcomingBookings] = useState<UpcomingBookingState>({
     status: "loading",
     items: [],
@@ -160,22 +152,6 @@ export default function HomePage() {
   useEffect(() => {
     fetchProfileAndCurrentBooking()
   }, [fetchProfileAndCurrentBooking])
-
-  useEffect(() => {
-    async function fetchTenantContact() {
-      try {
-        const data = await apiFetch<TenantContactInfo>("/api/v1/tenant/info")
-        setTenantContact(data)
-      } catch (err: unknown) {
-        if (isTenantAccessError(err)) {
-          setTenantError(err.message)
-        }
-        setTenantContact(null)
-      }
-    }
-
-    fetchTenantContact()
-  }, [])
 
   useEffect(() => {
     const refreshBookings = () => {
@@ -317,17 +293,13 @@ export default function HomePage() {
               {profile ? `Hoşgeldin ${profile.first_name} ${profile.last_name}` : "Hoşgeldin"}
             </h1>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setContactOpen(true)}
-              className="text-sm text-zinc-400 hover:text-zinc-300"
-            >
-              İletişim
-            </button>
-            <SettingsButton />
-            <LogoutButton />
-          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/menu")}
+            className="inline-flex h-10 items-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 text-sm font-bold text-zinc-100 shadow-sm transition-colors hover:border-zinc-500 hover:bg-zinc-800 active:scale-[0.99]"
+          >
+            Menü
+          </button>
         </div>
       </div>
 
@@ -527,134 +499,6 @@ export default function HomePage() {
           </div>
         )}
       </ActionConfirmSheet>
-
-      <ContactSheet
-        open={contactOpen}
-        contact={tenantContact}
-        onClose={() => setContactOpen(false)}
-      />
     </div>
-  )
-}
-
-function ContactSheet({
-  open,
-  contact,
-  onClose,
-}: {
-  open: boolean
-  contact: TenantContactInfo | null
-  onClose: () => void
-}) {
-  const [copiedField, setCopiedField] = useState<"phone" | "address" | null>(null)
-
-  if (!open) return null
-
-  async function copyValue(field: "phone" | "address", value?: string | null) {
-    if (!value) return
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopiedField(field)
-      window.setTimeout(() => setCopiedField(null), 1800)
-    } catch {
-      setCopiedField(null)
-    }
-  }
-
-  const phone = contact?.phone || "-"
-  const address = contact?.address || "-"
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button
-        type="button"
-        aria-label="Kapat"
-        className="absolute inset-0 bg-black/70"
-        onClick={onClose}
-      />
-      <div className="relative w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-4 shadow-2xl shadow-black/40">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-base font-semibold text-zinc-100">İletişim</h3>
-          <button type="button" onClick={onClose} className="text-sm text-zinc-400 hover:text-zinc-200">
-            Kapat
-          </button>
-        </div>
-        <div className="mt-4 space-y-2">
-          <button
-            type="button"
-            onClick={() => copyValue("phone", contact?.phone)}
-            disabled={!contact?.phone}
-            className="relative w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 pr-10 text-left text-sm text-zinc-200 disabled:cursor-default disabled:opacity-70"
-          >
-            <span className="absolute right-3 top-3 text-base" aria-hidden="true">
-              📋
-            </span>
-            <span className="block text-xs text-zinc-500">Berber No</span>
-            <span className="mt-1 block break-all font-medium">{phone}</span>
-            {copiedField === "phone" && <span className="mt-1 block text-xs text-emerald-300">Kopyalandı!</span>}
-          </button>
-          <button
-            type="button"
-            onClick={() => copyValue("address", contact?.address)}
-            disabled={!contact?.address}
-            className="relative w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 pr-10 text-left text-sm text-zinc-200 disabled:cursor-default disabled:opacity-70"
-          >
-            <span className="absolute right-3 top-3 text-base" aria-hidden="true">
-              📋
-            </span>
-            <span className="block text-xs text-zinc-500">Adres</span>
-            <span className="mt-1 block break-words font-medium">{address}</span>
-            {copiedField === "address" && <span className="mt-1 block text-xs text-emerald-300">Kopyalandı!</span>}
-          </button>
-        </div>
-        <a
-          href="https://bbsoft.com.tr"
-          target="_blank"
-          rel="noreferrer"
-          className="mt-4 block text-center text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          Bu hizmet için detaylı bilgi almak için web sitemizi ziyaret edin bbsoft.com.tr
-        </a>
-      </div>
-    </div>
-  )
-}
-
-function SettingsButton() {
-  const router = useRouter()
-  return (
-    <button
-      onClick={() => router.push("/settings")}
-      className="text-sm text-zinc-400 hover:text-zinc-300"
-    >
-      Ayarlar
-    </button>
-  )
-}
-
-function LogoutButton() {
-  const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
-
-  async function handleLogout() {
-    setIsLoading(true)
-    try {
-      await apiFetch("/api/v1/auth/logout", { method: "POST" })
-    } catch {
-      // no-op
-    } finally {
-      setIsLoading(false)
-      router.push("/auth")
-    }
-  }
-
-  return (
-    <button
-      onClick={handleLogout}
-      disabled={isLoading}
-      className="text-sm text-zinc-400 hover:text-zinc-300 disabled:opacity-50"
-    >
-      Cikis
-    </button>
   )
 }

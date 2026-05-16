@@ -4,6 +4,7 @@ import dynamic from "next/dynamic"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
+import { BackToMenuButton } from "../BackToMenuButton"
 
 const BookingStatusDonut = dynamic(() => import("./BookingStatusDonut"), { ssr: false })
 const CustomerTypeDonut = dynamic(() => import("./CustomerTypeDonut"), { ssr: false })
@@ -139,14 +140,7 @@ export default function AdminStatisticsPage() {
     <div className="min-h-screen bg-zinc-950 pb-8">
       <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-4 sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            aria-label="Menüye dön"
-            onClick={() => router.push("/admin/menu")}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-xl leading-none text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
-          >
-            ←
-          </button>
+          <BackToMenuButton />
           <div>
             <h1 className="text-lg font-bold text-zinc-100">Istatistiklerim</h1>
             <p className="text-xs text-zinc-400">
