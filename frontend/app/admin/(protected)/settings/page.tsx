@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { apiDelete, apiFetch, apiPut } from "@/lib/api"
-import { BackToMenuButton } from "../BackToMenuButton"
 
 type BarberSettings = {
   slot_duration_minutes: number
@@ -425,7 +424,14 @@ export default function AdminSettingsPage() {
     <div className="min-h-screen bg-zinc-950 pb-8">
       <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-4 sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <BackToMenuButton />
+          <button
+            type="button"
+            aria-label={activeSection ? "Ayarlara dön" : "Menüye dön"}
+            onClick={() => router.push(activeSection ? "/admin/settings" : "/admin/menu")}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-800 bg-zinc-950/70 text-lg leading-none text-zinc-200 transition-colors hover:border-zinc-600 hover:bg-zinc-800 hover:text-white"
+          >
+            ←
+          </button>
           <h1 className="text-lg font-bold text-zinc-100">
             {activeSection ? SETTINGS_SECTION_LABELS[activeSection] : "Ayarlar"}
           </h1>
