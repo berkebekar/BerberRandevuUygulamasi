@@ -37,6 +37,7 @@ from app.modules.whatsapp.state import (
     STEP_DATE_SELECT,
     STEP_IDLE,
     STEP_NAME_COLLECT,
+    STEP_SAME_DAY_CONFIRM,
     STEP_TIME_SELECT,
     ConversationState,
     get_state,
@@ -46,12 +47,20 @@ from app.modules.whatsapp.state import (
 logger = logging.getLogger(__name__)
 
 TZ = ZoneInfo("Europe/Istanbul")
+BOOKING_FLOW_TTL = timedelta(minutes=15)
+HUMAN_HANDOFF_TTL = timedelta(hours=3)
+MENU_COOLDOWN_SECONDS = 15
 
 _TR_DAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
 _TR_MONTHS = [
     "", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
     "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
 ]
+
+_INTENT_RE = re.compile(
+    r"(?<![\wçğıöşüÇĞİÖŞÜ])(randevu|saat|müsait|musait|boşluk|bosluk|sıra|sira)(?![\wçğıöşüÇĞİÖŞÜ])",
+    re.IGNORECASE,
+)
 
 
 # ─── Yardımcılar ─────────────────────────────────────────────────────────────
@@ -63,6 +72,72 @@ def _fmt_date(d: date) -> str:
 
 def _fmt_date_short(d: date) -> str:
     return f"{d.day:02d} {_TR_MONTHS[d.month]} {_TR_DAYS[d.weekday()]}"
+
+
+def _parse_dt(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _is_resume_command(content: str | None) -> bool:
+    return (content or "").strip().lower() in {"/bot", "/menu"}
+
+
+def _has_booking_intent(content: str | None) -> bool:
+    return bool(content and _INTENT_RE.search(content))
+
+
+def _set_booking_flow(state: ConversationState) -> None:
+    state.mode = "booking_flow"
+    state.flow_expires_at = (datetime.now(TZ) + BOOKING_FLOW_TTL).isoformat()
+
+
+def _clear_booking_flow(state: ConversationState) -> None:
+    state.flow_expires_at = None
+    state.selected_date = None
+    state.selected_time = None
+    state.slot_offset = 0
+
+
+async def _send_main_menu_guarded(
+    phone_number_id: str,
+    access_token: str,
+    wa_phone: str,
+    tenant_name: str,
+    state: ConversationState,
+) -> None:
+    now = datetime.now(TZ)
+    last_menu = _parse_dt(state.last_menu_sent_at)
+    if last_menu and (now - last_menu).total_seconds() < MENU_COOLDOWN_SECONDS:
+        return
+    state.last_menu_sent_at = now.isoformat()
+    await save_state(phone_number_id, wa_phone, state)
+    await _send_main_menu(phone_number_id, access_token, wa_phone, tenant_name)
+
+
+async def _start_human_handoff(
+    pid: str,
+    tok: str,
+    wa_phone: str,
+    tenant: Tenant,
+    state: ConversationState,
+) -> None:
+    _clear_booking_flow(state)
+    state.step = STEP_IDLE
+    state.mode = "human_requested"
+    state.human_handoff_until = (datetime.now(TZ) + HUMAN_HANDOFF_TTL).isoformat()
+    await save_state(pid, wa_phone, state)
+    name = (tenant.first_name or tenant.name).strip()
+    await wa.send_text(
+        pid,
+        tok,
+        wa_phone,
+        f"Tamam, {name}'ye haber verildi. Benimle devam etmek isterseniz /bot yazabilirsiniz.",
+    )
 
 
 async def _get_tenant_by_subdomain(db: AsyncSession, subdomain: str) -> Tenant | None:
@@ -149,6 +224,7 @@ async def _reset_to_idle(
         step=STEP_IDLE,
         tenant_id=str(tenant_id),
         wa_name=wa_name,
+        mode="idle",
     )
     await save_state(pid, wa_phone, fresh)
 
@@ -267,6 +343,10 @@ async def _send_main_menu(
     wa_phone: str,
     tenant_name: str,
 ) -> None:
+    display_name = tenant_name.strip() or "Berber"
+    talk_title = f"{display_name.split()[0]} ile Konus"
+    if len(talk_title) > 20:
+        talk_title = "Berberle Konus"
     body = (
         f"Merhaba! *{tenant_name}* randevu sistemine hoş geldiniz.\n\n"
         "Aşağıdan yapmak istediğiniz işlemi seçin:"
@@ -278,6 +358,7 @@ async def _send_main_menu(
         body,
         buttons=[
             wa.InteractiveButton(id="booking", title="Randevu Al"),
+            wa.InteractiveButton(id="talk_human", title=talk_title),
             wa.InteractiveButton(id="my_bookings", title="Mevcut Randevularım"),
         ],
         footer="Yapmak istediginiz islemi secin.",
@@ -441,6 +522,7 @@ async def handle_incoming(
     msg_type: str,
     content: str | None,
     db: AsyncSession,
+    tenant: Tenant | None = None,
 ) -> None:
     """
     Gelen WhatsApp mesajını işler.
@@ -464,8 +546,7 @@ async def handle_incoming(
     state = await get_state(pid, wa_phone)
 
     # Tenant'ı state'den çöz; yoksa subdomain keyword ile bul
-    tenant: Tenant | None = None
-    if state.tenant_id:
+    if tenant is None and state.tenant_id:
         try:
             t_res = await db.execute(
                 select(Tenant).where(
@@ -478,12 +559,46 @@ async def handle_incoming(
             pass
 
     if tenant is None:
-        known_tenants = await _find_user_tenants(db, wa_phone)
-        await _handle_tenant_selection(pid, tok, wa_phone, wa_name, content, state, db, known_tenants=known_tenants)
+        await log_wa_error(
+            db,
+            "unknown_phone_number_id",
+            "WhatsApp phone_number_id icin tenant bulunamadi",
+            wa_phone=wa_phone,
+            meta={"phone_number_id": phone_number_id},
+        )
+        return
+
+    state.tenant_id = str(tenant.id)
+    state.wa_name = state.wa_name or wa_name
+
+    if not getattr(tenant, "whatsapp_bot_enabled", True):
+        await save_state(pid, wa_phone, state)
         return
 
     await log_wa_contact(db, wa_phone, tenant.id)
     tid = tenant.id
+
+    now = datetime.now(TZ)
+    resume_requested = _is_resume_command(content) or _has_booking_intent(content)
+    handoff_until = _parse_dt(state.human_handoff_until)
+    if state.mode in {"human_requested", "human_handoff"} and handoff_until and handoff_until > now and not resume_requested:
+        return
+    if resume_requested:
+        state.mode = "idle"
+        state.human_handoff_until = None
+
+    flow_expires_at = _parse_dt(state.flow_expires_at)
+    if state.mode == "booking_flow" and flow_expires_at and flow_expires_at <= now:
+        _clear_booking_flow(state)
+        state.step = STEP_IDLE
+        state.mode = "idle"
+        await save_state(pid, wa_phone, state)
+
+    if _is_resume_command(content):
+        await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
+        state = await get_state(pid, wa_phone)
+        await _send_main_menu_guarded(pid, tok, wa_phone, tenant.name, state)
+        return
 
     # "iptal" veya "geri" kelimeleri her adımda ana menüye döner
     if content and content.strip().lower() in ("iptal", "geri", "menu", "menü"):
@@ -497,12 +612,14 @@ async def handle_incoming(
             await _handle_booking_start(pid, tok, wa_phone, tid, state, db)
         elif content == "my_bookings":
             await _handle_my_bookings(pid, tok, wa_phone, tid, tenant, db)
+        elif content == "talk_human":
+            await _start_human_handoff(pid, tok, wa_phone, tenant, state)
         else:
             # İlk mesaj veya tanımlanamayan input → hoş geldin + menü
             state.tenant_id = str(tid)
             state.wa_name = wa_name
             await save_state(pid, wa_phone, state)
-            await _send_main_menu(pid, tok, wa_phone, tenant.name)
+            await _send_main_menu_guarded(pid, tok, wa_phone, tenant.name, state)
         return
 
     # ── NAME_COLLECT: Yeni kullanıcı isim/soyisim toplama ────────────────────
@@ -609,6 +726,25 @@ async def handle_incoming(
         return
 
     # Bilinmeyen adım → sıfırla
+    if state.step == STEP_SAME_DAY_CONFIRM:
+        if content == "confirm_additional_yes":
+            await _handle_booking_confirm(pid, tok, wa_phone, wa_name, state, tenant, db, confirm_same_day=True)
+        elif content == "cancel_booking":
+            await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
+            await wa.send_text(pid, tok, wa_phone, "Randevu iptal edildi. Baska bir islem icin /menu yazabilirsiniz.")
+        else:
+            await wa.send_buttons(
+                pid,
+                tok,
+                wa_phone,
+                "Ayni gun icin aktif randevunuz var. Yine de ek randevu almak istiyor musunuz?",
+                buttons=[
+                    wa.InteractiveButton(id="confirm_additional_yes", title="Evet"),
+                    wa.InteractiveButton(id="cancel_booking", title="Iptal Et"),
+                ],
+            )
+        return
+
     await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
     await _send_main_menu(pid, tok, wa_phone, tenant.name)
 
@@ -640,6 +776,7 @@ async def _handle_booking_start(
 
     if existing_user is None:
         state.step = STEP_NAME_COLLECT
+        _set_booking_flow(state)
         await save_state(pid, wa_phone, state)
         await wa.send_text(
             pid, tok, wa_phone,
@@ -651,6 +788,7 @@ async def _handle_booking_start(
 
     state.step = STEP_DATE_SELECT
     state.user_id = str(existing_user.id)
+    _set_booking_flow(state)
     await save_state(pid, wa_phone, state)
 
     has_dates = await _send_available_dates(pid, tok, wa_phone, tenant_id, db)
@@ -712,6 +850,7 @@ async def _handle_name_received(
 
     state.user_id = str(user.id)
     state.step = STEP_DATE_SELECT
+    _set_booking_flow(state)
     await save_state(pid, wa_phone, state)
 
     await wa.send_text(pid, tok, wa_phone, f"Kaydınız oluşturuldu, merhaba {first_name}!")
@@ -739,6 +878,7 @@ async def _handle_date_selected(
     state.step = STEP_TIME_SELECT
     state.selected_date = selected_date.isoformat()
     state.slot_offset = 0
+    _set_booking_flow(state)
     await save_state(pid, wa_phone, state)
 
     has_times = await _send_available_times(pid, tok, wa_phone, tenant_id, selected_date, db, offset=0)
@@ -765,6 +905,7 @@ async def _handle_time_selected(
     """Saat seçildi → randevu özetini göster, onay iste."""
     state.step = STEP_CONFIRM
     state.selected_time = selected_time
+    _set_booking_flow(state)
     await save_state(pid, wa_phone, state)
 
     selected_date = date.fromisoformat(state.selected_date)  # type: ignore[arg-type]
@@ -779,6 +920,7 @@ async def _handle_booking_confirm(
     state: ConversationState,
     tenant: Tenant,
     db: AsyncSession,
+    confirm_same_day: bool = False,
 ) -> None:
     """Onay verildi → kullanıcı bul/oluştur → randevu oluştur."""
     if not state.selected_date or not state.selected_time:
@@ -805,7 +947,7 @@ async def _handle_booking_confirm(
             tenant.id,
             user.id,
             slot_dt,
-            confirm_additional_same_day=True,
+            confirm_additional_same_day=confirm_same_day,
             source="whatsapp",
         )
     except Exception as exc:
@@ -818,6 +960,21 @@ async def _handle_booking_confirm(
                 msg = "Bu saat kapali.\nLutfen baska saat secin."
             elif error_code in ("slot_in_past", "invalid_slot"):
                 msg = "Gecersiz randevu saati. Lutfen tekrar deneyin."
+            elif error_code == "additional_booking_confirmation_required":
+                state.step = STEP_SAME_DAY_CONFIRM
+                _set_booking_flow(state)
+                await save_state(pid, wa_phone, state)
+                await wa.send_buttons(
+                    pid,
+                    tok,
+                    wa_phone,
+                    "Ayni gun icin aktif randevunuz var. Yine de ek randevu almak istiyor musunuz?",
+                    buttons=[
+                        wa.InteractiveButton(id="confirm_additional_yes", title="Evet"),
+                        wa.InteractiveButton(id="cancel_booking", title="Iptal Et"),
+                    ],
+                )
+                return
             else:
                 msg = "Randevu olusturulamadi. Lutfen tekrar deneyin."
         else:
@@ -829,6 +986,7 @@ async def _handle_booking_confirm(
         # Saatleri tekrar göster (aynı sayfada)
         state.step = STEP_TIME_SELECT
         state.selected_time = None
+        _set_booking_flow(state)
         await save_state(pid, wa_phone, state)
         await _send_available_times(pid, tok, wa_phone, tenant.id, selected_date, db, offset=state.slot_offset)
         return
@@ -846,6 +1004,7 @@ async def _handle_booking_confirm(
         f"Saat degisikligi, iptal ve diger hizmetler icin web sitemizi ziyaret edin:\n"
         f"🌐 {site_url}"
     )
+    success_msg += "\n\nTekrar menuye donmek icin /menu yazabilirsiniz."
     await wa.send_text(pid, tok, wa_phone, success_msg)
     logger.info("WA randevu oluşturuldu | booking_id=%s | user_id=%s", booking.id, user.id)
 

@@ -27,9 +27,8 @@ class Settings(BaseSettings):
     # Redis — konuşma state yönetimi için (WhatsApp botu)
     redis_url: str = "redis://localhost:6379/0"
 
-    # WhatsApp Business API (Meta Cloud API) — tek numara, platform geneli
+    # WhatsApp Business API (Meta Cloud API) — platform token + tenant phone ids
     wa_verify_token: str = ""
-    wa_phone_number_id: str = ""
     wa_access_token: str = ""
 
 

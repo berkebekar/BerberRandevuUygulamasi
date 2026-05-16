@@ -48,6 +48,8 @@ from app.modules.superadmin.tenant_schemas import (
     TenantStatusUpdateRequest,
     TenantStatusUpdateResponse,
     TenantUpdateRequest,
+    TenantWhatsappSettings,
+    TenantWhatsappUpdateRequest,
 )
 
 TZ = ZoneInfo("Europe/Istanbul")
@@ -162,6 +164,17 @@ def _tenant_parent_summary(tenant: Tenant | None) -> TenantParentSummary | None:
         name=tenant.name,
         first_name=tenant.first_name,
         last_name=tenant.last_name,
+    )
+
+
+def _tenant_whatsapp_settings(tenant: Tenant) -> TenantWhatsappSettings:
+    return TenantWhatsappSettings(
+        phone_number_id=getattr(tenant, "whatsapp_phone_number_id", None),
+        waba_id=getattr(tenant, "whatsapp_waba_id", None),
+        display_phone_number=getattr(tenant, "whatsapp_display_phone_number", None),
+        connection_status=getattr(tenant, "whatsapp_connection_status", "disconnected"),
+        connected_at=getattr(tenant, "whatsapp_connected_at", None),
+        bot_enabled=getattr(tenant, "whatsapp_bot_enabled", True),
     )
 
 
@@ -386,6 +399,7 @@ async def get_tenant_detail(db: AsyncSession, tenant_id: uuid.UUID) -> TenantDet
         created_at=tenant.created_at,
         admin=admin_summary,
         parent_tenant=_tenant_parent_summary(parent),
+        whatsapp=_tenant_whatsapp_settings(tenant),
         stats=TenantDetailStats(
             user_count=user_count,
             booking_count_total=booking_total,
@@ -569,6 +583,63 @@ async def update_tenant(
         mapped_error = _map_integrity_error_to_http(exc)
         if mapped_error is not None:
             raise mapped_error from exc
+        raise
+    return await get_tenant_detail(db, tenant.id)
+
+
+async def update_tenant_whatsapp(
+    db: AsyncSession,
+    super_admin: SuperAdmin,
+    tenant_id: uuid.UUID,
+    body: TenantWhatsappUpdateRequest,
+) -> TenantDetailResponse:
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(404, {"error": "tenant_not_found"})
+    if tenant.status == TenantStatus.deleted:
+        raise HTTPException(409, {"error": "tenant_deleted"})
+
+    if body.phone_number_id:
+        duplicate = await db.execute(
+            select(Tenant.id).where(
+                Tenant.whatsapp_phone_number_id == body.phone_number_id,
+                Tenant.id != tenant.id,
+            )
+        )
+        if duplicate.scalar_one_or_none() is not None:
+            raise HTTPException(409, {"error": "whatsapp_phone_number_id_already_exists"})
+
+    previous_status = getattr(tenant, "whatsapp_connection_status", "disconnected")
+    tenant.whatsapp_phone_number_id = body.phone_number_id
+    tenant.whatsapp_waba_id = body.waba_id
+    tenant.whatsapp_display_phone_number = body.display_phone_number
+    tenant.whatsapp_connection_status = body.connection_status
+    tenant.whatsapp_bot_enabled = body.bot_enabled
+    if body.connection_status == "connected" and previous_status != "connected":
+        tenant.whatsapp_connected_at = datetime.now(timezone.utc)
+    if body.connection_status != "connected":
+        tenant.whatsapp_connected_at = None
+
+    await _log_activity(
+        db,
+        super_admin=super_admin,
+        action_type="tenant_whatsapp_updated",
+        tenant_id=tenant.id,
+        metadata={
+            "phone_number_id": tenant.whatsapp_phone_number_id,
+            "waba_id": tenant.whatsapp_waba_id,
+            "connection_status": tenant.whatsapp_connection_status,
+            "bot_enabled": tenant.whatsapp_bot_enabled,
+        },
+    )
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        message = str(exc.orig).lower() if getattr(exc, "orig", None) else str(exc).lower()
+        if "whatsapp_phone_number_id" in message:
+            raise HTTPException(409, {"error": "whatsapp_phone_number_id_already_exists"}) from exc
         raise
     return await get_tenant_detail(db, tenant.id)
 

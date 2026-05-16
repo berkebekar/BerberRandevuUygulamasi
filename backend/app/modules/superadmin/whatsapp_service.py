@@ -48,7 +48,21 @@ def _booking_window(start: date) -> datetime:
 async def get_wa_health(db: AsyncSession) -> WaHealthResponse:
     settings = get_settings()
     token_configured = bool(settings.wa_access_token)
-    pid_configured = bool(settings.wa_phone_number_id)
+    connected_result = await db.execute(
+        select(func.count(Tenant.id)).where(
+            Tenant.whatsapp_phone_number_id.is_not(None),
+            Tenant.whatsapp_connection_status == "connected",
+        )
+    )
+    connected_tenant_count = int(connected_result.scalar_one() or 0)
+    bot_enabled_result = await db.execute(
+        select(func.count(Tenant.id)).where(
+            Tenant.whatsapp_phone_number_id.is_not(None),
+            Tenant.whatsapp_connection_status == "connected",
+            Tenant.whatsapp_bot_enabled.is_(True),
+        )
+    )
+    bot_enabled_tenant_count = int(bot_enabled_result.scalar_one() or 0)
 
     since = datetime.now(timezone.utc) - timedelta(hours=24)
     count_result = await db.execute(
@@ -63,7 +77,9 @@ async def get_wa_health(db: AsyncSession) -> WaHealthResponse:
 
     return WaHealthResponse(
         token_configured=token_configured,
-        phone_number_id_configured=pid_configured,
+        phone_number_id_configured=connected_tenant_count > 0,
+        connected_tenant_count=connected_tenant_count,
+        bot_enabled_tenant_count=bot_enabled_tenant_count,
         errors_last_24h=errors_24h,
         last_error_at=last_error_at,
     )

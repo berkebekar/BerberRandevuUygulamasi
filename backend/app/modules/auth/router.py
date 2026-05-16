@@ -34,6 +34,7 @@ from app.models.admin import Admin
 from app.models.tenant import Tenant
 from app.modules.auth import service as auth_service
 from app.modules.whatsapp import client as wa_client
+from app.modules.whatsapp.tenant_config import get_tenant_whatsapp_credentials
 from app.modules.auth.schemas import (
     AdminVerifyOTPRequest,
     CompleteRegistrationRequest,
@@ -59,8 +60,8 @@ async def _try_send_otp_via_whatsapp(
     OTP konsol loguna zaten yazıldığından bu fallback güvenlidir.
     """
     try:
-        settings = get_settings()
-        if not settings.wa_phone_number_id or not settings.wa_access_token:
+        creds = await get_tenant_whatsapp_credentials(db, tenant_id)
+        if creds is None:
             return
         try:
             normalized = normalize_tr_phone(phone)
@@ -73,8 +74,8 @@ async def _try_send_otp_via_whatsapp(
             "Kod 5 dakika gecerlidir."
         )
         await wa_client.send_text(
-            settings.wa_phone_number_id,
-            settings.wa_access_token,
+            creds.phone_number_id,
+            creds.access_token,
             wa_phone,
             msg,
         )

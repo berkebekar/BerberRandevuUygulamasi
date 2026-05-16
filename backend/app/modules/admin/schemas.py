@@ -45,6 +45,18 @@ class AdminProfileUpdateRequest(BaseModel):
         return stripped
 
 
+class AdminWhatsappSettingsResponse(BaseModel):
+    phone_number_id: str | None = None
+    display_phone_number: str | None = None
+    connection_status: str = "disconnected"
+    connected_at: datetime | None = None
+    bot_enabled: bool = True
+
+
+class AdminWhatsappSettingsUpdateRequest(BaseModel):
+    bot_enabled: bool
+
+
 class DashboardBookingItem(BaseModel):
     """
     Dashboard'da gosterilen tek randevu satiri.

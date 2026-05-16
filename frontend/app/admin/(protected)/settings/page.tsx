@@ -33,6 +33,14 @@ type AdminProfile = {
   email: string
 }
 
+type AdminWhatsappSettings = {
+  phone_number_id: string | null
+  display_phone_number: string | null
+  connection_status: string
+  connected_at: string | null
+  bot_enabled: boolean
+}
+
 type SettingsSection = "business" | "personal" | "whatsapp"
 
 const SETTINGS_SECTION_PATHS: Record<SettingsSection, string> = {
@@ -109,6 +117,10 @@ export default function AdminSettingsPage() {
   const [businessAddress, setBusinessAddress] = useState("")
   const [adminPhone, setAdminPhone] = useState("")
   const [adminEmail, setAdminEmail] = useState("")
+  const [whatsappSettings, setWhatsappSettings] = useState<AdminWhatsappSettings | null>(null)
+  const [whatsappBotEnabled, setWhatsappBotEnabled] = useState(true)
+  const [whatsappLoading, setWhatsappLoading] = useState(false)
+  const [whatsappSaving, setWhatsappSaving] = useState(false)
   const generalDefaultsRef = useRef({
     slotDuration: 30,
     workStart: "09:00",
@@ -194,6 +206,26 @@ export default function AdminSettingsPage() {
 
     loadProfile()
   }, [])
+
+  useEffect(() => {
+    if (activeSection !== "whatsapp") return
+
+    async function loadWhatsappSettings() {
+      setWhatsappLoading(true)
+      setError("")
+      try {
+        const data = await apiFetch<AdminWhatsappSettings>("/api/v1/admin/whatsapp/settings")
+        setWhatsappSettings(data)
+        setWhatsappBotEnabled(data.bot_enabled)
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Whatsapp ayarlari yuklenemedi.")
+      } finally {
+        setWhatsappLoading(false)
+      }
+    }
+
+    loadWhatsappSettings()
+  }, [activeSection])
 
   useEffect(() => {
     async function loadSpecialDay() {
@@ -417,6 +449,25 @@ export default function AdminSettingsPage() {
       setError(err instanceof Error ? err.message : "Ozel gun kaydi silinemedi.")
     } finally {
       setSpecialLoading(false)
+    }
+  }
+
+  async function handleSaveWhatsappSettings() {
+    setWhatsappSaving(true)
+    setError("")
+    setSuccess("")
+    try {
+      const data = await apiFetch<AdminWhatsappSettings>("/api/v1/admin/whatsapp/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ bot_enabled: whatsappBotEnabled }),
+      })
+      setWhatsappSettings(data)
+      setWhatsappBotEnabled(data.bot_enabled)
+      setSuccess("Whatsapp bot ayarlari kaydedildi.")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Whatsapp bot ayarlari kaydedilemedi.")
+    } finally {
+      setWhatsappSaving(false)
     }
   }
 
@@ -753,10 +804,70 @@ export default function AdminSettingsPage() {
         </button>
 
         {activeSection === "whatsapp" && (
-          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-2">
-            <h2 className="text-sm font-semibold text-zinc-200">Whatsapp Bot Ayarları</h2>
-            <p className="text-xs text-zinc-400">Bu alana Whatsapp bot ozellikleri eklenecek.</p>
-          </div>
+          <>
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-200">Whatsapp Bot Ayarları</h2>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Numara baglantisi yetkili tarafindan yonetilir. Buradan sadece botun cevap verip vermeyecegini secersiniz.
+                </p>
+              </div>
+
+              {whatsappLoading ? (
+                <p className="text-sm text-zinc-400">Yukleniyor...</p>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-zinc-500">Baglanti</span>
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                          whatsappSettings?.connection_status === "connected"
+                            ? "bg-emerald-500/15 text-emerald-300"
+                            : "bg-amber-500/15 text-amber-300"
+                        }`}
+                      >
+                        {whatsappSettings?.connection_status === "connected" ? "Bagli" : "Bagli degil"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-zinc-500">Numara</span>
+                      <span className="text-sm text-zinc-200">
+                        {whatsappSettings?.display_phone_number || "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-zinc-500">Phone Number ID</span>
+                      <span className="max-w-[170px] truncate text-right text-xs text-zinc-400">
+                        {whatsappSettings?.phone_number_id || "-"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3">
+                    <span>
+                      <span className="block text-sm font-semibold text-zinc-200">Bot cevap versin</span>
+                      <span className="block text-xs text-zinc-500">Kapali olursa bot sohbetlere cevap yazmaz.</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappBotEnabled}
+                      onChange={(e) => setWhatsappBotEnabled(e.target.checked)}
+                      className="h-5 w-5 accent-emerald-400"
+                    />
+                  </label>
+
+                  <button
+                    onClick={handleSaveWhatsappSettings}
+                    disabled={whatsappSaving || whatsappLoading}
+                    className="w-full py-3 bg-zinc-100 text-zinc-950 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
+                  >
+                    {whatsappSaving ? "Kaydediliyor..." : "Whatsapp Bot Ayarlarini Kaydet"}
+                  </button>
+                </>
+              )}
+            </div>
+          </>
         )}
 
         {error && (

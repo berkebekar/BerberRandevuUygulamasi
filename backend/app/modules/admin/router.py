@@ -25,6 +25,8 @@ from app.modules.admin.schemas import (
     AdminOverviewResponse,
     AdminRangeStatisticsResponse,
     AdminStatisticsResponse,
+    AdminWhatsappSettingsResponse,
+    AdminWhatsappSettingsUpdateRequest,
     BookingHistoryResponse,
     BookingHistoryStatusFilter,
     DashboardResponse,
@@ -53,6 +55,25 @@ async def update_profile(
     """Adminin duzenleyebilecegi profil bilgilerini gunceller."""
     data = await admin_service.update_profile(db, admin, body)
     return AdminProfileResponse(**data)
+
+
+@router.get("/whatsapp/settings", response_model=AdminWhatsappSettingsResponse)
+async def get_whatsapp_settings(
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    data = await admin_service.get_whatsapp_settings(db, admin)
+    return AdminWhatsappSettingsResponse(**data)
+
+
+@router.patch("/whatsapp/settings", response_model=AdminWhatsappSettingsResponse)
+async def update_whatsapp_settings(
+    body: AdminWhatsappSettingsUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    data = await admin_service.update_whatsapp_settings(db, admin, body)
+    return AdminWhatsappSettingsResponse(**data)
 
 
 @router.get("/dashboard", response_model=DashboardResponse)

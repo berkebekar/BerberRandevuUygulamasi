@@ -32,6 +32,14 @@ class Tenant(Base):
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    whatsapp_phone_number_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    whatsapp_waba_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    whatsapp_display_phone_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    whatsapp_connection_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="disconnected"
+    )
+    whatsapp_connected_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    whatsapp_bot_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     status: Mapped[TenantStatus] = mapped_column(
         Enum(TenantStatus, name="tenantstatus", create_constraint=True),

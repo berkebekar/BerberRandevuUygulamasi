@@ -20,7 +20,7 @@ from app.models.booking import Booking
 from app.models.enums import BookingStatus, TenantStatus
 from app.models.tenant import Tenant
 from app.models.user import User
-from app.modules.admin.schemas import AdminProfileUpdateRequest
+from app.modules.admin.schemas import AdminProfileUpdateRequest, AdminWhatsappSettingsUpdateRequest
 from app.modules.booking import service as booking_service
 from app.modules.schedule import service as schedule_service
 
@@ -74,6 +74,41 @@ async def update_profile(
         "business_address": tenant.address,
         "phone": admin.phone,
         "email": admin.email,
+    }
+
+
+async def get_whatsapp_settings(db: AsyncSession, admin: Admin) -> dict:
+    result = await db.execute(select(Tenant).where(Tenant.id == admin.tenant_id))
+    tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(404, {"error": "tenant_not_found"})
+    return {
+        "phone_number_id": getattr(tenant, "whatsapp_phone_number_id", None),
+        "display_phone_number": getattr(tenant, "whatsapp_display_phone_number", None),
+        "connection_status": getattr(tenant, "whatsapp_connection_status", "disconnected"),
+        "connected_at": getattr(tenant, "whatsapp_connected_at", None),
+        "bot_enabled": getattr(tenant, "whatsapp_bot_enabled", True),
+    }
+
+
+async def update_whatsapp_settings(
+    db: AsyncSession,
+    admin: Admin,
+    body: AdminWhatsappSettingsUpdateRequest,
+) -> dict:
+    result = await db.execute(select(Tenant).where(Tenant.id == admin.tenant_id))
+    tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(404, {"error": "tenant_not_found"})
+    tenant.whatsapp_bot_enabled = body.bot_enabled
+    await db.commit()
+    await db.refresh(tenant)
+    return {
+        "phone_number_id": getattr(tenant, "whatsapp_phone_number_id", None),
+        "display_phone_number": getattr(tenant, "whatsapp_display_phone_number", None),
+        "connection_status": getattr(tenant, "whatsapp_connection_status", "disconnected"),
+        "connected_at": getattr(tenant, "whatsapp_connected_at", None),
+        "bot_enabled": getattr(tenant, "whatsapp_bot_enabled", True),
     }
 
 

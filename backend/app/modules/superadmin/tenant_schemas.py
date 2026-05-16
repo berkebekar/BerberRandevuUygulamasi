@@ -69,6 +69,15 @@ class TenantDetailStats(BaseModel):
     cancel_rate: float
 
 
+class TenantWhatsappSettings(BaseModel):
+    phone_number_id: str | None = None
+    waba_id: str | None = None
+    display_phone_number: str | None = None
+    connection_status: Literal["disconnected", "connected", "pending", "error"] = "disconnected"
+    connected_at: datetime | None = None
+    bot_enabled: bool = True
+
+
 class TenantDetailResponse(BaseModel):
     id: uuid.UUID
     parent_tenant_id: uuid.UUID | None = None
@@ -80,6 +89,7 @@ class TenantDetailResponse(BaseModel):
     created_at: datetime
     admin: TenantAdminSummary | None = None
     parent_tenant: TenantParentSummary | None = None
+    whatsapp: TenantWhatsappSettings
     stats: TenantDetailStats
 
 
@@ -135,6 +145,22 @@ class TenantUpdateRequest(BaseModel):
     address: str | None = Field(default=None, min_length=5, max_length=500)
     admin_phone: str | None = Field(default=None, min_length=10, max_length=50)
     admin_email: str | None = Field(default=None, min_length=5, max_length=255)
+
+
+class TenantWhatsappUpdateRequest(BaseModel):
+    phone_number_id: str | None = Field(default=None, max_length=100)
+    waba_id: str | None = Field(default=None, max_length=100)
+    display_phone_number: str | None = Field(default=None, max_length=50)
+    connection_status: Literal["disconnected", "connected", "pending", "error"] = "disconnected"
+    bot_enabled: bool = True
+
+    @field_validator("phone_number_id", "waba_id", "display_phone_number")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class TenantStatusUpdateRequest(BaseModel):

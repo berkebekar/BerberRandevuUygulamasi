@@ -18,6 +18,7 @@ from app.models.enums import BookingStatus
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.modules.whatsapp import client as wa_client
+from app.modules.whatsapp.tenant_config import get_tenant_whatsapp_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def _full_name(tenant: Tenant) -> str:
 async def send_reminders() -> None:
     """88-92 dakika icinde randevusu olan, henuz hatirlatilmamis musterilere WP gonderir."""
     settings = get_settings()
-    if not settings.wa_phone_number_id or not settings.wa_access_token:
+    if not settings.wa_access_token:
         return
 
     now = datetime.now(tz=ZoneInfo("Europe/Istanbul"))
@@ -75,6 +76,9 @@ async def send_reminders() -> None:
                 tenant = t_res.scalar_one_or_none()
                 if not tenant:
                     continue
+                creds = await get_tenant_whatsapp_credentials(db, tenant.id)
+                if creds is None:
+                    continue
 
                 u_res = await db.execute(select(User).where(User.id == booking.user_id))
                 user = u_res.scalar_one_or_none()
@@ -94,8 +98,8 @@ async def send_reminders() -> None:
                     f"Sizi bekliyoruz! ✂️"
                 )
                 await wa_client.send_text(
-                    settings.wa_phone_number_id,
-                    settings.wa_access_token,
+                    creds.phone_number_id,
+                    creds.access_token,
                     wa_phone,
                     msg,
                 )

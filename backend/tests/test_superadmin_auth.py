@@ -177,7 +177,13 @@ async def test_logout_idempotent_without_cookie_200():
 
 @pytest.mark.asyncio
 async def test_dependency_wrong_role_forbidden():
-    token = create_token({"sub": str(uuid.uuid4()), "role": "admin", "sv": str(uuid.uuid4())}, expires_minutes=30)
+    settings = get_settings()
+    secret = settings.super_admin_session_secret or settings.secret_key
+    token = create_token_with_secret(
+        {"sub": str(uuid.uuid4()), "role": "admin", "sv": str(uuid.uuid4())},
+        expires_minutes=30,
+        secret_key=secret,
+    )
     request = MagicMock()
     request.state = SimpleNamespace()
     session = AsyncMock()

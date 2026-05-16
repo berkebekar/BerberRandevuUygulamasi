@@ -13,6 +13,8 @@ from app.modules.superadmin.monitoring_schemas import PaginationMeta
 class WaHealthResponse(BaseModel):
     token_configured: bool
     phone_number_id_configured: bool
+    connected_tenant_count: int = 0
+    bot_enabled_tenant_count: int = 0
     errors_last_24h: int
     last_error_at: datetime | None
 

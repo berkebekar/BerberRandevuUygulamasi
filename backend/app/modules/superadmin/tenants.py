@@ -24,6 +24,7 @@ from app.modules.superadmin.tenant_schemas import (
     TenantStatusUpdateRequest,
     TenantStatusUpdateResponse,
     TenantUpdateRequest,
+    TenantWhatsappUpdateRequest,
 )
 from app.modules.superadmin.tenant_service import (
     create_tenant,
@@ -33,6 +34,7 @@ from app.modules.superadmin.tenant_service import (
     list_tenants,
     soft_delete_tenant,
     update_tenant,
+    update_tenant_whatsapp,
     update_tenant_status,
 )
 
@@ -105,6 +107,16 @@ async def super_admin_update_tenant(
     super_admin: SuperAdmin = Depends(get_current_super_admin),
 ):
     return await update_tenant(db, super_admin, tenant_id, body)
+
+
+@router.put("/{tenant_id}/whatsapp", response_model=TenantDetailResponse, status_code=200)
+async def super_admin_update_tenant_whatsapp(
+    tenant_id: uuid.UUID,
+    body: TenantWhatsappUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    super_admin: SuperAdmin = Depends(get_current_super_admin),
+):
+    return await update_tenant_whatsapp(db, super_admin, tenant_id, body)
 
 
 @router.put("/{tenant_id}/status", response_model=TenantStatusUpdateResponse, status_code=200)

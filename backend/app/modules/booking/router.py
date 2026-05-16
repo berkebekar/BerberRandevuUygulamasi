@@ -24,7 +24,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_admin, get_current_user
 from app.core.phone import normalize_tr_phone, phone_variants
@@ -35,6 +34,7 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.modules.booking import service as booking_service
 from app.modules.whatsapp import client as wa_client
+from app.modules.whatsapp.tenant_config import get_tenant_whatsapp_credentials
 from app.modules.booking.schemas import (
     AdminBookingCreateRequest,
     BookingCreateRequest,
@@ -75,8 +75,8 @@ async def _notify_cancelled_by_admin(
 ) -> None:
     """Berber iptali sonrasi musteriye WP mesaji gonderir; basarisizlik sessizce yutulur."""
     try:
-        settings = get_settings()
-        if not settings.wa_phone_number_id or not settings.wa_access_token:
+        creds = await get_tenant_whatsapp_credentials(db, tenant_id)
+        if creds is None:
             return
         t_res = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = t_res.scalar_one_or_none()
@@ -95,8 +95,8 @@ async def _notify_cancelled_by_admin(
         slot_str = _tr_datetime(slot_time)
         msg = f"{slot_str} saatindeki randevunuz {_tenant_full_name(tenant)} tarafından iptal edilmiştir."
         await wa_client.send_text(
-            settings.wa_phone_number_id,
-            settings.wa_access_token,
+            creds.phone_number_id,
+            creds.access_token,
             wa_phone,
             msg,
         )
@@ -113,8 +113,8 @@ async def _notify_rescheduled_by_admin(
 ) -> None:
     """Berber saat degisikligi sonrasi musteriye WP mesaji gonderir; basarisizlik sessizce yutulur."""
     try:
-        settings = get_settings()
-        if not settings.wa_phone_number_id or not settings.wa_access_token:
+        creds = await get_tenant_whatsapp_credentials(db, tenant_id)
+        if creds is None:
             return
         t_res = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = t_res.scalar_one_or_none()
@@ -137,8 +137,8 @@ async def _notify_rescheduled_by_admin(
             f"{_tenant_full_name(tenant)} tarafından alınmıştır."
         )
         await wa_client.send_text(
-            settings.wa_phone_number_id,
-            settings.wa_access_token,
+            creds.phone_number_id,
+            creds.access_token,
             wa_phone,
             msg,
         )

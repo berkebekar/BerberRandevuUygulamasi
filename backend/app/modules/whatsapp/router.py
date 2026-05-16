@@ -19,10 +19,12 @@ TenantMiddleware bu route'da tenant zorunluluğunu ATLAR çünkü
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.models.tenant import Tenant
 from app.modules.whatsapp.handlers import handle_incoming
 from app.modules.whatsapp.tracking import log_wa_error
 
@@ -114,6 +116,22 @@ async def _process_webhook(body: dict, db: AsyncSession) -> None:
             if not phone_number_id:
                 continue
 
+            tenant_result = await db.execute(
+                select(Tenant).where(
+                    Tenant.whatsapp_phone_number_id == phone_number_id,
+                    Tenant.is_active.is_(True),
+                )
+            )
+            tenant = tenant_result.scalar_one_or_none()
+            if tenant is None:
+                await log_wa_error(
+                    db,
+                    "unknown_phone_number_id",
+                    "WhatsApp phone_number_id icin tenant bulunamadi",
+                    meta={"phone_number_id": phone_number_id},
+                )
+                continue
+
             # Gönderen profil adları (contacts listesinde)
             contacts = {c["wa_id"]: c.get("profile", {}).get("name", "Musteri") for c in value.get("contacts", [])}
 
@@ -149,4 +167,5 @@ async def _process_webhook(body: dict, db: AsyncSession) -> None:
                     msg_type=msg_type,
                     content=content,
                     db=db,
+                    tenant=tenant,
                 )
