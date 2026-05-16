@@ -4,7 +4,7 @@ Tek berber işletmesi; subdomain ile çözümlenir.
 """
 
 import uuid
-from sqlalchemy import Boolean, DateTime, Enum, String, text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +21,11 @@ class Tenant(Base):
         UUID(as_uuid=True),
         primary_key=True,
         server_default=text("gen_random_uuid()"),
+    )
+    parent_tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
     )
     subdomain: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)

@@ -67,6 +67,12 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   admin_not_registered: "Bu telefon numarasi ile kayitli yonetici bulunamadi.",
   invalid_credentials: "Email veya sifre hatali.",
   otp_required: "Guvenlik geregi yonetici girisi sadece SMS dogrulama ile yapilir.",
+  invalid_page_size: "Liste boyutu 10, 25 veya 50 olmalidir.",
+  linked_tenant_not_found: "Bu berber size bagli degil veya aktif degil.",
+  tenant_parent_self: "Tenant kendisine baglanamaz.",
+  tenant_parent_invalid: "Secilen bagli olunan berber aktif degil veya bulunamadi.",
+  tenant_parent_is_child: "Bagli calisan bir berbere yeni berber baglanamaz.",
+  tenant_has_children: "Bu tenantin bagli calisanlari var. Once baglantilari kaldirin.",
 }
 
 type ParsedApiError = {

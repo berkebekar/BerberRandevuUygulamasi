@@ -20,6 +20,7 @@ from app.modules.superadmin.tenant_schemas import (
     TenantHardDeleteResponse,
     TenantListQuery,
     TenantListResponse,
+    TenantParentCandidatesResponse,
     TenantStatusUpdateRequest,
     TenantStatusUpdateResponse,
     TenantUpdateRequest,
@@ -28,6 +29,7 @@ from app.modules.superadmin.tenant_service import (
     create_tenant,
     get_tenant_detail,
     hard_delete_tenant,
+    list_parent_candidates,
     list_tenants,
     soft_delete_tenant,
     update_tenant,
@@ -64,6 +66,16 @@ async def super_admin_list_tenants(
             sort_order=sort_order,
         ),
     )
+
+
+@router.get("/parent-candidates", response_model=TenantParentCandidatesResponse, status_code=200)
+async def super_admin_list_parent_candidates(
+    exclude_tenant_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    super_admin: SuperAdmin = Depends(get_current_super_admin),
+):
+    _ = super_admin
+    return await list_parent_candidates(db, exclude_tenant_id=exclude_tenant_id)
 
 
 @router.get("/{tenant_id}", response_model=TenantDetailResponse, status_code=200)

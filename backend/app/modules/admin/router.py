@@ -9,6 +9,7 @@ Bu dosya sadece HTTP katmanidir:
 Business logic admin/service.py icindedir.
 """
 
+import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -24,7 +25,10 @@ from app.modules.admin.schemas import (
     AdminOverviewResponse,
     AdminRangeStatisticsResponse,
     AdminStatisticsResponse,
+    BookingHistoryResponse,
+    BookingHistoryStatusFilter,
     DashboardResponse,
+    LinkedTenantOverviewResponse,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -128,3 +132,58 @@ async def get_statistics_range(
         end_date=end_date,
     )
     return AdminRangeStatisticsResponse(**data)
+
+
+@router.get("/bookings/history", response_model=BookingHistoryResponse)
+async def get_booking_history(
+    start_date: date = Query(..., description="Baslangic tarihi: YYYY-MM-DD"),
+    end_date: date = Query(..., description="Bitis tarihi: YYYY-MM-DD"),
+    status_filter: BookingHistoryStatusFilter = Query("all", alias="status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1),
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    data = await admin_service.get_booking_history(
+        db,
+        tenant_id=admin.tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+        status_filter=status_filter,
+        page=page,
+        page_size=page_size,
+    )
+    return BookingHistoryResponse(**data)
+
+
+@router.get("/linked-tenants", response_model=LinkedTenantOverviewResponse)
+async def get_linked_tenants(
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    data = await admin_service.get_linked_tenant_overview(db, admin)
+    return LinkedTenantOverviewResponse(**data)
+
+
+@router.get("/linked-tenants/{linked_tenant_id}/bookings", response_model=BookingHistoryResponse)
+async def get_linked_tenant_booking_history(
+    linked_tenant_id: uuid.UUID,
+    start_date: date = Query(..., description="Baslangic tarihi: YYYY-MM-DD"),
+    end_date: date = Query(..., description="Bitis tarihi: YYYY-MM-DD"),
+    status_filter: BookingHistoryStatusFilter = Query("all", alias="status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1),
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    data = await admin_service.get_linked_tenant_booking_history(
+        db,
+        owner_tenant_id=admin.tenant_id,
+        linked_tenant_id=uuid.UUID(linked_tenant_id),
+        start_date=start_date,
+        end_date=end_date,
+        status_filter=status_filter,
+        page=page,
+        page_size=page_size,
+    )
+    return BookingHistoryResponse(**data)

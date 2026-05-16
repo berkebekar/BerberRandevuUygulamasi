@@ -7,6 +7,7 @@ Business logic yoktur; sadece veri dogrulama ve serilestirme yapilir.
 
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -185,3 +186,60 @@ class AdminRangeStatisticsResponse(BaseModel):
     summary: StatsSummary
     customer_stats: PeriodCustomerStats
     capacity_stats: PeriodCapacityStats
+
+
+BookingHistoryStatusFilter = Literal["all", "completed", "upcoming", "cancelled", "no_show"]
+
+
+class BookingHistorySummary(BaseModel):
+    total_bookings: int
+    completed_count: int
+    upcoming_count: int
+    no_show_count: int
+    cancelled_count: int
+
+
+class BookingHistoryItem(BaseModel):
+    id: uuid.UUID
+    user_first_name: str
+    user_last_name: str
+    user_phone: str
+    slot_time: datetime
+    status: BookingStatus
+    cancelled_by: CancelledBy | None
+    created_at: datetime
+
+
+class BookingHistoryPagination(BaseModel):
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+
+
+class BookingHistoryResponse(BaseModel):
+    start_date: date
+    end_date: date
+    summary: BookingHistorySummary
+    items: list[BookingHistoryItem]
+    pagination: BookingHistoryPagination
+
+
+class LinkedTenantItem(BaseModel):
+    id: uuid.UUID
+    first_name: str | None = None
+    last_name: str | None = None
+    name: str
+
+
+class LinkedParentInfo(BaseModel):
+    id: uuid.UUID
+    name: str
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+class LinkedTenantOverviewResponse(BaseModel):
+    mode: Literal["owner", "child"]
+    linked_tenants: list[LinkedTenantItem] = []
+    parent_tenant: LinkedParentInfo | None = None

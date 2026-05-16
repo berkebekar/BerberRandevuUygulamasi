@@ -30,6 +30,8 @@ from app.models.user import User
 from app.models.wa_contact_log import WaContactLog
 from app.models.wa_error_log import WaErrorLog
 from app.modules.superadmin.tenant_schemas import (
+    TenantParentCandidate,
+    TenantParentCandidatesResponse,
     TenantAdminSummary,
     TenantCreateRequest,
     TenantCreateResponse,
@@ -42,6 +44,7 @@ from app.modules.superadmin.tenant_schemas import (
     TenantListPagination,
     TenantListQuery,
     TenantListResponse,
+    TenantParentSummary,
     TenantStatusUpdateRequest,
     TenantStatusUpdateResponse,
     TenantUpdateRequest,
@@ -138,6 +141,7 @@ def _domain_sync_response(
 def _tenant_item(tenant: Tenant, user_count: int, booking_count: int) -> TenantListItem:
     return TenantListItem(
         id=tenant.id,
+        parent_tenant_id=getattr(tenant, "parent_tenant_id", None),
         subdomain=tenant.subdomain,
         name=tenant.name,
         address=tenant.address,
@@ -146,6 +150,75 @@ def _tenant_item(tenant: Tenant, user_count: int, booking_count: int) -> TenantL
         created_at=tenant.created_at,
         user_count=int(user_count),
         booking_count=int(booking_count),
+    )
+
+
+def _tenant_parent_summary(tenant: Tenant | None) -> TenantParentSummary | None:
+    if tenant is None:
+        return None
+    return TenantParentSummary(
+        id=tenant.id,
+        subdomain=tenant.subdomain,
+        name=tenant.name,
+        first_name=tenant.first_name,
+        last_name=tenant.last_name,
+    )
+
+
+async def _tenant_has_children(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
+    result = await db.execute(
+        select(Tenant.id).where(
+            Tenant.parent_tenant_id == tenant_id,
+            Tenant.status != TenantStatus.deleted,
+        ).limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _validate_parent_tenant_assignment(
+    db: AsyncSession,
+    tenant_id: uuid.UUID | None,
+    parent_tenant_id: uuid.UUID | None,
+) -> None:
+    if parent_tenant_id is None:
+        return
+    if tenant_id is not None and parent_tenant_id == tenant_id:
+        raise HTTPException(422, {"error": "tenant_parent_self"})
+
+    parent_result = await db.execute(select(Tenant).where(Tenant.id == parent_tenant_id))
+    parent = parent_result.scalar_one_or_none()
+    if parent is None or parent.status != TenantStatus.active or not parent.is_active:
+        raise HTTPException(422, {"error": "tenant_parent_invalid"})
+    if parent.parent_tenant_id is not None:
+        raise HTTPException(422, {"error": "tenant_parent_is_child"})
+    if tenant_id is not None and await _tenant_has_children(db, tenant_id):
+        raise HTTPException(422, {"error": "tenant_has_children"})
+
+
+async def list_parent_candidates(
+    db: AsyncSession,
+    exclude_tenant_id: uuid.UUID | None = None,
+) -> TenantParentCandidatesResponse:
+    query = select(Tenant).where(
+        Tenant.parent_tenant_id.is_(None),
+        Tenant.status == TenantStatus.active,
+        Tenant.is_active == True,  # noqa: E712
+    )
+    if exclude_tenant_id is not None:
+        query = query.where(Tenant.id != exclude_tenant_id)
+    result = await db.execute(query.order_by(Tenant.name.asc(), Tenant.created_at.desc()))
+    tenants = list(result.scalars().all())
+    return TenantParentCandidatesResponse(
+        items=[
+            TenantParentCandidate(
+                id=tenant.id,
+                subdomain=tenant.subdomain,
+                name=tenant.name,
+                first_name=tenant.first_name,
+                last_name=tenant.last_name,
+            )
+            for tenant in tenants
+        ]
     )
 
 
@@ -263,6 +336,11 @@ async def get_tenant_detail(db: AsyncSession, tenant_id: uuid.UUID) -> TenantDet
 
     admin_result = await db.execute(select(Admin).where(Admin.tenant_id == tenant.id))
     admin = admin_result.scalar_one_or_none()
+    parent = None
+    tenant_parent_id = getattr(tenant, "parent_tenant_id", None)
+    if tenant_parent_id is not None:
+        parent_result = await db.execute(select(Tenant).where(Tenant.id == tenant_parent_id))
+        parent = parent_result.scalar_one_or_none()
 
     user_count_result = await db.execute(select(func.count(User.id)).where(User.tenant_id == tenant.id))
     user_count = int(user_count_result.scalar_one() or 0)
@@ -299,6 +377,7 @@ async def get_tenant_detail(db: AsyncSession, tenant_id: uuid.UUID) -> TenantDet
     cancel_rate = round((cancelled / booking_total) * 100, 1) if booking_total else 0.0
     return TenantDetailResponse(
         id=tenant.id,
+        parent_tenant_id=tenant_parent_id,
         subdomain=tenant.subdomain,
         name=tenant.name,
         address=tenant.address,
@@ -306,6 +385,7 @@ async def get_tenant_detail(db: AsyncSession, tenant_id: uuid.UUID) -> TenantDet
         is_active=tenant.is_active,
         created_at=tenant.created_at,
         admin=admin_summary,
+        parent_tenant=_tenant_parent_summary(parent),
         stats=TenantDetailStats(
             user_count=user_count,
             booking_count_total=booking_total,
@@ -336,8 +416,10 @@ async def create_tenant(
     existing_phone_result = await db.execute(select(Admin.id).where(Admin.phone == phone))
     if existing_phone_result.scalar_one_or_none() is not None:
         raise HTTPException(409, {"error": "admin_phone_already_exists"})
+    await _validate_parent_tenant_assignment(db, None, body.parent_tenant_id)
 
     tenant = Tenant(
+        parent_tenant_id=body.parent_tenant_id,
         subdomain=subdomain,
         name=body.name.strip(),
         address=body.address.strip(),
@@ -380,6 +462,7 @@ async def create_tenant(
                 "admin_phone": admin.phone,
                 "admin_first_name": body.admin_first_name,
                 "admin_last_name": body.admin_last_name,
+                "parent_tenant_id": str(body.parent_tenant_id) if body.parent_tenant_id else None,
             },
         )
         await db.commit()
@@ -455,12 +538,29 @@ async def update_tenant(
             raise HTTPException(409, {"error": "admin_phone_already_exists"})
         admin.phone = new_phone
 
+    if hasattr(body, "model_fields_set"):
+        parent_field_was_sent = "parent_tenant_id" in body.model_fields_set
+    else:
+        parent_field_was_sent = hasattr(body, "parent_tenant_id")
+    body_parent_tenant_id = getattr(body, "parent_tenant_id", None)
+    if parent_field_was_sent and body_parent_tenant_id != getattr(tenant, "parent_tenant_id", None):
+        await _validate_parent_tenant_assignment(db, tenant.id, body_parent_tenant_id)
+        tenant.parent_tenant_id = body_parent_tenant_id
+
     await _log_activity(
         db,
         super_admin=super_admin,
         action_type="tenant_updated",
         tenant_id=tenant.id,
-        metadata={"tenant_name": tenant.name, "subdomain": tenant.subdomain},
+        metadata={
+            "tenant_name": tenant.name,
+            "subdomain": tenant.subdomain,
+            "parent_tenant_id": (
+                str(getattr(tenant, "parent_tenant_id", None))
+                if getattr(tenant, "parent_tenant_id", None)
+                else None
+            ),
+        },
     )
     try:
         await db.commit()

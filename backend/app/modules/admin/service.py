@@ -8,6 +8,7 @@ HTTP katmani (router.py) buradan aldigi veriyi response'a cevirir.
 import uuid
 from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
+import math
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin import Admin
 from app.models.booking import Booking
+from app.models.enums import BookingStatus, TenantStatus
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.modules.admin.schemas import AdminProfileUpdateRequest
@@ -447,3 +449,201 @@ async def get_statistics(
             "monthly": monthly_capacity,
         },
     }
+
+
+def _history_date_bounds(start_date: date, end_date: date) -> tuple[datetime, datetime]:
+    return (
+        datetime.combine(start_date, time.min, tzinfo=TZ),
+        datetime.combine(end_date, time.max, tzinfo=TZ),
+    )
+
+
+def _history_status_predicate(status_filter: str, now: datetime):
+    if status_filter == "cancelled":
+        return Booking.status == BookingStatus.cancelled
+    if status_filter == "no_show":
+        return Booking.status == BookingStatus.no_show
+    if status_filter == "completed":
+        return Booking.status == BookingStatus.confirmed, Booking.slot_time <= now
+    if status_filter == "upcoming":
+        return Booking.status == BookingStatus.confirmed, Booking.slot_time > now
+    return None
+
+
+def _build_history_summary(rows: list[tuple[Booking, User]], now: datetime) -> dict:
+    completed_count = 0
+    upcoming_count = 0
+    no_show_count = 0
+    cancelled_count = 0
+    for booking, _user in rows:
+        if booking.status == BookingStatus.cancelled:
+            cancelled_count += 1
+        elif booking.status == BookingStatus.no_show:
+            no_show_count += 1
+        elif _to_local_tz(booking.slot_time) <= now:
+            completed_count += 1
+        else:
+            upcoming_count += 1
+    return {
+        "total_bookings": len(rows),
+        "completed_count": completed_count,
+        "upcoming_count": upcoming_count,
+        "no_show_count": no_show_count,
+        "cancelled_count": cancelled_count,
+    }
+
+
+def _serialize_history_items(rows: list[tuple[Booking, User]]) -> list[dict]:
+    return [
+        {
+            "id": booking.id,
+            "user_first_name": user.first_name,
+            "user_last_name": user.last_name,
+            "user_phone": user.phone,
+            "slot_time": booking.slot_time,
+            "status": booking.status,
+            "cancelled_by": booking.cancelled_by,
+            "created_at": booking.created_at,
+        }
+        for booking, user in rows
+    ]
+
+
+async def get_booking_history(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    start_date: date,
+    end_date: date,
+    status_filter: str = "all",
+    page: int = 1,
+    page_size: int = 10,
+) -> dict:
+    if end_date < start_date:
+        raise HTTPException(status_code=422, detail="Bitis tarihi baslangic tarihinden once olamaz.")
+    if page_size not in {10, 25, 50}:
+        raise HTTPException(422, {"error": "invalid_page_size"})
+
+    now = datetime.now(TZ)
+    start_dt, end_dt = _history_date_bounds(start_date, end_date)
+    base_filters = [
+        Booking.tenant_id == tenant_id,
+        Booking.slot_time >= start_dt,
+        Booking.slot_time <= end_dt,
+    ]
+
+    summary_rows_result = await db.execute(
+        select(Booking, User)
+        .join(User, User.id == Booking.user_id)
+        .where(*base_filters)
+        .order_by(Booking.slot_time.desc())
+    )
+    summary_rows = list(summary_rows_result.all())
+
+    item_filters = list(base_filters)
+    predicate = _history_status_predicate(status_filter, now)
+    if isinstance(predicate, tuple):
+        item_filters.extend(predicate)
+    elif predicate is not None:
+        item_filters.append(predicate)
+
+    total_result = await db.execute(select(func.count(Booking.id)).where(*item_filters))
+    total = int(total_result.scalar_one() or 0)
+    total_pages = math.ceil(total / page_size) if total else 0
+
+    rows_result = await db.execute(
+        select(Booking, User)
+        .join(User, User.id == Booking.user_id)
+        .where(*item_filters)
+        .order_by(Booking.slot_time.desc(), Booking.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = list(rows_result.all())
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "summary": _build_history_summary(summary_rows, now),
+        "items": _serialize_history_items(rows),
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "total_pages": total_pages,
+        },
+    }
+
+
+async def get_linked_tenant_overview(db: AsyncSession, admin: Admin) -> dict:
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == admin.tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(404, {"error": "tenant_not_found"})
+
+    if tenant.parent_tenant_id is not None:
+        parent_result = await db.execute(select(Tenant).where(Tenant.id == tenant.parent_tenant_id))
+        parent = parent_result.scalar_one_or_none()
+        return {
+            "mode": "child",
+            "linked_tenants": [],
+            "parent_tenant": None if parent is None else {
+                "id": parent.id,
+                "name": parent.name,
+                "first_name": parent.first_name,
+                "last_name": parent.last_name,
+            },
+        }
+
+    linked_result = await db.execute(
+        select(Tenant)
+        .where(
+            Tenant.parent_tenant_id == admin.tenant_id,
+            Tenant.status == TenantStatus.active,
+            Tenant.is_active == True,  # noqa: E712
+        )
+        .order_by(Tenant.first_name.asc(), Tenant.last_name.asc(), Tenant.name.asc())
+    )
+    linked = list(linked_result.scalars().all())
+    return {
+        "mode": "owner",
+        "linked_tenants": [
+            {
+                "id": tenant.id,
+                "first_name": tenant.first_name,
+                "last_name": tenant.last_name,
+                "name": tenant.name,
+            }
+            for tenant in linked
+        ],
+        "parent_tenant": None,
+    }
+
+
+async def get_linked_tenant_booking_history(
+    db: AsyncSession,
+    owner_tenant_id: uuid.UUID,
+    linked_tenant_id: uuid.UUID,
+    start_date: date,
+    end_date: date,
+    status_filter: str = "all",
+    page: int = 1,
+    page_size: int = 10,
+) -> dict:
+    linked_result = await db.execute(
+        select(Tenant.id).where(
+            Tenant.id == linked_tenant_id,
+            Tenant.parent_tenant_id == owner_tenant_id,
+            Tenant.status == TenantStatus.active,
+            Tenant.is_active == True,  # noqa: E712
+        )
+    )
+    if linked_result.scalar_one_or_none() is None:
+        raise HTTPException(404, {"error": "linked_tenant_not_found"})
+    return await get_booking_history(
+        db,
+        tenant_id=linked_tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+        status_filter=status_filter,
+        page=page,
+        page_size=page_size,
+    )

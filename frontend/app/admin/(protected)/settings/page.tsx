@@ -5,7 +5,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { apiDelete, apiFetch, apiPut } from "@/lib/api"
 
 type BarberSettings = {
@@ -35,6 +35,23 @@ type AdminProfile = {
 
 type SettingsSection = "business" | "personal" | "whatsapp"
 
+const SETTINGS_SECTION_PATHS: Record<SettingsSection, string> = {
+  business: "/admin/settings/business",
+  personal: "/admin/settings/personal",
+  whatsapp: "/admin/settings/whatsapp",
+}
+
+const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
+  business: "İşletme Ayarları",
+  personal: "Kişisel Ayarlar",
+  whatsapp: "Whatsapp Bot Ayarları",
+}
+
+function sectionFromPath(pathname: string): SettingsSection | null {
+  const section = pathname.split("/").filter(Boolean).at(-1)
+  return section === "business" || section === "personal" || section === "whatsapp" ? section : null
+}
+
 const WEEK_DAYS = [
   { label: "Pzt", value: 0 },
   { label: "Sal", value: 1 },
@@ -59,7 +76,9 @@ function addDaysIso(isoDate: string, days: number): string {
 
 export default function AdminSettingsPage() {
   const router = useRouter()
+  const pathname = usePathname()
   const todayIso = useMemo(() => todayInIstanbulIso(), [])
+  const activeSection = useMemo(() => sectionFromPath(pathname), [pathname])
 
   // Genel ayarlar
   const [slotDuration, setSlotDuration] = useState(30)
@@ -80,7 +99,6 @@ export default function AdminSettingsPage() {
   const [closeLoading, setCloseLoading] = useState(false)
 
   // UI state
-  const [activeSection, setActiveSection] = useState<SettingsSection | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
   const [error, setError] = useState("")
@@ -407,27 +425,31 @@ export default function AdminSettingsPage() {
       <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-4 sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push("/admin")}
-            className="text-zinc-400 hover:text-zinc-300 text-sm"
+            type="button"
+            aria-label="Menüye dön"
+            onClick={() => router.push("/admin/menu")}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-xl leading-none text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
           >
-            {"<- Geri"}
+            ←
           </button>
-          <h1 className="text-lg font-bold text-zinc-100">Ayarlar</h1>
+          <h1 className="text-lg font-bold text-zinc-100">
+            {activeSection ? SETTINGS_SECTION_LABELS[activeSection] : "Ayarlar"}
+          </h1>
         </div>
       </div>
 
       <div className="px-4 pt-6 space-y-4 max-w-sm mx-auto">
         <button
           type="button"
-          onClick={() => setActiveSection(activeSection === "business" ? null : "business")}
-          className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
+          onClick={() => router.push(SETTINGS_SECTION_PATHS.business)}
+          className={`${activeSection ? "hidden" : "flex"} w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
             activeSection === "business"
               ? "border-zinc-500 bg-zinc-800 text-zinc-100"
               : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"
           }`}
         >
           <span>İşletme Ayarları</span>
-          <span aria-hidden="true">{activeSection === "business" ? "-" : "+"}</span>
+          <span aria-hidden="true">›</span>
         </button>
 
         {activeSection === "business" && (
@@ -652,15 +674,15 @@ export default function AdminSettingsPage() {
 
         <button
           type="button"
-          onClick={() => setActiveSection(activeSection === "personal" ? null : "personal")}
-          className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
+          onClick={() => router.push(SETTINGS_SECTION_PATHS.personal)}
+          className={`${activeSection ? "hidden" : "flex"} w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
             activeSection === "personal"
               ? "border-zinc-500 bg-zinc-800 text-zinc-100"
               : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"
           }`}
         >
           <span>Kişisel Ayarlar</span>
-          <span aria-hidden="true">{activeSection === "personal" ? "-" : "+"}</span>
+          <span aria-hidden="true">›</span>
         </button>
 
         {activeSection === "personal" && (
@@ -719,15 +741,15 @@ export default function AdminSettingsPage() {
 
         <button
           type="button"
-          onClick={() => setActiveSection(activeSection === "whatsapp" ? null : "whatsapp")}
-          className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
+          onClick={() => router.push(SETTINGS_SECTION_PATHS.whatsapp)}
+          className={`${activeSection ? "hidden" : "flex"} w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
             activeSection === "whatsapp"
               ? "border-zinc-500 bg-zinc-800 text-zinc-100"
               : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"
           }`}
         >
           <span>Whatsapp Bot Ayarları</span>
-          <span aria-hidden="true">{activeSection === "whatsapp" ? "-" : "+"}</span>
+          <span aria-hidden="true">›</span>
         </button>
 
         {activeSection === "whatsapp" && (

@@ -398,26 +398,12 @@ export default function AdminDashboardPage() {
           <div>
             <h1 className="text-lg font-bold text-zinc-100">Admin Paneli</h1>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push("/admin/statistics")}
-              className="text-sm text-zinc-400 hover:text-zinc-300"
-            >
-              Istatistiklerim
-            </button>
-            <button
-              onClick={() => router.push("/admin/settings")}
-              className="text-sm text-zinc-400 hover:text-zinc-300"
-            >
-              Ayarlar
-            </button>
-            <button
-              onClick={handleLogout}
-              className="text-sm text-zinc-400 hover:text-zinc-300"
-            >
-              Cikis
-            </button>
-          </div>
+          <button
+            onClick={() => router.push("/admin/menu")}
+            className="inline-flex h-10 items-center rounded-lg border border-zinc-700 bg-zinc-100 px-4 text-sm font-bold text-zinc-950 shadow-sm transition-colors hover:bg-white active:scale-[0.99]"
+          >
+            Menü
+          </button>
         </div>
       </div>
 

@@ -29,8 +29,17 @@ class TenantAdminSummary(BaseModel):
     created_at: datetime
 
 
+class TenantParentSummary(BaseModel):
+    id: uuid.UUID
+    subdomain: str
+    name: str
+    first_name: str | None = None
+    last_name: str | None = None
+
+
 class TenantListItem(BaseModel):
     id: uuid.UUID
+    parent_tenant_id: uuid.UUID | None = None
     subdomain: str
     name: str
     address: str | None = None
@@ -62,6 +71,7 @@ class TenantDetailStats(BaseModel):
 
 class TenantDetailResponse(BaseModel):
     id: uuid.UUID
+    parent_tenant_id: uuid.UUID | None = None
     subdomain: str
     name: str
     address: str | None = None
@@ -69,6 +79,7 @@ class TenantDetailResponse(BaseModel):
     is_active: bool
     created_at: datetime
     admin: TenantAdminSummary | None = None
+    parent_tenant: TenantParentSummary | None = None
     stats: TenantDetailStats
 
 
@@ -88,6 +99,7 @@ class TenantDefaultsInput(BaseModel):
 
 
 class TenantCreateRequest(BaseModel):
+    parent_tenant_id: uuid.UUID | None = None
     subdomain: str = Field(min_length=3, max_length=63)
     name: str = Field(min_length=2, max_length=255)
     address: str = Field(min_length=5, max_length=500)
@@ -117,6 +129,7 @@ class TenantCreateResponse(BaseModel):
 
 
 class TenantUpdateRequest(BaseModel):
+    parent_tenant_id: uuid.UUID | None = None
     subdomain: str | None = Field(default=None, min_length=3, max_length=63)
     name: str | None = Field(default=None, min_length=2, max_length=255)
     address: str | None = Field(default=None, min_length=5, max_length=500)
@@ -133,6 +146,18 @@ class TenantStatusUpdateResponse(BaseModel):
     id: uuid.UUID
     status: TenantStatus
     is_active: bool
+
+
+class TenantParentCandidate(BaseModel):
+    id: uuid.UUID
+    subdomain: str
+    name: str
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+class TenantParentCandidatesResponse(BaseModel):
+    items: list[TenantParentCandidate]
 
 
 class TenantHardDeleteResponse(BaseModel):
