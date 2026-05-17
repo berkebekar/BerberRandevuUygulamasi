@@ -34,6 +34,7 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.modules.booking import service as booking_service
 from app.modules.whatsapp import client as wa_client
+from app.modules.whatsapp.settings import build_whatsapp_feature_settings
 from app.modules.whatsapp.tenant_config import get_tenant_whatsapp_credentials
 from app.modules.booking.schemas import (
     AdminBookingCreateRequest,
@@ -82,6 +83,8 @@ async def _notify_cancelled_by_admin(
         tenant = t_res.scalar_one_or_none()
         if not tenant:
             return
+        if not build_whatsapp_feature_settings(tenant).cancellation_effective_enabled:
+            return
         u_res = await db.execute(
             select(User).where(User.id == user_id, User.tenant_id == tenant_id)
         )
@@ -119,6 +122,8 @@ async def _notify_rescheduled_by_admin(
         t_res = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = t_res.scalar_one_or_none()
         if not tenant:
+            return
+        if not build_whatsapp_feature_settings(tenant).reschedule_effective_enabled:
             return
         u_res = await db.execute(
             select(User).where(User.id == user_id, User.tenant_id == tenant_id)

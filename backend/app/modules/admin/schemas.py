@@ -51,10 +51,30 @@ class AdminWhatsappSettingsResponse(BaseModel):
     connection_status: str = "disconnected"
     connected_at: datetime | None = None
     bot_enabled: bool = True
+    bot_superadmin_enabled: bool = True
+    bot_effective_enabled: bool = True
+    booking_enabled: bool = True
+    booking_superadmin_enabled: bool = True
+    booking_effective_enabled: bool = True
+    reminder_enabled: bool = True
+    reminder_superadmin_enabled: bool = True
+    reminder_effective_enabled: bool = True
+    cancellation_enabled: bool = True
+    cancellation_superadmin_enabled: bool = True
+    cancellation_effective_enabled: bool = True
+    reschedule_enabled: bool = True
+    reschedule_superadmin_enabled: bool = True
+    reschedule_effective_enabled: bool = True
+    silent_numbers: list[str] = Field(default_factory=list)
 
 
 class AdminWhatsappSettingsUpdateRequest(BaseModel):
     bot_enabled: bool
+    booking_enabled: bool = True
+    reminder_enabled: bool = True
+    cancellation_enabled: bool = True
+    reschedule_enabled: bool = True
+    silent_numbers: list[str] = Field(default_factory=list)
 
 
 class DashboardBookingItem(BaseModel):

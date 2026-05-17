@@ -51,6 +51,7 @@ from app.modules.superadmin.tenant_schemas import (
     TenantWhatsappSettings,
     TenantWhatsappUpdateRequest,
 )
+from app.modules.whatsapp.settings import build_whatsapp_feature_settings, normalize_silent_numbers
 
 TZ = ZoneInfo("Europe/Istanbul")
 _SUBDOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
@@ -168,13 +169,14 @@ def _tenant_parent_summary(tenant: Tenant | None) -> TenantParentSummary | None:
 
 
 def _tenant_whatsapp_settings(tenant: Tenant) -> TenantWhatsappSettings:
+    features = build_whatsapp_feature_settings(tenant)
     return TenantWhatsappSettings(
         phone_number_id=getattr(tenant, "whatsapp_phone_number_id", None),
         waba_id=getattr(tenant, "whatsapp_waba_id", None),
         display_phone_number=getattr(tenant, "whatsapp_display_phone_number", None),
         connection_status=getattr(tenant, "whatsapp_connection_status", "disconnected"),
         connected_at=getattr(tenant, "whatsapp_connected_at", None),
-        bot_enabled=getattr(tenant, "whatsapp_bot_enabled", True),
+        **features.as_dict(),
     )
 
 
@@ -616,6 +618,16 @@ async def update_tenant_whatsapp(
     tenant.whatsapp_display_phone_number = body.display_phone_number
     tenant.whatsapp_connection_status = body.connection_status
     tenant.whatsapp_bot_enabled = body.bot_enabled
+    tenant.whatsapp_bot_superadmin_enabled = body.bot_superadmin_enabled
+    tenant.whatsapp_booking_enabled = body.booking_enabled
+    tenant.whatsapp_booking_superadmin_enabled = body.booking_superadmin_enabled
+    tenant.whatsapp_reminder_enabled = body.reminder_enabled
+    tenant.whatsapp_reminder_superadmin_enabled = body.reminder_superadmin_enabled
+    tenant.whatsapp_cancellation_enabled = body.cancellation_enabled
+    tenant.whatsapp_cancellation_superadmin_enabled = body.cancellation_superadmin_enabled
+    tenant.whatsapp_reschedule_enabled = body.reschedule_enabled
+    tenant.whatsapp_reschedule_superadmin_enabled = body.reschedule_superadmin_enabled
+    tenant.whatsapp_silent_numbers = normalize_silent_numbers(body.silent_numbers)
     if body.connection_status == "connected" and previous_status != "connected":
         tenant.whatsapp_connected_at = datetime.now(timezone.utc)
     if body.connection_status != "connected":
@@ -631,6 +643,16 @@ async def update_tenant_whatsapp(
             "waba_id": tenant.whatsapp_waba_id,
             "connection_status": tenant.whatsapp_connection_status,
             "bot_enabled": tenant.whatsapp_bot_enabled,
+            "bot_superadmin_enabled": tenant.whatsapp_bot_superadmin_enabled,
+            "booking_enabled": tenant.whatsapp_booking_enabled,
+            "booking_superadmin_enabled": tenant.whatsapp_booking_superadmin_enabled,
+            "reminder_enabled": tenant.whatsapp_reminder_enabled,
+            "reminder_superadmin_enabled": tenant.whatsapp_reminder_superadmin_enabled,
+            "cancellation_enabled": tenant.whatsapp_cancellation_enabled,
+            "cancellation_superadmin_enabled": tenant.whatsapp_cancellation_superadmin_enabled,
+            "reschedule_enabled": tenant.whatsapp_reschedule_enabled,
+            "reschedule_superadmin_enabled": tenant.whatsapp_reschedule_superadmin_enabled,
+            "silent_numbers_count": len(tenant.whatsapp_silent_numbers or []),
         },
     )
     try:

@@ -39,6 +39,21 @@ type AdminWhatsappSettings = {
   connection_status: string
   connected_at: string | null
   bot_enabled: boolean
+  bot_superadmin_enabled: boolean
+  bot_effective_enabled: boolean
+  booking_enabled: boolean
+  booking_superadmin_enabled: boolean
+  booking_effective_enabled: boolean
+  reminder_enabled: boolean
+  reminder_superadmin_enabled: boolean
+  reminder_effective_enabled: boolean
+  cancellation_enabled: boolean
+  cancellation_superadmin_enabled: boolean
+  cancellation_effective_enabled: boolean
+  reschedule_enabled: boolean
+  reschedule_superadmin_enabled: boolean
+  reschedule_effective_enabled: boolean
+  silent_numbers: string[]
 }
 
 type SettingsSection = "business" | "personal" | "whatsapp"
@@ -119,6 +134,11 @@ export default function AdminSettingsPage() {
   const [adminEmail, setAdminEmail] = useState("")
   const [whatsappSettings, setWhatsappSettings] = useState<AdminWhatsappSettings | null>(null)
   const [whatsappBotEnabled, setWhatsappBotEnabled] = useState(true)
+  const [whatsappBookingEnabled, setWhatsappBookingEnabled] = useState(true)
+  const [whatsappReminderEnabled, setWhatsappReminderEnabled] = useState(true)
+  const [whatsappCancellationEnabled, setWhatsappCancellationEnabled] = useState(true)
+  const [whatsappRescheduleEnabled, setWhatsappRescheduleEnabled] = useState(true)
+  const [whatsappSilentNumbers, setWhatsappSilentNumbers] = useState("")
   const [whatsappLoading, setWhatsappLoading] = useState(false)
   const [whatsappSaving, setWhatsappSaving] = useState(false)
   const generalDefaultsRef = useRef({
@@ -216,7 +236,12 @@ export default function AdminSettingsPage() {
       try {
         const data = await apiFetch<AdminWhatsappSettings>("/api/v1/admin/whatsapp/settings")
         setWhatsappSettings(data)
-        setWhatsappBotEnabled(data.bot_enabled)
+        setWhatsappBotEnabled(data.bot_superadmin_enabled ? data.bot_enabled : false)
+        setWhatsappBookingEnabled(data.booking_superadmin_enabled ? data.booking_enabled : false)
+        setWhatsappReminderEnabled(data.reminder_superadmin_enabled ? data.reminder_enabled : false)
+        setWhatsappCancellationEnabled(data.cancellation_superadmin_enabled ? data.cancellation_enabled : false)
+        setWhatsappRescheduleEnabled(data.reschedule_superadmin_enabled ? data.reschedule_enabled : false)
+        setWhatsappSilentNumbers(data.silent_numbers.join("\n"))
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Whatsapp ayarlari yuklenemedi.")
       } finally {
@@ -459,10 +484,25 @@ export default function AdminSettingsPage() {
     try {
       const data = await apiFetch<AdminWhatsappSettings>("/api/v1/admin/whatsapp/settings", {
         method: "PATCH",
-        body: JSON.stringify({ bot_enabled: whatsappBotEnabled }),
+        body: JSON.stringify({
+          bot_enabled: whatsappBotEnabled,
+          booking_enabled: whatsappBookingEnabled,
+          reminder_enabled: whatsappReminderEnabled,
+          cancellation_enabled: whatsappCancellationEnabled,
+          reschedule_enabled: whatsappRescheduleEnabled,
+          silent_numbers: whatsappSilentNumbers
+            .split(/\r?\n|,/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+        }),
       })
       setWhatsappSettings(data)
-      setWhatsappBotEnabled(data.bot_enabled)
+      setWhatsappBotEnabled(data.bot_superadmin_enabled ? data.bot_enabled : false)
+      setWhatsappBookingEnabled(data.booking_superadmin_enabled ? data.booking_enabled : false)
+      setWhatsappReminderEnabled(data.reminder_superadmin_enabled ? data.reminder_enabled : false)
+      setWhatsappCancellationEnabled(data.cancellation_superadmin_enabled ? data.cancellation_enabled : false)
+      setWhatsappRescheduleEnabled(data.reschedule_superadmin_enabled ? data.reschedule_enabled : false)
+      setWhatsappSilentNumbers(data.silent_numbers.join("\n"))
       setSuccess("Whatsapp bot ayarlari kaydedildi.")
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Whatsapp bot ayarlari kaydedilemedi.")
@@ -844,6 +884,12 @@ export default function AdminSettingsPage() {
                     </div>
                   </div>
 
+                  {!whatsappSettings?.bot_superadmin_enabled && (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                      Bot superadmin tarafindan kapatildi. Bu kilit acilmadan panelden aktif edilemez.
+                    </div>
+                  )}
+
                   <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3">
                     <span>
                       <span className="block text-sm font-semibold text-zinc-200">Bot cevap versin</span>
@@ -853,7 +899,76 @@ export default function AdminSettingsPage() {
                       type="checkbox"
                       checked={whatsappBotEnabled}
                       onChange={(e) => setWhatsappBotEnabled(e.target.checked)}
+                      disabled={!whatsappSettings?.bot_superadmin_enabled}
                       className="h-5 w-5 accent-emerald-400"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3">
+                    <span>
+                      <span className="block text-sm font-semibold text-zinc-200">WhatsApp ile randevu alma</span>
+                      <span className="block text-xs text-zinc-500">Kapaliysa bot randevu akisini baslatmaz.</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappBookingEnabled}
+                      onChange={(e) => setWhatsappBookingEnabled(e.target.checked)}
+                      disabled={!whatsappSettings?.booking_superadmin_enabled}
+                      className="h-5 w-5 accent-emerald-400"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3">
+                    <span>
+                      <span className="block text-sm font-semibold text-zinc-200">Hatirlatma mesaji</span>
+                      <span className="block text-xs text-zinc-500">Randevu yaklasinca WhatsApp hatirlatmasi gonderilir.</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappReminderEnabled}
+                      onChange={(e) => setWhatsappReminderEnabled(e.target.checked)}
+                      disabled={!whatsappSettings?.reminder_superadmin_enabled}
+                      className="h-5 w-5 accent-emerald-400"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3">
+                    <span>
+                      <span className="block text-sm font-semibold text-zinc-200">Iptal bildirimi</span>
+                      <span className="block text-xs text-zinc-500">Berber iptal edince musteriye WhatsApp mesaji gider.</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappCancellationEnabled}
+                      onChange={(e) => setWhatsappCancellationEnabled(e.target.checked)}
+                      disabled={!whatsappSettings?.cancellation_superadmin_enabled}
+                      className="h-5 w-5 accent-emerald-400"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3">
+                    <span>
+                      <span className="block text-sm font-semibold text-zinc-200">Randevu degisiklik bildirimi</span>
+                      <span className="block text-xs text-zinc-500">Berber saat degistirince musteriye WhatsApp mesaji gider.</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappRescheduleEnabled}
+                      onChange={(e) => setWhatsappRescheduleEnabled(e.target.checked)}
+                      disabled={!whatsappSettings?.reschedule_superadmin_enabled}
+                      className="h-5 w-5 accent-emerald-400"
+                    />
+                  </label>
+
+                  <label className="block rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3">
+                    <span className="block text-sm font-semibold text-zinc-200">Sessiz kisiler</span>
+                    <span className="mb-2 block text-xs text-zinc-500">Botun konusmayacagi numaralari her satira bir numara olacak sekilde yazin.</span>
+                    <textarea
+                      value={whatsappSilentNumbers}
+                      onChange={(e) => setWhatsappSilentNumbers(e.target.value)}
+                      rows={4}
+                      placeholder="905551112233"
+                      className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none"
                     />
                   </label>
 

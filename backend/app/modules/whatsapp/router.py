@@ -111,14 +111,17 @@ async def _process_webhook(body: dict, db: AsyncSession) -> None:
 
             # Hangi WA numarasına mesaj geldi?
             metadata = value.get("metadata", {})
-            phone_number_id = metadata.get("phone_number_id", "")
+            phone_number_id = (metadata.get("phone_number_id") or "").strip()
 
             if not phone_number_id:
                 continue
 
+            await _log_status_errors(value, db, phone_number_id)
+
             tenant_result = await db.execute(
                 select(Tenant).where(
                     Tenant.whatsapp_phone_number_id == phone_number_id,
+                    Tenant.whatsapp_connection_status == "connected",
                     Tenant.is_active.is_(True),
                 )
             )
@@ -133,7 +136,11 @@ async def _process_webhook(body: dict, db: AsyncSession) -> None:
                 continue
 
             # Gönderen profil adları (contacts listesinde)
-            contacts = {c["wa_id"]: c.get("profile", {}).get("name", "Musteri") for c in value.get("contacts", [])}
+            contacts = {
+                c.get("wa_id"): c.get("profile", {}).get("name", "Musteri")
+                for c in value.get("contacts", [])
+                if c.get("wa_id")
+            }
 
             for msg in value.get("messages", []):
                 wa_phone = msg.get("from", "")
@@ -169,3 +176,23 @@ async def _process_webhook(body: dict, db: AsyncSession) -> None:
                     db=db,
                     tenant=tenant,
                 )
+
+
+async def _log_status_errors(value: dict, db: AsyncSession, phone_number_id: str) -> None:
+    """Meta delivery/status webhook'larindaki hata detaylarini kayda alir."""
+    for status in value.get("statuses", []):
+        errors = status.get("errors") or []
+        if not errors:
+            continue
+        await log_wa_error(
+            db,
+            "message_status_error",
+            "WhatsApp mesaj status webhook hata bildirdi",
+            wa_phone=status.get("recipient_id"),
+            meta={
+                "phone_number_id": phone_number_id,
+                "message_id": status.get("id"),
+                "status": status.get("status"),
+                "errors": errors,
+            },
+        )

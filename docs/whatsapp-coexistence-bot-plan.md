@@ -279,6 +279,9 @@ V1 kapsaminda uygulananlar:
 - Bilinmeyen `phone_number_id` icin bot cevap vermez ve `unknown_phone_number_id` loglanir.
 - Berber admin panelinde bot aktif/pasif kontrolu vardir.
 - Superadmin tenant detayinda WhatsApp baglanti bilgilerini yonetir.
+- Berber admin panelinde bot, WhatsApp randevu alma, hatirlatma, iptal bildirimi, degisiklik bildirimi ve sessiz kisiler listesi yonetilir.
+- Superadmin tenant detayinda ayni bot ayarlarini gorur ve degistirir.
+- Superadmin izinleri kilit gibi calisir: superadmin bir ozelligi kapatirsa berber panelinden tekrar acilamaz.
 - Superadmin WhatsApp saglik ekraninda bagli tenant ve botu acik tenant sayilari gosterilir.
 - Randevu akisi 15 dakika hatirlanir; slot kilitleme yapilmaz.
 - `/bot`, `/menu` ve dogal randevu niyeti kelimeleri botu uyandirir.
@@ -289,7 +292,6 @@ V1 kapsaminda uygulananlar:
 
 V1 disinda birakilanlar:
 
-- Botun konusmayacagi kisiler listesi.
 - Web push veya panel push bildirimi.
 - 24 saat disi template altyapisi.
 - Tenant bazli access token saklama.
@@ -301,3 +303,23 @@ Canli test sonucu beklenenler:
 - Business App'ten berber manuel mesaj yazinca webhook event'i geliyor mu?
 - Bot mesajlari Business App tarafinda gorunuyor mu?
 - Bildirim ve okunmamis sayaci berberin kullanimi icin kabul edilebilir mi?
+
+## Meta Test Numarasi ile Gecici Dogrulama
+
+Gercek Coexistence erisimi Meta tarafinda kilitliyken Cloud API test numarasi bir tenant'a baglanarak backend akisi dogrulanabilir.
+
+Bu test sunlari kapsar:
+
+- Webhook dogrulama ve `messages` subscription.
+- `metadata.phone_number_id` ile tenant cozumu.
+- Ana menu, randevu akisi, 15 dakika flow timeout, `/bot` ve `/menu`.
+- Berber paneli ve superadmin tarafinda bot aktif/pasif etkisi.
+- Meta message status hatalarinin superadmin hata loglarinda gorunmesi.
+
+Bu test sunlari kapsamaz:
+
+- WhatsApp Business App + Cloud API Coexistence davranisi.
+- Berber Business App'ten manuel mesaj yazinca webhook dusup dusmedigi.
+- Bot mesajlarinin berberin kendi WhatsApp Business App ekraninda gorunme/bildirim davranisi.
+
+Operasyon adimlari icin `docs/whatsapp-test-number-runbook.md` ana kaynak olarak kullanilir.

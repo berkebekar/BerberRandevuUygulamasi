@@ -18,6 +18,7 @@ from app.models.enums import BookingStatus
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.modules.whatsapp import client as wa_client
+from app.modules.whatsapp.settings import build_whatsapp_feature_settings
 from app.modules.whatsapp.tenant_config import get_tenant_whatsapp_credentials
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,8 @@ async def send_reminders() -> None:
                 t_res = await db.execute(select(Tenant).where(Tenant.id == booking.tenant_id))
                 tenant = t_res.scalar_one_or_none()
                 if not tenant:
+                    continue
+                if not build_whatsapp_feature_settings(tenant).reminder_effective_enabled:
                     continue
                 creds = await get_tenant_whatsapp_credentials(db, tenant.id)
                 if creds is None:

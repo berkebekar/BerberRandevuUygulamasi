@@ -4,8 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
+from app.modules.superadmin.tenant_schemas import TenantWhatsappUpdateRequest
 from app.modules.whatsapp import handlers
+from app.modules.whatsapp import router as wa_router
 from app.modules.whatsapp.state import STEP_SAME_DAY_CONFIRM, ConversationState
 
 
@@ -111,4 +114,61 @@ async def test_whatsapp_same_day_required_moves_to_confirmation_step(monkeypatch
     assert [button.id for button in sent_buttons[-1]["buttons"]] == [
         "confirm_additional_yes",
         "cancel_booking",
+    ]
+
+
+def test_connected_whatsapp_requires_phone_number_id():
+    with pytest.raises(ValidationError):
+        TenantWhatsappUpdateRequest(
+            phone_number_id=None,
+            waba_id="123",
+            display_phone_number="+1 555",
+            connection_status="connected",
+            bot_enabled=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_webhook_logs_status_errors(monkeypatch):
+    logged: list[dict] = []
+
+    async def fake_log_wa_error(db, error_type, message, tenant_id=None, wa_phone=None, meta=None):
+        logged.append(
+            {
+                "error_type": error_type,
+                "message": message,
+                "wa_phone": wa_phone,
+                "meta": meta,
+            }
+        )
+
+    monkeypatch.setattr(wa_router, "log_wa_error", fake_log_wa_error)
+
+    await wa_router._log_status_errors(
+        {
+            "statuses": [
+                {
+                    "id": "wamid.test",
+                    "status": "failed",
+                    "recipient_id": "905551112233",
+                    "errors": [{"code": 131000, "message": "Something failed"}],
+                }
+            ]
+        },
+        db=object(),
+        phone_number_id="111",
+    )
+
+    assert logged == [
+        {
+            "error_type": "message_status_error",
+            "message": "WhatsApp mesaj status webhook hata bildirdi",
+            "wa_phone": "905551112233",
+            "meta": {
+                "phone_number_id": "111",
+                "message_id": "wamid.test",
+                "status": "failed",
+                "errors": [{"code": 131000, "message": "Something failed"}],
+            },
+        }
     ]

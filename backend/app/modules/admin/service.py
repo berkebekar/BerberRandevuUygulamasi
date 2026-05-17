@@ -23,6 +23,7 @@ from app.models.user import User
 from app.modules.admin.schemas import AdminProfileUpdateRequest, AdminWhatsappSettingsUpdateRequest
 from app.modules.booking import service as booking_service
 from app.modules.schedule import service as schedule_service
+from app.modules.whatsapp.settings import build_whatsapp_feature_settings, normalize_silent_numbers
 
 TZ = ZoneInfo("Europe/Istanbul")
 
@@ -82,12 +83,13 @@ async def get_whatsapp_settings(db: AsyncSession, admin: Admin) -> dict:
     tenant = result.scalar_one_or_none()
     if tenant is None:
         raise HTTPException(404, {"error": "tenant_not_found"})
+    features = build_whatsapp_feature_settings(tenant)
     return {
         "phone_number_id": getattr(tenant, "whatsapp_phone_number_id", None),
         "display_phone_number": getattr(tenant, "whatsapp_display_phone_number", None),
         "connection_status": getattr(tenant, "whatsapp_connection_status", "disconnected"),
         "connected_at": getattr(tenant, "whatsapp_connected_at", None),
-        "bot_enabled": getattr(tenant, "whatsapp_bot_enabled", True),
+        **features.as_dict(),
     }
 
 
@@ -100,15 +102,37 @@ async def update_whatsapp_settings(
     tenant = result.scalar_one_or_none()
     if tenant is None:
         raise HTTPException(404, {"error": "tenant_not_found"})
+    features = build_whatsapp_feature_settings(tenant)
+    requested = {
+        "bot_enabled": body.bot_enabled,
+        "booking_enabled": body.booking_enabled,
+        "reminder_enabled": body.reminder_enabled,
+        "cancellation_enabled": body.cancellation_enabled,
+        "reschedule_enabled": body.reschedule_enabled,
+    }
+    locked = [
+        name
+        for name, value in requested.items()
+        if value and not getattr(features, name.replace("_enabled", "_superadmin_enabled"))
+    ]
+    if locked:
+        raise HTTPException(403, {"error": "whatsapp_setting_locked_by_superadmin", "fields": locked})
+
     tenant.whatsapp_bot_enabled = body.bot_enabled
+    tenant.whatsapp_booking_enabled = body.booking_enabled
+    tenant.whatsapp_reminder_enabled = body.reminder_enabled
+    tenant.whatsapp_cancellation_enabled = body.cancellation_enabled
+    tenant.whatsapp_reschedule_enabled = body.reschedule_enabled
+    tenant.whatsapp_silent_numbers = normalize_silent_numbers(body.silent_numbers)
     await db.commit()
     await db.refresh(tenant)
+    features = build_whatsapp_feature_settings(tenant)
     return {
         "phone_number_id": getattr(tenant, "whatsapp_phone_number_id", None),
         "display_phone_number": getattr(tenant, "whatsapp_display_phone_number", None),
         "connection_status": getattr(tenant, "whatsapp_connection_status", "disconnected"),
         "connected_at": getattr(tenant, "whatsapp_connected_at", None),
-        "bot_enabled": getattr(tenant, "whatsapp_bot_enabled", True),
+        **features.as_dict(),
     }
 
 

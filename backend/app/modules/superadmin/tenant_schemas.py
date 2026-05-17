@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime, time
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.enums import TenantStatus
 
@@ -76,6 +76,21 @@ class TenantWhatsappSettings(BaseModel):
     connection_status: Literal["disconnected", "connected", "pending", "error"] = "disconnected"
     connected_at: datetime | None = None
     bot_enabled: bool = True
+    bot_superadmin_enabled: bool = True
+    bot_effective_enabled: bool = True
+    booking_enabled: bool = True
+    booking_superadmin_enabled: bool = True
+    booking_effective_enabled: bool = True
+    reminder_enabled: bool = True
+    reminder_superadmin_enabled: bool = True
+    reminder_effective_enabled: bool = True
+    cancellation_enabled: bool = True
+    cancellation_superadmin_enabled: bool = True
+    cancellation_effective_enabled: bool = True
+    reschedule_enabled: bool = True
+    reschedule_superadmin_enabled: bool = True
+    reschedule_effective_enabled: bool = True
+    silent_numbers: list[str] = Field(default_factory=list)
 
 
 class TenantDetailResponse(BaseModel):
@@ -153,6 +168,16 @@ class TenantWhatsappUpdateRequest(BaseModel):
     display_phone_number: str | None = Field(default=None, max_length=50)
     connection_status: Literal["disconnected", "connected", "pending", "error"] = "disconnected"
     bot_enabled: bool = True
+    bot_superadmin_enabled: bool = True
+    booking_enabled: bool = True
+    booking_superadmin_enabled: bool = True
+    reminder_enabled: bool = True
+    reminder_superadmin_enabled: bool = True
+    cancellation_enabled: bool = True
+    cancellation_superadmin_enabled: bool = True
+    reschedule_enabled: bool = True
+    reschedule_superadmin_enabled: bool = True
+    silent_numbers: list[str] = Field(default_factory=list)
 
     @field_validator("phone_number_id", "waba_id", "display_phone_number")
     @classmethod
@@ -161,6 +186,12 @@ class TenantWhatsappUpdateRequest(BaseModel):
             return None
         stripped = value.strip()
         return stripped or None
+
+    @model_validator(mode="after")
+    def validate_connected_state(self) -> "TenantWhatsappUpdateRequest":
+        if self.connection_status == "connected" and not self.phone_number_id:
+            raise ValueError("connected_whatsapp_requires_phone_number_id")
+        return self
 
 
 class TenantStatusUpdateRequest(BaseModel):

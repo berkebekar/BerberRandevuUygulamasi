@@ -4,7 +4,7 @@ Tek berber işletmesi; subdomain ile çözümlenir.
 """
 
 import uuid
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, JSON, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,6 +40,16 @@ class Tenant(Base):
     )
     whatsapp_connected_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     whatsapp_bot_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_bot_superadmin_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_booking_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_booking_superadmin_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_reminder_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_reminder_superadmin_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_cancellation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_cancellation_superadmin_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_reschedule_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_reschedule_superadmin_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_silent_numbers: Mapped[list[str]] = mapped_column(JSON, nullable=False, server_default=text("'[]'"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     status: Mapped[TenantStatus] = mapped_column(
         Enum(TenantStatus, name="tenantstatus", create_constraint=True),

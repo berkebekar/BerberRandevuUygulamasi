@@ -31,6 +31,11 @@ from app.modules.booking import service as booking_service
 from app.modules.schedule import service as schedule_service
 from app.modules.schedule.schemas import SlotStatus
 from app.modules.whatsapp import client as wa
+from app.modules.whatsapp.settings import (
+    WhatsappFeatureSettings,
+    build_whatsapp_feature_settings,
+    is_silent_contact,
+)
 from app.modules.whatsapp.tracking import log_wa_contact, log_wa_error
 from app.modules.whatsapp.state import (
     STEP_CONFIRM,
@@ -109,6 +114,7 @@ async def _send_main_menu_guarded(
     wa_phone: str,
     tenant_name: str,
     state: ConversationState,
+    feature_settings: WhatsappFeatureSettings | None = None,
 ) -> None:
     now = datetime.now(TZ)
     last_menu = _parse_dt(state.last_menu_sent_at)
@@ -116,7 +122,7 @@ async def _send_main_menu_guarded(
         return
     state.last_menu_sent_at = now.isoformat()
     await save_state(phone_number_id, wa_phone, state)
-    await _send_main_menu(phone_number_id, access_token, wa_phone, tenant_name)
+    await _send_main_menu(phone_number_id, access_token, wa_phone, tenant_name, feature_settings)
 
 
 async def _start_human_handoff(
@@ -342,6 +348,7 @@ async def _send_main_menu(
     access_token: str,
     wa_phone: str,
     tenant_name: str,
+    feature_settings: WhatsappFeatureSettings | None = None,
 ) -> None:
     display_name = tenant_name.strip() or "Berber"
     talk_title = f"{display_name.split()[0]} ile Konus"
@@ -351,6 +358,20 @@ async def _send_main_menu(
         f"Merhaba! *{tenant_name}* randevu sistemine hoş geldiniz.\n\n"
         "Aşağıdan yapmak istediğiniz işlemi seçin:"
     )
+    buttons = []
+    if feature_settings is None or feature_settings.booking_effective_enabled:
+        buttons.append(wa.InteractiveButton(id="booking", title="Randevu Al"))
+    buttons.append(wa.InteractiveButton(id="talk_human", title=talk_title))
+    buttons.append(wa.InteractiveButton(id="my_bookings", title="Mevcut Randevularim"))
+    await wa.send_buttons(
+        phone_number_id,
+        access_token,
+        wa_phone,
+        body,
+        buttons=buttons,
+        footer="Yapmak istediginiz islemi secin.",
+    )
+    return
     await wa.send_buttons(
         phone_number_id,
         access_token,
@@ -571,7 +592,12 @@ async def handle_incoming(
     state.tenant_id = str(tenant.id)
     state.wa_name = state.wa_name or wa_name
 
-    if not getattr(tenant, "whatsapp_bot_enabled", True):
+    feature_settings = build_whatsapp_feature_settings(tenant)
+    if is_silent_contact(tenant, wa_phone):
+        await save_state(pid, wa_phone, state)
+        return
+
+    if not feature_settings.bot_effective_enabled:
         await save_state(pid, wa_phone, state)
         return
 
@@ -597,18 +623,27 @@ async def handle_incoming(
     if _is_resume_command(content):
         await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
         state = await get_state(pid, wa_phone)
-        await _send_main_menu_guarded(pid, tok, wa_phone, tenant.name, state)
+        await _send_main_menu_guarded(pid, tok, wa_phone, tenant.name, state, feature_settings)
         return
 
     # "iptal" veya "geri" kelimeleri her adımda ana menüye döner
     if content and content.strip().lower() in ("iptal", "geri", "menu", "menü"):
         await _reset_to_idle(pid, wa_phone, tid, state.wa_name)
-        await _send_main_menu(pid, tok, wa_phone, tenant.name)
+        await _send_main_menu(pid, tok, wa_phone, tenant.name, feature_settings)
         return
 
     # ── IDLE: Ana menü ────────────────────────────────────────────────────────
     if state.step == STEP_IDLE:
         if content == "booking":
+            if not feature_settings.booking_effective_enabled:
+                await wa.send_text(
+                    pid,
+                    tok,
+                    wa_phone,
+                    "WhatsApp'tan randevu alma su an kapali. Randevu icin web sitesini kullanabilirsiniz.",
+                )
+                await _send_main_menu_guarded(pid, tok, wa_phone, tenant.name, state, feature_settings)
+                return
             await _handle_booking_start(pid, tok, wa_phone, tid, state, db)
         elif content == "my_bookings":
             await _handle_my_bookings(pid, tok, wa_phone, tid, tenant, db)
@@ -619,7 +654,7 @@ async def handle_incoming(
             state.tenant_id = str(tid)
             state.wa_name = wa_name
             await save_state(pid, wa_phone, state)
-            await _send_main_menu_guarded(pid, tok, wa_phone, tenant.name, state)
+            await _send_main_menu_guarded(pid, tok, wa_phone, tenant.name, state, feature_settings)
         return
 
     # ── NAME_COLLECT: Yeni kullanıcı isim/soyisim toplama ────────────────────
