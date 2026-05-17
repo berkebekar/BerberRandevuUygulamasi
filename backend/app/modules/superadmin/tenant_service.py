@@ -401,6 +401,7 @@ async def get_tenant_detail(db: AsyncSession, tenant_id: uuid.UUID) -> TenantDet
         created_at=tenant.created_at,
         admin=admin_summary,
         parent_tenant=_tenant_parent_summary(parent),
+        otp_provider=getattr(tenant, "otp_provider", "whatsapp"),
         whatsapp=_tenant_whatsapp_settings(tenant),
         stats=TenantDetailStats(
             user_count=user_count,
@@ -536,6 +537,10 @@ async def update_tenant(
     if body.address is not None:
         tenant.address = body.address.strip()
 
+    body_otp_provider = getattr(body, "otp_provider", None)
+    if body_otp_provider is not None:
+        tenant.otp_provider = body_otp_provider
+
     if admin is not None and body.admin_email is not None:
         normalized_email = _normalize_email(body.admin_email)
         duplicate_email = await db.execute(
@@ -571,6 +576,7 @@ async def update_tenant(
         metadata={
             "tenant_name": tenant.name,
             "subdomain": tenant.subdomain,
+            "otp_provider": getattr(tenant, "otp_provider", "whatsapp"),
             "parent_tenant_id": (
                 str(getattr(tenant, "parent_tenant_id", None))
                 if getattr(tenant, "parent_tenant_id", None)

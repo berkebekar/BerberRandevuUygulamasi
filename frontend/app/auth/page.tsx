@@ -11,12 +11,16 @@
 
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import type { ConfirmationResult } from "firebase/auth"
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth"
 import { PhoneInput, OTPInput, TenantUnavailable } from "@/components"
 import { apiFetch, apiPost, isTenantAccessError } from "@/lib/api"
+import { getFirebaseAuth } from "@/lib/firebase"
 
 // Formun hangi aşamada olduğunu temsil eder
 type Step = "phone" | "otp" | "register"
+type OtpProvider = "whatsapp" | "firebase_sms"
 const TR_PHONE_REGEX = /^\+90\d{10}$/
 
 export default function AuthPage() {
@@ -29,6 +33,8 @@ export default function AuthPage() {
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
   const [registrationToken, setRegistrationToken] = useState("")
+  const [firebaseConfirmation, setFirebaseConfirmation] = useState<ConfirmationResult | null>(null)
+  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null)
 
   // Yükleme ve hata durumları
   const [isLoading, setIsLoading] = useState(false)
@@ -36,6 +42,7 @@ export default function AuthPage() {
 
   // Tenant adı
   const [tenantName, setTenantName] = useState<string | null>(null)
+  const [otpProvider, setOtpProvider] = useState<OtpProvider>("whatsapp")
   const [tenantError, setTenantError] = useState("")
   const [isTenantLoading, setIsTenantLoading] = useState(true)
 
@@ -45,8 +52,9 @@ export default function AuthPage() {
   useEffect(() => {
     async function loadTenantInfo() {
       try {
-        const data = await apiFetch<{ name: string }>("/api/v1/tenant/info")
+        const data = await apiFetch<{ name: string; otp_provider?: OtpProvider }>("/api/v1/tenant/info")
         setTenantName(data.name)
+        setOtpProvider(data.otp_provider ?? "whatsapp")
       } catch (err: unknown) {
         if (isTenantAccessError(err)) {
           setTenantError(err.message)
@@ -56,6 +64,13 @@ export default function AuthPage() {
       }
     }
     loadTenantInfo()
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      recaptchaVerifierRef.current?.clear()
+      recaptchaVerifierRef.current = null
+    }
   }, [])
 
   // Geri sayım her saniye azalır
@@ -80,7 +95,17 @@ export default function AuthPage() {
     setError("")
     setIsLoading(true)
     try {
-      await apiPost("/api/v1/auth/send-otp", { phone })
+      setFirebaseConfirmation(null)
+      if (otpProvider === "firebase_sms") {
+        const auth = getFirebaseAuth()
+        recaptchaVerifierRef.current?.clear()
+        const verifier = new RecaptchaVerifier(auth, "firebase-recaptcha-container", { size: "invisible" })
+        recaptchaVerifierRef.current = verifier
+        const confirmation = await signInWithPhoneNumber(auth, phone, verifier)
+        setFirebaseConfirmation(confirmation)
+      } else {
+        await apiPost("/api/v1/auth/send-otp", { phone })
+      }
       // Başarıyla gönderildiyse OTP aşamasına geç
       setStep("otp")
       // 60 saniye geri sayım başlat — rate limit aynı süre
@@ -101,10 +126,23 @@ export default function AuthPage() {
     setError("")
     setIsLoading(true)
     try {
-      const res = await apiPost<{ next: "admin" | "user" | "register"; registration_token?: string }>(
-        "/api/v1/auth/verify-otp",
-        { phone, code }
-      )
+      let res: { next: "admin" | "user" | "register"; registration_token?: string }
+      if (otpProvider === "firebase_sms") {
+        if (!firebaseConfirmation) {
+          throw new Error("Dogrulama oturumu bulunamadi. Kodu tekrar gonderin.")
+        }
+        const credential = await firebaseConfirmation.confirm(code)
+        const idToken = await credential.user.getIdToken()
+        res = await apiPost<{ next: "admin" | "user" | "register"; registration_token?: string }>(
+          "/api/v1/auth/firebase/verify-phone",
+          { phone, id_token: idToken }
+        )
+      } else {
+        res = await apiPost<{ next: "admin" | "user" | "register"; registration_token?: string }>(
+          "/api/v1/auth/verify-otp",
+          { phone, code }
+        )
+      }
 
       if (res.next === "register") {
         // Yeni kullanıcı — registration_token ile isim/soyisim kayıt aşamasına geç
@@ -162,7 +200,16 @@ export default function AuthPage() {
     setError("")
     setIsLoading(true)
     try {
-      await apiPost("/api/v1/auth/send-otp", { phone })
+      if (otpProvider === "firebase_sms") {
+        const auth = getFirebaseAuth()
+        recaptchaVerifierRef.current?.clear()
+        const verifier = new RecaptchaVerifier(auth, "firebase-recaptcha-container", { size: "invisible" })
+        recaptchaVerifierRef.current = verifier
+        const confirmation = await signInWithPhoneNumber(auth, phone, verifier)
+        setFirebaseConfirmation(confirmation)
+      } else {
+        await apiPost("/api/v1/auth/send-otp", { phone })
+      }
       setCountdown(60)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Kod gönderilemedi.")
@@ -234,7 +281,9 @@ export default function AuthPage() {
             <div className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-3 text-center">
-                  {phone} numarasına WhatsApp&apos;tan gönderilen kodu girin
+                  {otpProvider === "firebase_sms"
+                    ? `${phone} numarasina SMS ile gonderilen kodu girin`
+                    : `${phone} numarasına WhatsApp'tan gönderilen kodu girin`}
                 </label>
                 <OTPInput onComplete={handleVerifyOtp} disabled={isLoading} />
               </div>
@@ -323,6 +372,7 @@ export default function AuthPage() {
           )}
 
         </div>
+        <div id="firebase-recaptcha-container" />
         <div className="mt-5 text-center text-xs">
           <a
             href="https://bbsoft.com.tr"

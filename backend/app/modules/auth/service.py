@@ -184,6 +184,49 @@ async def verify_otp(
     return {"status": "returning_user", "registration_token": None, "user": user}
 
 
+async def authenticate_user_by_verified_phone(
+    db: AsyncSession,
+    tenant_id,
+    phone: str,
+) -> dict:
+    """Attach an externally verified phone number to the existing user/register flow."""
+    normalized_phone = normalize_tr_phone(phone)
+    phone_candidates = phone_variants(normalized_phone)
+
+    user_result = await db.execute(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.phone.in_(phone_candidates),
+        )
+    )
+    user = user_result.scalar_one_or_none()
+
+    if user is None:
+        registration_token = create_token(
+            {
+                "sub": normalized_phone,
+                "tenant_id": str(tenant_id),
+                "type": "registration",
+            },
+            expires_minutes=10,
+        )
+        return {"status": "new_user", "registration_token": registration_token, "user": None}
+
+    user_status = getattr(user, "status", None)
+    if user_status is None:
+        user_status = UserStatus.blocked if bool(getattr(user, "is_blocked", False)) else UserStatus.active
+    else:
+        user_status = UserStatus(user_status)
+    if user_status == UserStatus.deleted:
+        raise HTTPException(403, {"error": "user_deleted"})
+
+    user.session_version = str(uuid.uuid4())
+    await db.commit()
+    await db.refresh(user)
+
+    return {"status": "returning_user", "registration_token": None, "user": user}
+
+
 # â"€â"€â"€ Admin Service FonksiyonlarÄ± â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 async def send_admin_otp(db: AsyncSession, tenant_id, phone: str) -> str:
@@ -306,6 +349,31 @@ async def verify_admin_otp(
 
     # Admin tekrar giris yaptiginda session_version rotate edilir.
     # Boylece eski cihazdaki tokenlar bir sonraki istekte gecersiz kalir.
+    admin.session_version = str(uuid.uuid4())
+    await db.commit()
+    await db.refresh(admin)
+    return admin
+
+
+async def authenticate_admin_by_verified_phone(
+    db: AsyncSession,
+    tenant_id,
+    phone: str,
+) -> Admin:
+    """Open an admin session after an external provider verifies the phone."""
+    normalized_phone = normalize_tr_phone(phone)
+    phone_candidates = phone_variants(normalized_phone)
+
+    admin_result = await db.execute(
+        select(Admin).where(
+            Admin.tenant_id == tenant_id,
+            Admin.phone.in_(phone_candidates),
+        )
+    )
+    admin = admin_result.scalar_one_or_none()
+    if admin is None:
+        raise HTTPException(401, {"error": "admin_not_registered"})
+
     admin.session_version = str(uuid.uuid4())
     await db.commit()
     await db.refresh(admin)

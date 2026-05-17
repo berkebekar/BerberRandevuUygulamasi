@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     wa_long_absence_template_name: str = "long_time_no_visit_reminder"
     wa_long_absence_template_language: str = "tr"
 
+    # Firebase Authentication Phone provider (SMS OTP)
+    firebase_project_id: str = ""
+    firebase_service_account_json: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

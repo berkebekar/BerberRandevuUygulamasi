@@ -183,6 +183,7 @@ async def test_otp_ile_giris_basarili_cookie():
     admin = _make_admin()
 
     session = _make_mock_session(
+        _make_db_result("whatsapp"),
         _make_db_result(otp_record),  # İlk execute: OTP kaydı
         _make_db_result(admin),       # İkinci execute: Admin kaydı
     )

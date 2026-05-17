@@ -78,6 +78,7 @@ async def test_unified_verify_admin_phone_sets_admin_cookie_and_next_admin():
     session = AsyncMock()
     session.execute = AsyncMock(
         side_effect=[
+            _make_db_result("whatsapp"),  # provider check
             _make_db_result(admin),       # unified endpoint: admin var mi?
             _make_db_result(admin_otp),   # verify_admin_otp: OTP kaydi
             _make_db_result(admin),       # verify_admin_otp: admin kaydi
@@ -114,6 +115,7 @@ async def test_unified_verify_user_phone_sets_user_cookie_and_next_user():
     session = AsyncMock()
     session.execute = AsyncMock(
         side_effect=[
+            _make_db_result("whatsapp"),  # provider check
             _make_db_result(None),       # unified endpoint: admin var mi?
             _make_db_result(user_otp),   # verify_otp: OTP kaydi
             _make_db_result(user),       # verify_otp: user kaydi
@@ -150,6 +152,7 @@ async def test_unified_verify_admin_legacy_phone_format_matches():
     session = AsyncMock()
     session.execute = AsyncMock(
         side_effect=[
+            _make_db_result("whatsapp"),  # provider check
             _make_db_result(admin),       # unified endpoint: admin var mi?
             _make_db_result(admin_otp),   # verify_admin_otp: OTP kaydi
             _make_db_result(admin),       # verify_admin_otp: admin kaydi
@@ -173,3 +176,64 @@ async def test_unified_verify_admin_legacy_phone_format_matches():
 
     assert response.status_code == 200
     assert response.json()["next"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_firebase_verify_user_phone_sets_user_cookie(monkeypatch):
+    user = _make_user()
+
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _make_db_result("firebase_sms"),  # provider check
+            _make_db_result(None),            # firebase endpoint: admin var mi?
+            _make_db_result(user),            # authenticate_user_by_verified_phone: user kaydi
+        ]
+    )
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_tenant_id] = _override_tenant_id
+    monkeypatch.setattr(
+        "app.modules.auth.router.verify_firebase_phone_id_token",
+        lambda _token: user.phone,
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        response = await client.post(
+            "/api/v1/auth/firebase/verify-phone",
+            json={"phone": user.phone, "id_token": "valid-token"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"next": "user", "registration_token": None}
+    assert "user_session" in response.cookies
+
+
+@pytest.mark.asyncio
+async def test_firebase_verify_rejected_for_whatsapp_tenant(monkeypatch):
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[_make_db_result("whatsapp")])
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_tenant_id] = _override_tenant_id
+    monkeypatch.setattr(
+        "app.modules.auth.router.verify_firebase_phone_id_token",
+        lambda _token: "+905551234567",
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        response = await client.post(
+            "/api/v1/auth/firebase/verify-phone",
+            json={"phone": "+905551234567", "id_token": "valid-token"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "otp_provider_whatsapp"}

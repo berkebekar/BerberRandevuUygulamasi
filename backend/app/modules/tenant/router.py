@@ -17,6 +17,7 @@ class TenantInfoResponse(BaseModel):
     name: str
     phone: str | None = None
     address: str | None = None
+    otp_provider: str = "whatsapp"
 
 
 @router.get("/info", response_model=TenantInfoResponse)
@@ -50,4 +51,5 @@ async def get_tenant_info(
         name=display_name,
         phone=admin.phone if admin else None,
         address=tenant.address,
+        otp_provider=getattr(tenant, "otp_provider", "whatsapp"),
     )

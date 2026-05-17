@@ -53,6 +53,7 @@ class Tenant(Base):
     whatsapp_long_absence_superadmin_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     whatsapp_long_absence_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("45"))
     whatsapp_silent_numbers: Mapped[list[str]] = mapped_column(JSON, nullable=False, server_default=text("'[]'"))
+    otp_provider: Mapped[str] = mapped_column(String(30), nullable=False, server_default="whatsapp")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     status: Mapped[TenantStatus] = mapped_column(
         Enum(TenantStatus, name="tenantstatus", create_constraint=True),

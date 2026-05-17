@@ -132,6 +132,7 @@ async def test_dogru_otp_mevcut_kullanici_200_cookie():
     user = _make_user()
 
     session = _make_mock_session(
+        _make_db_result("whatsapp"),
         _make_db_result(otp_record),  # İlk execute: OTP kaydı
         _make_db_result(user),        # İkinci execute: User kaydı
     )
@@ -171,7 +172,7 @@ async def test_yanlis_otp_401_attempt_count_artar():
     # Doğru kod "999999", biz "111111" göndereceğiz → yanlış
     otp_record = _make_otp_record(code="999999", attempt_count=0)
 
-    session = _make_mock_session(_make_db_result(otp_record))
+    session = _make_mock_session(_make_db_result("whatsapp"), _make_db_result(otp_record))
 
     async def override_db():
         yield session
@@ -199,7 +200,7 @@ async def test_uc_yanlis_deneme_kodu_iptal_401():
     """
     otp_record = _make_otp_record(code="999999", attempt_count=2)
 
-    session = _make_mock_session(_make_db_result(otp_record))
+    session = _make_mock_session(_make_db_result("whatsapp"), _make_db_result(otp_record))
 
     async def override_db():
         yield session
@@ -225,6 +226,7 @@ async def test_suresi_dolmus_otp_401():
     Süresi dolmuş OTP → DB sorgusu kayıt döndürmez (WHERE expires_at > now filtresi) → 401.
     """
     session = _make_mock_session(
+        _make_db_result("whatsapp"),
         _make_db_result(None)  # OTP bulunamadı (süresi dolmuş veya kullanılmış)
     )
 
@@ -257,6 +259,7 @@ async def test_rate_limit_60sn_429():
     recent_otp = _make_otp_record()  # Aktif, kullanılmamış bir OTP var
 
     session = _make_mock_session(
+        _make_db_result("whatsapp"),
         _make_db_result(recent_otp)  # Rate limit sorgusu: kayıt bulundu → 429
     )
 

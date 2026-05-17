@@ -20,7 +20,7 @@ Business logic auth/service.py içindedir; bu dosya sadece HTTP katmanıdır.
 
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,11 +33,13 @@ from app.core.security import create_token, decode_token
 from app.models.admin import Admin
 from app.models.tenant import Tenant
 from app.modules.auth import service as auth_service
+from app.modules.auth.firebase_phone import verify_firebase_phone_id_token
 from app.modules.whatsapp import client as wa_client
 from app.modules.whatsapp.tenant_config import get_tenant_whatsapp_credentials
 from app.modules.auth.schemas import (
     AdminVerifyOTPRequest,
     CompleteRegistrationRequest,
+    FirebaseVerifyPhoneRequest,
     SendOTPRequest,
     UnifiedVerifyOTPResponse,
     VerifyOTPRequest,
@@ -100,6 +102,17 @@ def get_tenant_id(request: Request):
     return tenant_id
 
 
+async def _get_tenant_otp_provider(db: AsyncSession, tenant_id) -> str:
+    result = await db.execute(select(Tenant.otp_provider).where(Tenant.id == tenant_id))
+    return result.scalar_one_or_none() or "whatsapp"
+
+
+async def _require_otp_provider(db: AsyncSession, tenant_id, expected: str) -> None:
+    provider = await _get_tenant_otp_provider(db, tenant_id)
+    if provider != expected:
+        raise HTTPException(400, {"error": f"otp_provider_{provider}"})
+
+
 def _set_session_cookie(request: Request, response: Response, user_id, session_version: str) -> None:
     """
     Kullanıcı (customer) için HTTP-only session cookie set eder.
@@ -156,6 +169,7 @@ async def send_otp_unified(
     Tek giris endpoint'i.
     Telefon bu tenant'ta admin'e aitse admin OTP, degilse user OTP uretir.
     """
+    await _require_otp_provider(db, tenant_id, "whatsapp")
     phone_candidates = phone_variants(body.phone)
     admin_result = await db.execute(
         select(Admin).where(
@@ -187,6 +201,7 @@ async def verify_otp_unified(
     Tek giris endpoint'i.
     Telefon admin'e aitse admin cookie, degilse user akisi calisir.
     """
+    await _require_otp_provider(db, tenant_id, "whatsapp")
     phone_candidates = phone_variants(body.phone)
     admin_result = await db.execute(
         select(Admin).where(
@@ -222,6 +237,61 @@ async def verify_otp_unified(
     )
 
 
+@router.post("/firebase/verify-phone", status_code=200, response_model=UnifiedVerifyOTPResponse)
+async def verify_firebase_phone(
+    body: FirebaseVerifyPhoneRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    tenant_id=Depends(get_tenant_id),
+):
+    """Firebase Phone Auth token'ini dogrular ve mevcut session/register akisina baglar."""
+    await _require_otp_provider(db, tenant_id, "firebase_sms")
+
+    verified_phone = verify_firebase_phone_id_token(body.id_token)
+    normalized_request_phone = normalize_tr_phone(body.phone)
+    normalized_verified_phone = normalize_tr_phone(verified_phone)
+    if normalized_request_phone != normalized_verified_phone:
+        raise HTTPException(401, {"error": "firebase_phone_mismatch"})
+
+    phone_candidates = phone_variants(normalized_request_phone)
+    admin_result = await db.execute(
+        select(Admin).where(
+            Admin.tenant_id == tenant_id,
+            Admin.phone.in_(phone_candidates),
+        )
+    )
+    admin = admin_result.scalar_one_or_none()
+    if admin is not None:
+        verified_admin = await auth_service.authenticate_admin_by_verified_phone(
+            db,
+            tenant_id,
+            normalized_request_phone,
+        )
+        _set_admin_session_cookie(
+            request,
+            response,
+            verified_admin.id,
+            verified_admin.session_version,
+        )
+        return UnifiedVerifyOTPResponse(next="admin")
+
+    result = await auth_service.authenticate_user_by_verified_phone(
+        db,
+        tenant_id,
+        normalized_request_phone,
+    )
+    if result["status"] == "returning_user":
+        user = result["user"]
+        _set_session_cookie(request, response, user.id, user.session_version)
+        return UnifiedVerifyOTPResponse(next="user")
+
+    return UnifiedVerifyOTPResponse(
+        next="register",
+        registration_token=result["registration_token"],
+    )
+
+
 @router.post("/user/send-otp", status_code=200)
 async def send_otp(
     body: SendOTPRequest,
@@ -232,6 +302,7 @@ async def send_otp(
     Müşteri telefon numarasına 6 haneli OTP gönderir.
     Rate limit ihlalinde 429 döner.
     """
+    await _require_otp_provider(db, tenant_id, "whatsapp")
     code = await auth_service.send_otp(db, tenant_id, body.phone)
     await _try_send_otp_via_whatsapp(db, tenant_id, body.phone, code)
     logger.info("[OTP] phone=%s code=%s", body.phone, code)
@@ -253,6 +324,7 @@ async def verify_otp(
     Yeni kullanıcı → {"status": "new_user", "registration_token": "..."} dön (cookie YOK).
     Frontend new_user durumunda isim/soyisim formu gösterir.
     """
+    await _require_otp_provider(db, tenant_id, "whatsapp")
     result = await auth_service.verify_otp(db, tenant_id, body.phone, body.code)
 
     if result["status"] == "returning_user":
@@ -300,6 +372,7 @@ async def admin_send_otp(
     Admin telefon numarasına OTP gönderir.
     Rate limit ihlalinde 429 döner.
     """
+    await _require_otp_provider(db, tenant_id, "whatsapp")
     code = await auth_service.send_admin_otp(db, tenant_id, body.phone)
     await _try_send_otp_via_whatsapp(db, tenant_id, body.phone, code)
     logger.info("[OTP] phone=%s code=%s", body.phone, code)
@@ -320,6 +393,7 @@ async def admin_verify_otp(
     Kullanıcı akışından farklı olarak "yeni kayıt" durumu yoktur —
     admin önce /auth/admin/register ile kayıt olmuş olmalıdır.
     """
+    await _require_otp_provider(db, tenant_id, "whatsapp")
     admin = await auth_service.verify_admin_otp(db, tenant_id, body.phone, body.code)
     _set_admin_session_cookie(request, response, admin.id, admin.session_version)
     return {"message": "login_successful"}

@@ -23,6 +23,11 @@ class VerifyOTPRequest(BaseModel):
     code: str
 
 
+class FirebaseVerifyPhoneRequest(BaseModel):
+    phone: str
+    id_token: str
+
+
 class CompleteRegistrationRequest(BaseModel):
     """
     Yeni kullanıcı kayıt tamamlama isteği.
