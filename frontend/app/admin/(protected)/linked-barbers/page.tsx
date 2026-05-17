@@ -30,6 +30,9 @@ function barberName(item: LinkedTenant | NonNullable<LinkedOverview["parent_tena
   return fullName || item.name
 }
 
+const FILTER_CONTROL_CLASS =
+  "block h-12 w-full min-w-0 max-w-full box-border appearance-none rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-base text-zinc-100 outline-none"
+
 export default function LinkedBarbersPage() {
   const router = useRouter()
   const today = todayInIstanbulIso()
@@ -110,23 +113,23 @@ export default function LinkedBarbersPage() {
 
         {overview?.mode === "owner" && overview.linked_tenants.length > 0 && (
           <>
-            <section className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-              <label className="min-w-0 space-y-1 text-xs text-zinc-400">
+            <section className="space-y-3 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+              <label className="block min-w-0 space-y-1 text-xs text-zinc-400">
                 Berber
-                <select value={selectedTenantId} onChange={(e) => { setSelectedTenantId(e.target.value); setData(null); }} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100">
+                <select value={selectedTenantId} onChange={(e) => { setSelectedTenantId(e.target.value); setData(null); }} className={FILTER_CONTROL_CLASS}>
                   {overview.linked_tenants.map((item) => (
                     <option key={item.id} value={item.id}>{barberName(item)}</option>
                   ))}
                 </select>
               </label>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="min-w-0 space-y-1 text-xs text-zinc-400">
+                <label className="block min-w-0 space-y-1 text-xs text-zinc-400">
                   Başlangıç
-                  <input type="date" value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" />
+                  <input type="date" value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} className={FILTER_CONTROL_CLASS} />
                 </label>
-                <label className="min-w-0 space-y-1 text-xs text-zinc-400">
+                <label className="block min-w-0 space-y-1 text-xs text-zinc-400">
                   Bitiş
-                  <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" />
+                  <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className={FILTER_CONTROL_CLASS} />
                 </label>
               </div>
               <button type="button" onClick={() => loadHistory(1)} disabled={loading} className="w-full rounded-lg bg-zinc-100 px-3 py-2.5 text-sm font-semibold text-zinc-950 disabled:opacity-60">
