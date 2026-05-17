@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from app.modules.superadmin.tenant_schemas import TenantWhatsappUpdateRequest
 from app.modules.whatsapp import handlers
 from app.modules.whatsapp import router as wa_router
+from app.modules.whatsapp.settings import build_whatsapp_feature_settings
 from app.modules.whatsapp.state import STEP_SAME_DAY_CONFIRM, ConversationState
 
 
@@ -126,6 +127,31 @@ def test_connected_whatsapp_requires_phone_number_id():
             connection_status="connected",
             bot_enabled=True,
         )
+
+
+def test_long_absence_days_accepts_45_or_10_steps():
+    assert TenantWhatsappUpdateRequest(long_absence_days=45).long_absence_days == 45
+    assert TenantWhatsappUpdateRequest(long_absence_days=30).long_absence_days == 30
+    assert TenantWhatsappUpdateRequest(long_absence_days=120).long_absence_days == 120
+
+    with pytest.raises(ValidationError):
+        TenantWhatsappUpdateRequest(long_absence_days=35)
+
+
+def test_long_absence_effective_setting_requires_both_toggles():
+    tenant = SimpleNamespace(
+        whatsapp_long_absence_enabled=True,
+        whatsapp_long_absence_superadmin_enabled=False,
+        whatsapp_long_absence_days=45,
+        whatsapp_silent_numbers=[],
+    )
+
+    settings = build_whatsapp_feature_settings(tenant)
+
+    assert settings.long_absence_enabled is True
+    assert settings.long_absence_superadmin_enabled is False
+    assert settings.long_absence_effective_enabled is False
+    assert settings.long_absence_days == 45
 
 
 @pytest.mark.asyncio

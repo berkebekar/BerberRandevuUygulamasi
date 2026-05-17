@@ -36,6 +36,7 @@ from app.modules.superadmin.users import router as superadmin_users_router
 from app.modules.tenant.router import router as tenant_router
 from app.modules.user.router import router as user_router
 from app.modules.whatsapp.router import router as whatsapp_router
+from app.core.long_absence_reminder import send_long_absence_reminders
 from app.core.reminder import send_reminders
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,9 @@ logger = logging.getLogger(__name__)
 async def _lifespan(app: FastAPI):
     scheduler = AsyncIOScheduler(timezone="Europe/Istanbul")
     scheduler.add_job(send_reminders, "interval", minutes=2, id="reminder_job")
+    scheduler.add_job(send_long_absence_reminders, "cron", hour=11, minute=0, id="long_absence_reminder_job")
     scheduler.start()
-    logger.info("APScheduler started — reminder job every 2 minutes")
+    logger.info("APScheduler started - reminder job every 2 minutes, long absence job daily at 11:00")
     yield
     scheduler.shutdown(wait=False)
     logger.info("APScheduler stopped")

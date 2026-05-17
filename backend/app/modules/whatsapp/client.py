@@ -149,6 +149,36 @@ async def send_list(
     return await _post(phone_number_id, access_token, payload)
 
 
+async def send_template(
+    phone_number_id: str,
+    access_token: str,
+    to: str,
+    template_name: str,
+    language_code: str,
+    body_parameters: list[str],
+) -> bool:
+    """Onayli WhatsApp template mesaji gonderir."""
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {"code": language_code},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": value}
+                        for value in body_parameters
+                    ],
+                }
+            ],
+        },
+    }
+    return await _post(phone_number_id, access_token, payload)
+
+
 async def _post(phone_number_id: str, access_token: str, payload: dict) -> bool:
     """Meta Graph API'ye POST atar; başarıda True, hatada False döner."""
     url = f"{_GRAPH_URL}/{phone_number_id}/messages"

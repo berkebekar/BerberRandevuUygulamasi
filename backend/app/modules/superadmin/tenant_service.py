@@ -627,6 +627,9 @@ async def update_tenant_whatsapp(
     tenant.whatsapp_cancellation_superadmin_enabled = body.cancellation_superadmin_enabled
     tenant.whatsapp_reschedule_enabled = body.reschedule_enabled
     tenant.whatsapp_reschedule_superadmin_enabled = body.reschedule_superadmin_enabled
+    tenant.whatsapp_long_absence_enabled = body.long_absence_enabled
+    tenant.whatsapp_long_absence_superadmin_enabled = body.long_absence_superadmin_enabled
+    tenant.whatsapp_long_absence_days = body.long_absence_days
     tenant.whatsapp_silent_numbers = normalize_silent_numbers(body.silent_numbers)
     if body.connection_status == "connected" and previous_status != "connected":
         tenant.whatsapp_connected_at = datetime.now(timezone.utc)
@@ -652,6 +655,9 @@ async def update_tenant_whatsapp(
             "cancellation_superadmin_enabled": tenant.whatsapp_cancellation_superadmin_enabled,
             "reschedule_enabled": tenant.whatsapp_reschedule_enabled,
             "reschedule_superadmin_enabled": tenant.whatsapp_reschedule_superadmin_enabled,
+            "long_absence_enabled": tenant.whatsapp_long_absence_enabled,
+            "long_absence_superadmin_enabled": tenant.whatsapp_long_absence_superadmin_enabled,
+            "long_absence_days": tenant.whatsapp_long_absence_days,
             "silent_numbers_count": len(tenant.whatsapp_silent_numbers or []),
         },
     )

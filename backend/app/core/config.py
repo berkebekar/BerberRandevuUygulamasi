@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     # WhatsApp Business API (Meta Cloud API) — platform token + tenant phone ids
     wa_verify_token: str = ""
     wa_access_token: str = ""
+    wa_long_absence_template_name: str = "long_time_no_visit_reminder"
+    wa_long_absence_template_language: str = "tr"
 
 
 @lru_cache

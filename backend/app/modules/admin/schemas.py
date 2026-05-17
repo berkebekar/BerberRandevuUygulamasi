@@ -65,6 +65,10 @@ class AdminWhatsappSettingsResponse(BaseModel):
     reschedule_enabled: bool = True
     reschedule_superadmin_enabled: bool = True
     reschedule_effective_enabled: bool = True
+    long_absence_enabled: bool = True
+    long_absence_superadmin_enabled: bool = True
+    long_absence_effective_enabled: bool = True
+    long_absence_days: int = 45
     silent_numbers: list[str] = Field(default_factory=list)
 
 
@@ -74,6 +78,7 @@ class AdminWhatsappSettingsUpdateRequest(BaseModel):
     reminder_enabled: bool = True
     cancellation_enabled: bool = True
     reschedule_enabled: bool = True
+    long_absence_enabled: bool = True
     silent_numbers: list[str] = Field(default_factory=list)
 
 

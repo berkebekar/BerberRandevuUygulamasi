@@ -111,7 +111,7 @@ export default function LinkedBarbersPage() {
         {overview?.mode === "owner" && overview.linked_tenants.length > 0 && (
           <>
             <section className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-              <label className="space-y-1 text-xs text-zinc-400">
+              <label className="min-w-0 space-y-1 text-xs text-zinc-400">
                 Berber
                 <select value={selectedTenantId} onChange={(e) => { setSelectedTenantId(e.target.value); setData(null); }} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100">
                   {overview.linked_tenants.map((item) => (
@@ -119,12 +119,12 @@ export default function LinkedBarbersPage() {
                   ))}
                 </select>
               </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="space-y-1 text-xs text-zinc-400">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="min-w-0 space-y-1 text-xs text-zinc-400">
                   Başlangıç
                   <input type="date" value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" />
                 </label>
-                <label className="space-y-1 text-xs text-zinc-400">
+                <label className="min-w-0 space-y-1 text-xs text-zinc-400">
                   Bitiş
                   <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" />
                 </label>

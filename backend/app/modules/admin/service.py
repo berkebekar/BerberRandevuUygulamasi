@@ -109,6 +109,7 @@ async def update_whatsapp_settings(
         "reminder_enabled": body.reminder_enabled,
         "cancellation_enabled": body.cancellation_enabled,
         "reschedule_enabled": body.reschedule_enabled,
+        "long_absence_enabled": body.long_absence_enabled,
     }
     locked = [
         name
@@ -123,6 +124,7 @@ async def update_whatsapp_settings(
     tenant.whatsapp_reminder_enabled = body.reminder_enabled
     tenant.whatsapp_cancellation_enabled = body.cancellation_enabled
     tenant.whatsapp_reschedule_enabled = body.reschedule_enabled
+    tenant.whatsapp_long_absence_enabled = body.long_absence_enabled
     tenant.whatsapp_silent_numbers = normalize_silent_numbers(body.silent_numbers)
     await db.commit()
     await db.refresh(tenant)

@@ -42,6 +42,10 @@ class WhatsappFeatureSettings:
     reschedule_enabled: bool
     reschedule_superadmin_enabled: bool
     reschedule_effective_enabled: bool
+    long_absence_enabled: bool
+    long_absence_superadmin_enabled: bool
+    long_absence_effective_enabled: bool
+    long_absence_days: int
     silent_numbers: list[str]
 
     def as_dict(self) -> dict:
@@ -61,6 +65,10 @@ class WhatsappFeatureSettings:
             "reschedule_enabled": self.reschedule_enabled,
             "reschedule_superadmin_enabled": self.reschedule_superadmin_enabled,
             "reschedule_effective_enabled": self.reschedule_effective_enabled,
+            "long_absence_enabled": self.long_absence_enabled,
+            "long_absence_superadmin_enabled": self.long_absence_superadmin_enabled,
+            "long_absence_effective_enabled": self.long_absence_effective_enabled,
+            "long_absence_days": self.long_absence_days,
             "silent_numbers": self.silent_numbers,
         }
 
@@ -76,6 +84,13 @@ def build_whatsapp_feature_settings(tenant: Tenant) -> WhatsappFeatureSettings:
     cancellation_superadmin_enabled = _enabled(tenant, "whatsapp_cancellation_superadmin_enabled")
     reschedule_enabled = _enabled(tenant, "whatsapp_reschedule_enabled")
     reschedule_superadmin_enabled = _enabled(tenant, "whatsapp_reschedule_superadmin_enabled")
+    long_absence_enabled = _enabled(tenant, "whatsapp_long_absence_enabled", default=False)
+    long_absence_superadmin_enabled = _enabled(tenant, "whatsapp_long_absence_superadmin_enabled")
+    long_absence_days = int(getattr(tenant, "whatsapp_long_absence_days", 45) or 45)
+    if long_absence_days < 30:
+        long_absence_days = 30
+    if long_absence_days > 120:
+        long_absence_days = 120
 
     return WhatsappFeatureSettings(
         bot_enabled=bot_enabled,
@@ -93,6 +108,10 @@ def build_whatsapp_feature_settings(tenant: Tenant) -> WhatsappFeatureSettings:
         reschedule_enabled=reschedule_enabled,
         reschedule_superadmin_enabled=reschedule_superadmin_enabled,
         reschedule_effective_enabled=reschedule_enabled and reschedule_superadmin_enabled,
+        long_absence_enabled=long_absence_enabled,
+        long_absence_superadmin_enabled=long_absence_superadmin_enabled,
+        long_absence_effective_enabled=long_absence_enabled and long_absence_superadmin_enabled,
+        long_absence_days=long_absence_days,
         silent_numbers=normalize_silent_numbers(getattr(tenant, "whatsapp_silent_numbers", []) or []),
     )
 

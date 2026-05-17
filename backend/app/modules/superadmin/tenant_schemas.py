@@ -90,6 +90,10 @@ class TenantWhatsappSettings(BaseModel):
     reschedule_enabled: bool = True
     reschedule_superadmin_enabled: bool = True
     reschedule_effective_enabled: bool = True
+    long_absence_enabled: bool = True
+    long_absence_superadmin_enabled: bool = True
+    long_absence_effective_enabled: bool = True
+    long_absence_days: int = 45
     silent_numbers: list[str] = Field(default_factory=list)
 
 
@@ -177,7 +181,17 @@ class TenantWhatsappUpdateRequest(BaseModel):
     cancellation_superadmin_enabled: bool = True
     reschedule_enabled: bool = True
     reschedule_superadmin_enabled: bool = True
+    long_absence_enabled: bool = True
+    long_absence_superadmin_enabled: bool = True
+    long_absence_days: int = Field(default=45, ge=30, le=120)
     silent_numbers: list[str] = Field(default_factory=list)
+
+    @field_validator("long_absence_days")
+    @classmethod
+    def validate_long_absence_step(cls, value: int) -> int:
+        if value != 45 and value % 10 != 0:
+            raise ValueError("long_absence_days_must_be_45_or_10_step")
+        return value
 
     @field_validator("phone_number_id", "waba_id", "display_phone_number")
     @classmethod

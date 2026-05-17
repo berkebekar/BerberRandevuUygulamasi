@@ -18,6 +18,7 @@ from app.models.error_log import ErrorLog
 from app.models.uptime_check import UptimeCheck
 from app.models.wa_contact_log import WaContactLog
 from app.models.wa_error_log import WaErrorLog
+from app.models.wa_long_absence_reminder import WaLongAbsenceReminder
 
 __all__ = [
     "Base",
@@ -35,4 +36,5 @@ __all__ = [
     "UptimeCheck",
     "WaContactLog",
     "WaErrorLog",
+    "WaLongAbsenceReminder",
 ]

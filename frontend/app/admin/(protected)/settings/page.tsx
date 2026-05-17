@@ -25,12 +25,8 @@ type DayOverride = {
 }
 
 type AdminProfile = {
-  first_name: string | null
-  last_name: string | null
   business_name: string
   business_address: string | null
-  phone: string
-  email: string
 }
 
 type AdminWhatsappSettings = {
@@ -53,26 +49,28 @@ type AdminWhatsappSettings = {
   reschedule_enabled: boolean
   reschedule_superadmin_enabled: boolean
   reschedule_effective_enabled: boolean
+  long_absence_enabled: boolean
+  long_absence_superadmin_enabled: boolean
+  long_absence_effective_enabled: boolean
+  long_absence_days: number
   silent_numbers: string[]
 }
 
-type SettingsSection = "business" | "personal" | "whatsapp"
+type SettingsSection = "business" | "whatsapp"
 
 const SETTINGS_SECTION_PATHS: Record<SettingsSection, string> = {
   business: "/admin/settings/business",
-  personal: "/admin/settings/personal",
   whatsapp: "/admin/settings/whatsapp",
 }
 
 const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   business: "İşletme Ayarları",
-  personal: "Kişisel Ayarlar",
   whatsapp: "Whatsapp Bot Ayarları",
 }
 
 function sectionFromPath(pathname: string): SettingsSection | null {
   const section = pathname.split("/").filter(Boolean).at(-1)
-  return section === "business" || section === "personal" || section === "whatsapp" ? section : null
+  return section === "business" || section === "whatsapp" ? section : null
 }
 
 const WEEK_DAYS = [
@@ -123,21 +121,17 @@ export default function AdminSettingsPage() {
 
   // UI state
   const [isLoading, setIsLoading] = useState(false)
-  const [profileLoading, setProfileLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
-  const [firstName, setFirstName] = useState("")
-  const [lastName, setLastName] = useState("")
   const [businessName, setBusinessName] = useState("")
   const [businessAddress, setBusinessAddress] = useState("")
-  const [adminPhone, setAdminPhone] = useState("")
-  const [adminEmail, setAdminEmail] = useState("")
   const [whatsappSettings, setWhatsappSettings] = useState<AdminWhatsappSettings | null>(null)
   const [whatsappBotEnabled, setWhatsappBotEnabled] = useState(true)
   const [whatsappBookingEnabled, setWhatsappBookingEnabled] = useState(true)
   const [whatsappReminderEnabled, setWhatsappReminderEnabled] = useState(true)
   const [whatsappCancellationEnabled, setWhatsappCancellationEnabled] = useState(true)
   const [whatsappRescheduleEnabled, setWhatsappRescheduleEnabled] = useState(true)
+  const [whatsappLongAbsenceEnabled, setWhatsappLongAbsenceEnabled] = useState(true)
   const [whatsappSilentNumbers, setWhatsappSilentNumbers] = useState("")
   const [whatsappLoading, setWhatsappLoading] = useState(false)
   const [whatsappSaving, setWhatsappSaving] = useState(false)
@@ -207,20 +201,13 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     async function loadProfile() {
-      setProfileLoading(true)
       setError("")
       try {
         const data = await apiFetch<AdminProfile>("/api/v1/admin/profile")
-        setFirstName(data.first_name ?? "")
-        setLastName(data.last_name ?? "")
         setBusinessName(data.business_name ?? "")
         setBusinessAddress(data.business_address ?? "")
-        setAdminPhone(data.phone ?? "")
-        setAdminEmail(data.email ?? "")
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Profil bilgileri yuklenemedi.")
-      } finally {
-        setProfileLoading(false)
       }
     }
 
@@ -241,6 +228,7 @@ export default function AdminSettingsPage() {
         setWhatsappReminderEnabled(data.reminder_superadmin_enabled ? data.reminder_enabled : false)
         setWhatsappCancellationEnabled(data.cancellation_superadmin_enabled ? data.cancellation_enabled : false)
         setWhatsappRescheduleEnabled(data.reschedule_superadmin_enabled ? data.reschedule_enabled : false)
+        setWhatsappLongAbsenceEnabled(data.long_absence_superadmin_enabled ? data.long_absence_enabled : false)
         setWhatsappSilentNumbers(data.silent_numbers.join("\n"))
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Whatsapp ayarlari yuklenemedi.")
@@ -355,37 +343,6 @@ export default function AdminSettingsPage() {
     }
   }
 
-  async function handleSavePersonalSettings() {
-    if (!firstName.trim() || !lastName.trim()) {
-      setError("Ad ve soyad zorunludur.")
-      return
-    }
-
-    setProfileLoading(true)
-    setError("")
-    setSuccess("")
-    try {
-      const profile = await apiFetch<AdminProfile>("/api/v1/admin/profile", {
-        method: "PATCH",
-        body: JSON.stringify({
-          first_name: firstName,
-          last_name: lastName,
-        }),
-      })
-      setFirstName(profile.first_name ?? "")
-      setLastName(profile.last_name ?? "")
-      setBusinessName(profile.business_name ?? "")
-      setBusinessAddress(profile.business_address ?? "")
-      setAdminPhone(profile.phone ?? "")
-      setAdminEmail(profile.email ?? "")
-      setSuccess("Kisisel ayarlar kaydedildi.")
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Kisisel ayarlar kaydedilemedi.")
-    } finally {
-      setProfileLoading(false)
-    }
-  }
-
   async function handleSaveSpecialDay() {
     if (!specialDate) {
       setError("Ozel gun tarihi secin.")
@@ -490,6 +447,7 @@ export default function AdminSettingsPage() {
           reminder_enabled: whatsappReminderEnabled,
           cancellation_enabled: whatsappCancellationEnabled,
           reschedule_enabled: whatsappRescheduleEnabled,
+          long_absence_enabled: whatsappLongAbsenceEnabled,
           silent_numbers: whatsappSilentNumbers
             .split(/\r?\n|,/)
             .map((item) => item.trim())
@@ -502,6 +460,7 @@ export default function AdminSettingsPage() {
       setWhatsappReminderEnabled(data.reminder_superadmin_enabled ? data.reminder_enabled : false)
       setWhatsappCancellationEnabled(data.cancellation_superadmin_enabled ? data.cancellation_enabled : false)
       setWhatsappRescheduleEnabled(data.reschedule_superadmin_enabled ? data.reschedule_enabled : false)
+      setWhatsappLongAbsenceEnabled(data.long_absence_superadmin_enabled ? data.long_absence_enabled : false)
       setWhatsappSilentNumbers(data.silent_numbers.join("\n"))
       setSuccess("Whatsapp bot ayarlari kaydedildi.")
     } catch (err: unknown) {
@@ -765,73 +724,6 @@ export default function AdminSettingsPage() {
 
         <button
           type="button"
-          onClick={() => router.push(SETTINGS_SECTION_PATHS.personal)}
-          className={`${activeSection ? "hidden" : "flex"} w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
-            activeSection === "personal"
-              ? "border-zinc-500 bg-zinc-800 text-zinc-100"
-              : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600"
-          }`}
-        >
-          <span>Kişisel Ayarlar</span>
-          <span aria-hidden="true">›</span>
-        </button>
-
-        {activeSection === "personal" && (
-          <>
-            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 space-y-3">
-              <h2 className="text-sm font-semibold text-zinc-200">Kisisel Bilgiler</h2>
-              <p className="text-xs text-zinc-400">Ad ve soyad musterilere gorunen berber adi olarak kullanilir.</p>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Ad</label>
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900 text-zinc-100"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Soyad</label>
-                <input
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-700 rounded-lg text-base outline-none focus:ring-2 focus:ring-zinc-200 focus:border-transparent bg-zinc-900 text-zinc-100"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Numara</label>
-                <input
-                  type="text"
-                  value={adminPhone}
-                  readOnly
-                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-800 rounded-lg text-base outline-none bg-zinc-950 text-zinc-400"
-                />
-                <p className="mt-1 text-xs text-amber-300">Numaranızı değiştirmek için yetkiliyle iletişime geçin.</p>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">E-posta</label>
-                <input
-                  type="email"
-                  value={adminEmail}
-                  readOnly
-                  className="block w-full max-w-full min-w-0 appearance-none px-3 py-2.5 border border-zinc-800 rounded-lg text-base outline-none bg-zinc-950 text-zinc-400"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleSavePersonalSettings}
-              disabled={profileLoading}
-              className="w-full py-3 bg-zinc-100 text-zinc-950 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
-            >
-              {profileLoading ? "Kaydediliyor..." : "Kisisel Ayarlari Kaydet"}
-            </button>
-          </>
-        )}
-
-        <button
-          type="button"
           onClick={() => router.push(SETTINGS_SECTION_PATHS.whatsapp)}
           className={`${activeSection ? "hidden" : "flex"} w-full items-center justify-between rounded-lg border px-4 py-3 text-left text-sm font-semibold transition-colors ${
             activeSection === "whatsapp"
@@ -956,6 +848,22 @@ export default function AdminSettingsPage() {
                       checked={whatsappRescheduleEnabled}
                       onChange={(e) => setWhatsappRescheduleEnabled(e.target.checked)}
                       disabled={!whatsappSettings?.reschedule_superadmin_enabled}
+                      className="h-5 w-5 accent-emerald-400"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3">
+                    <span>
+                      <span className="block text-sm font-semibold text-zinc-200">Uzun zamandir gelmeyenlere mesaj</span>
+                      <span className="block text-xs text-zinc-500">
+                        {whatsappSettings?.long_absence_days ?? 45} gun randevu almayan eski musterilere bir kez hatirlatma gonderir.
+                      </span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={whatsappLongAbsenceEnabled}
+                      onChange={(e) => setWhatsappLongAbsenceEnabled(e.target.checked)}
+                      disabled={!whatsappSettings?.long_absence_superadmin_enabled}
                       className="h-5 w-5 accent-emerald-400"
                     />
                   </label>

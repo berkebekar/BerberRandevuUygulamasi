@@ -4,7 +4,7 @@ Tek berber işletmesi; subdomain ile çözümlenir.
 """
 
 import uuid
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, JSON, String, text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, JSON, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -49,6 +49,9 @@ class Tenant(Base):
     whatsapp_cancellation_superadmin_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     whatsapp_reschedule_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     whatsapp_reschedule_superadmin_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_long_absence_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_long_absence_superadmin_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    whatsapp_long_absence_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("45"))
     whatsapp_silent_numbers: Mapped[list[str]] = mapped_column(JSON, nullable=False, server_default=text("'[]'"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     status: Mapped[TenantStatus] = mapped_column(
