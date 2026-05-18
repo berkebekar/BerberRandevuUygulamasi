@@ -26,28 +26,40 @@ const TR_PHONE_REGEX = /^\+90\d{10}$/
 function getFirebaseOtpErrorMessage(err: unknown) {
   const code = err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : ""
 
-  if (code === "auth/captcha-check-failed" || code === "auth/missing-app-credential") {
-    return "SMS güvenlik kontrolü başarısız oldu. Sayfayı yenileyip tekrar deneyin."
+  if (code === "auth/invalid-app-credential" || code === "auth/captcha-check-failed") {
+    return "SMS güvenlik doğrulaması başarısız oldu. Sayfayı yenileyip tekrar deneyin."
+  }
+  if (code === "auth/missing-app-credential") {
+    return "SMS güvenlik doğrulaması başlatılamadı. Sayfayı yenileyip tekrar deneyin."
   }
   if (code === "auth/too-many-requests") {
     return "Çok fazla SMS denemesi yapıldı. Lütfen biraz bekleyip tekrar deneyin."
   }
   if (code === "auth/quota-exceeded") {
-    return "Firebase SMS kotası doldu. Lütfen daha sonra tekrar deneyin."
+    return "SMS gönderim limiti doldu. Lütfen daha sonra tekrar deneyin."
   }
   if (code === "auth/billing-not-enabled") {
-    return "Firebase SMS için ödeme hesabı aktif değil."
+    return "SMS gönderimi şu anda aktif değil. Lütfen işletme ile iletişime geçin."
   }
   if (code === "auth/invalid-phone-number") {
-    return "Telefon numarası geçersiz."
+    return "Telefon numarası geçersiz. Lütfen numarayı kontrol edin."
   }
   if (code === "auth/network-request-failed") {
-    return "Ağ bağlantısı nedeniyle SMS başlatılamadı. Tekrar deneyin."
+    return "Bağlantı sorunu nedeniyle SMS gönderilemedi. Lütfen tekrar deneyin."
+  }
+  if (code === "auth/code-expired") {
+    return "Doğrulama kodunun süresi doldu. Lütfen yeni kod isteyin."
+  }
+  if (code === "auth/invalid-verification-code") {
+    return "Doğrulama kodu hatalı. Lütfen tekrar kontrol edin."
+  }
+  if (code === "auth/session-expired") {
+    return "Doğrulama oturumunun süresi doldu. Lütfen yeni kod isteyin."
   }
   if (err instanceof Error) {
     return err.message
   }
-  return "SMS gönderilemedi."
+  return "SMS doğrulama tamamlanamadı. Lütfen tekrar deneyin."
 }
 
 export default function AuthPage() {
