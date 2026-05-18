@@ -11,9 +11,9 @@
 
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useCallback, useState, useEffect, useRef } from "react"
 import type { ConfirmationResult } from "firebase/auth"
-import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth"
+import { RecaptchaVerifier, signInWithPhoneNumber, signOut } from "firebase/auth"
 import { PhoneInput, OTPInput, TenantUnavailable } from "@/components"
 import { apiFetch, apiPost, isTenantAccessError } from "@/lib/api"
 import { getFirebaseAuth } from "@/lib/firebase"
@@ -22,6 +22,33 @@ import { getFirebaseAuth } from "@/lib/firebase"
 type Step = "phone" | "otp" | "register"
 type OtpProvider = "whatsapp" | "firebase_sms"
 const TR_PHONE_REGEX = /^\+90\d{10}$/
+
+function getFirebaseOtpErrorMessage(err: unknown) {
+  const code = err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : ""
+
+  if (code === "auth/captcha-check-failed" || code === "auth/missing-app-credential") {
+    return "SMS güvenlik kontrolü başarısız oldu. Sayfayı yenileyip tekrar deneyin."
+  }
+  if (code === "auth/too-many-requests") {
+    return "Çok fazla SMS denemesi yapıldı. Lütfen biraz bekleyip tekrar deneyin."
+  }
+  if (code === "auth/quota-exceeded") {
+    return "Firebase SMS kotası doldu. Lütfen daha sonra tekrar deneyin."
+  }
+  if (code === "auth/billing-not-enabled") {
+    return "Firebase SMS için ödeme hesabı aktif değil."
+  }
+  if (code === "auth/invalid-phone-number") {
+    return "Telefon numarası geçersiz."
+  }
+  if (code === "auth/network-request-failed") {
+    return "Ağ bağlantısı nedeniyle SMS başlatılamadı. Tekrar deneyin."
+  }
+  if (err instanceof Error) {
+    return err.message
+  }
+  return "SMS gönderilemedi."
+}
 
 export default function AuthPage() {
   // Hangi aşamadayız
@@ -49,12 +76,56 @@ export default function AuthPage() {
   // OTP tekrar gönderme için geri sayım (saniye)
   const [countdown, setCountdown] = useState(0)
 
+  const clearFirebaseState = useCallback(function clearFirebaseState() {
+    recaptchaVerifierRef.current?.clear()
+    recaptchaVerifierRef.current = null
+    setFirebaseConfirmation(null)
+  }, [])
+
+  const refreshOtpProvider = useCallback(async function refreshOtpProvider() {
+    const data = await apiFetch<{ name: string; otp_provider?: OtpProvider }>(
+      "/api/v1/tenant/info",
+      { cache: "no-store" }
+    )
+    const nextProvider = data.otp_provider ?? "whatsapp"
+    setTenantName(data.name)
+    setOtpProvider((currentProvider) => {
+      if (currentProvider !== nextProvider) {
+        clearFirebaseState()
+        setOtp("")
+        setCountdown(0)
+      }
+      return nextProvider
+    })
+    return nextProvider
+  }, [clearFirebaseState])
+
+  const sendFirebaseOtp = useCallback(async function sendFirebaseOtp() {
+    const auth = getFirebaseAuth()
+    clearFirebaseState()
+    const verifier = new RecaptchaVerifier(auth, "firebase-recaptcha-container", { size: "invisible" })
+    recaptchaVerifierRef.current = verifier
+    try {
+      const confirmation = await signInWithPhoneNumber(auth, phone, verifier)
+      setFirebaseConfirmation(confirmation)
+    } catch (err) {
+      clearFirebaseState()
+      throw new Error(getFirebaseOtpErrorMessage(err))
+    }
+  }, [clearFirebaseState, phone])
+
+  async function signOutFirebaseIfConfigured() {
+    try {
+      await signOut(getFirebaseAuth())
+    } catch {
+      // Firebase oturumu bizim backend oturumumuzdan ayrı; temizleme başarısızsa akışı bozma.
+    }
+  }
+
   useEffect(() => {
     async function loadTenantInfo() {
       try {
-        const data = await apiFetch<{ name: string; otp_provider?: OtpProvider }>("/api/v1/tenant/info")
-        setTenantName(data.name)
-        setOtpProvider(data.otp_provider ?? "whatsapp")
+        await refreshOtpProvider()
       } catch (err: unknown) {
         if (isTenantAccessError(err)) {
           setTenantError(err.message)
@@ -64,14 +135,19 @@ export default function AuthPage() {
       }
     }
     loadTenantInfo()
-  }, [])
+  }, [refreshOtpProvider])
 
   useEffect(() => {
     return () => {
-      recaptchaVerifierRef.current?.clear()
-      recaptchaVerifierRef.current = null
+      clearFirebaseState()
     }
-  }, [])
+  }, [clearFirebaseState])
+
+  useEffect(() => {
+    clearFirebaseState()
+    setOtp("")
+    setCountdown(0)
+  }, [clearFirebaseState, phone])
 
   // Geri sayım her saniye azalır
   useEffect(() => {
@@ -95,14 +171,9 @@ export default function AuthPage() {
     setError("")
     setIsLoading(true)
     try {
-      setFirebaseConfirmation(null)
-      if (otpProvider === "firebase_sms") {
-        const auth = getFirebaseAuth()
-        recaptchaVerifierRef.current?.clear()
-        const verifier = new RecaptchaVerifier(auth, "firebase-recaptcha-container", { size: "invisible" })
-        recaptchaVerifierRef.current = verifier
-        const confirmation = await signInWithPhoneNumber(auth, phone, verifier)
-        setFirebaseConfirmation(confirmation)
+      const currentProvider = await refreshOtpProvider()
+      if (currentProvider === "firebase_sms") {
+        await sendFirebaseOtp()
       } else {
         await apiPost("/api/v1/auth/send-otp", { phone })
       }
@@ -137,6 +208,7 @@ export default function AuthPage() {
           "/api/v1/auth/firebase/verify-phone",
           { phone, id_token: idToken }
         )
+        await signOutFirebaseIfConfigured()
       } else {
         res = await apiPost<{ next: "admin" | "user" | "register"; registration_token?: string }>(
           "/api/v1/auth/verify-otp",
@@ -197,16 +269,17 @@ export default function AuthPage() {
     if (tenantError) return
 
     if (countdown > 0) return
+    if (!TR_PHONE_REGEX.test(phone)) {
+      setStep("phone")
+      setError("Lütfen geçerli bir telefon numarası girin.")
+      return
+    }
     setError("")
     setIsLoading(true)
     try {
-      if (otpProvider === "firebase_sms") {
-        const auth = getFirebaseAuth()
-        recaptchaVerifierRef.current?.clear()
-        const verifier = new RecaptchaVerifier(auth, "firebase-recaptcha-container", { size: "invisible" })
-        recaptchaVerifierRef.current = verifier
-        const confirmation = await signInWithPhoneNumber(auth, phone, verifier)
-        setFirebaseConfirmation(confirmation)
+      const currentProvider = await refreshOtpProvider()
+      if (currentProvider === "firebase_sms") {
+        await sendFirebaseOtp()
       } else {
         await apiPost("/api/v1/auth/send-otp", { phone })
       }
@@ -285,6 +358,11 @@ export default function AuthPage() {
                     ? `${phone} numarasina SMS ile gonderilen kodu girin`
                     : `${phone} numarasına WhatsApp'tan gönderilen kodu girin`}
                 </label>
+                {otpProvider === "firebase_sms" && (
+                  <p className="mb-3 text-center text-xs text-zinc-400">
+                    SMS spam kutunuza düşmüş olabilir, spam kutunuzu kontrol edin.
+                  </p>
+                )}
                 <OTPInput onComplete={handleVerifyOtp} disabled={isLoading} />
               </div>
 
@@ -317,7 +395,7 @@ export default function AuthPage() {
 
               {/* Geri butonu */}
               <button
-                onClick={() => { setStep("phone"); setError("") }}
+                onClick={() => { clearFirebaseState(); setOtp(""); setStep("phone"); setError("") }}
                 className="w-full text-sm text-zinc-400 hover:text-zinc-300"
               >
                 ← Numarayı değiştir
