@@ -169,6 +169,24 @@ export default function AuthPage() {
     }
 
     setError("")
+    if (otpProvider === "firebase_sms") {
+      setStep("otp")
+      setCountdown(60)
+      void (async () => {
+        try {
+          const currentProvider = await refreshOtpProvider()
+          if (currentProvider !== "firebase_sms") {
+            throw new Error("Doğrulama kanalı değişti. Lütfen numarayı tekrar gönderin.")
+          }
+          await sendFirebaseOtp()
+        } catch (err: unknown) {
+          setCountdown(0)
+          setError(err instanceof Error ? err.message : "Bir hata oluştu.")
+        }
+      })()
+      return
+    }
+
     setIsLoading(true)
     try {
       const currentProvider = await refreshOtpProvider()
