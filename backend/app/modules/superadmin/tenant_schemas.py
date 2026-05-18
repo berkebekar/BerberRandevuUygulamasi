@@ -108,7 +108,7 @@ class TenantDetailResponse(BaseModel):
     created_at: datetime
     admin: TenantAdminSummary | None = None
     parent_tenant: TenantParentSummary | None = None
-    otp_provider: Literal["whatsapp", "firebase_sms"] = "whatsapp"
+    otp_provider: Literal["whatsapp", "firebase_sms", "disabled"] = "whatsapp"
     whatsapp: TenantWhatsappSettings
     stats: TenantDetailStats
 
@@ -165,7 +165,7 @@ class TenantUpdateRequest(BaseModel):
     address: str | None = Field(default=None, min_length=5, max_length=500)
     admin_phone: str | None = Field(default=None, min_length=10, max_length=50)
     admin_email: str | None = Field(default=None, min_length=5, max_length=255)
-    otp_provider: Literal["whatsapp", "firebase_sms"] | None = None
+    otp_provider: Literal["whatsapp", "firebase_sms", "disabled"] | None = None
 
 
 class TenantWhatsappUpdateRequest(BaseModel):

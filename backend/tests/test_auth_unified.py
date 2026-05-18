@@ -237,3 +237,56 @@ async def test_firebase_verify_rejected_for_whatsapp_tenant(monkeypatch):
 
     assert response.status_code == 400
     assert response.json() == {"error": "otp_provider_whatsapp"}
+
+
+@pytest.mark.asyncio
+async def test_disabled_otp_login_user_phone_sets_user_cookie():
+    user = _make_user()
+
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _make_db_result("disabled"),  # provider check
+            _make_db_result(None),        # endpoint: admin var mi?
+            _make_db_result(user),        # authenticate_user_by_verified_phone: user kaydi
+        ]
+    )
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_tenant_id] = _override_tenant_id
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        response = await client.post(
+            "/api/v1/auth/otp-disabled-login",
+            json={"phone": user.phone},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"next": "user", "registration_token": None}
+    assert "user_session" in response.cookies
+
+
+@pytest.mark.asyncio
+async def test_disabled_otp_login_rejected_for_whatsapp_tenant():
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[_make_db_result("whatsapp")])
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_tenant_id] = _override_tenant_id
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        response = await client.post(
+            "/api/v1/auth/otp-disabled-login",
+            json={"phone": "+905551234567"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "otp_provider_whatsapp"}

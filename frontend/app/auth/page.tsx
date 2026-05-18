@@ -20,7 +20,7 @@ import { getFirebaseAuth } from "@/lib/firebase"
 
 // Formun hangi aşamada olduğunu temsil eder
 type Step = "phone" | "otp" | "register"
-type OtpProvider = "whatsapp" | "firebase_sms"
+type OtpProvider = "whatsapp" | "firebase_sms" | "disabled"
 const TR_PHONE_REGEX = /^\+90\d{10}$/
 
 function getFirebaseOtpErrorMessage(err: unknown) {
@@ -186,6 +186,20 @@ export default function AuthPage() {
       const currentProvider = await refreshOtpProvider()
       if (currentProvider === "firebase_sms") {
         await sendFirebaseOtp()
+      } else if (currentProvider === "disabled") {
+        const res = await apiPost<{ next: "admin" | "user" | "register"; registration_token?: string }>(
+          "/api/v1/auth/otp-disabled-login",
+          { phone }
+        )
+        if (res.next === "register") {
+          setRegistrationToken(res.registration_token ?? "")
+          setStep("register")
+        } else if (res.next === "admin") {
+          window.location.assign("/admin")
+        } else {
+          window.location.assign("/")
+        }
+        return
       } else {
         await apiPost("/api/v1/auth/send-otp", { phone })
       }

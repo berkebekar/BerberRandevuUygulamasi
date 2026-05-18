@@ -292,6 +292,56 @@ async def verify_firebase_phone(
     )
 
 
+@router.post("/otp-disabled-login", status_code=200, response_model=UnifiedVerifyOTPResponse)
+async def login_without_otp(
+    body: SendOTPRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    tenant_id=Depends(get_tenant_id),
+):
+    """OTP kapali tenantlarda telefon numarasi ile dogrudan session/register akisini baslatir."""
+    await _require_otp_provider(db, tenant_id, "disabled")
+
+    normalized_phone = normalize_tr_phone(body.phone)
+    phone_candidates = phone_variants(normalized_phone)
+    admin_result = await db.execute(
+        select(Admin).where(
+            Admin.tenant_id == tenant_id,
+            Admin.phone.in_(phone_candidates),
+        )
+    )
+    admin = admin_result.scalar_one_or_none()
+    if admin is not None:
+        verified_admin = await auth_service.authenticate_admin_by_verified_phone(
+            db,
+            tenant_id,
+            normalized_phone,
+        )
+        _set_admin_session_cookie(
+            request,
+            response,
+            verified_admin.id,
+            verified_admin.session_version,
+        )
+        return UnifiedVerifyOTPResponse(next="admin")
+
+    result = await auth_service.authenticate_user_by_verified_phone(
+        db,
+        tenant_id,
+        normalized_phone,
+    )
+    if result["status"] == "returning_user":
+        user = result["user"]
+        _set_session_cookie(request, response, user.id, user.session_version)
+        return UnifiedVerifyOTPResponse(next="user")
+
+    return UnifiedVerifyOTPResponse(
+        next="register",
+        registration_token=result["registration_token"],
+    )
+
+
 @router.post("/user/send-otp", status_code=200)
 async def send_otp(
     body: SendOTPRequest,

@@ -65,6 +65,7 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   otp_invalid: "Dogrulama kodu hatali.",
   otp_provider_whatsapp: "Bu isletmede dogrulama WhatsApp uzerinden yapiliyor.",
   otp_provider_firebase_sms: "Bu isletmede dogrulama SMS uzerinden yapiliyor.",
+  otp_provider_disabled: "Bu isletmede dogrulama kodu kapali.",
   firebase_not_configured: "SMS dogrulama henuz yapilandirilmamis.",
   firebase_token_invalid: "SMS dogrulamasi gecersiz veya suresi doldu.",
   firebase_phone_required: "SMS ile telefon dogrulamasi zorunlu.",
