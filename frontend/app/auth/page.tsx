@@ -183,7 +183,7 @@ export default function AuthPage() {
     setError("")
     setIsLoading(true)
     try {
-      const currentProvider = await refreshOtpProvider()
+      const currentProvider = otpProvider
       if (currentProvider === "firebase_sms") {
         await sendFirebaseOtp()
       } else if (currentProvider === "disabled") {
