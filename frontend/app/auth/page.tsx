@@ -26,9 +26,16 @@ const TR_PHONE_REGEX = /^\+90\d{10}$/
 
 function getFirebaseOtpErrorMessage(err: unknown) {
   const code = err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : ""
+  const message = err instanceof Error ? err.message : ""
 
   if (code === "auth/invalid-app-credential" || code === "auth/captcha-check-failed") {
     return "SMS güvenlik doğrulaması başarısız oldu. Sayfayı yenileyip tekrar deneyin."
+  }
+  if (code === "auth/error-code:-39") {
+    return "SMS şu anda gönderilemedi. Lütfen biraz sonra tekrar deneyin."
+  }
+  if (message.includes("reCAPTCHA has already been rendered")) {
+    return "SMS güvenlik doğrulaması yenilenemedi. Lütfen tekrar deneyin."
   }
   if (code === "auth/missing-app-credential") {
     return "SMS güvenlik doğrulaması başlatılamadı. Sayfayı yenileyip tekrar deneyin."
@@ -57,9 +64,6 @@ function getFirebaseOtpErrorMessage(err: unknown) {
   if (code === "auth/session-expired") {
     return "Doğrulama oturumunun süresi doldu. Lütfen yeni kod isteyin."
   }
-  if (err instanceof Error) {
-    return err.message
-  }
   return "SMS doğrulama tamamlanamadı. Lütfen tekrar deneyin."
 }
 
@@ -75,6 +79,7 @@ export default function AuthPage() {
   const [registrationToken, setRegistrationToken] = useState("")
   const [firebaseConfirmation, setFirebaseConfirmation] = useState<ConfirmationResult | null>(null)
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null)
+  const [recaptchaContainerKey, setRecaptchaContainerKey] = useState(0)
 
   // Yükleme ve hata durumları
   const [isLoading, setIsLoading] = useState(false)
@@ -93,7 +98,16 @@ export default function AuthPage() {
     recaptchaVerifierRef.current?.clear()
     recaptchaVerifierRef.current = null
     setFirebaseConfirmation(null)
+    const container = document.getElementById("firebase-recaptcha-container")
+    if (container) {
+      container.innerHTML = ""
+    }
   }, [])
+
+  const resetFirebaseRecaptcha = useCallback(function resetFirebaseRecaptcha() {
+    clearFirebaseState()
+    setRecaptchaContainerKey((key) => key + 1)
+  }, [clearFirebaseState])
 
   const refreshOtpProvider = useCallback(async function refreshOtpProvider() {
     const data = await apiFetch<{ name: string; otp_provider?: OtpProvider }>(
@@ -115,17 +129,17 @@ export default function AuthPage() {
 
   const sendFirebaseOtp = useCallback(async function sendFirebaseOtp() {
     const auth = getFirebaseAuth()
-    clearFirebaseState()
+    resetFirebaseRecaptcha()
     const verifier = new RecaptchaVerifier(auth, "firebase-recaptcha-container", { size: "invisible" })
     recaptchaVerifierRef.current = verifier
     try {
       const confirmation = await signInWithPhoneNumber(auth, phone, verifier)
       setFirebaseConfirmation(confirmation)
     } catch (err) {
-      clearFirebaseState()
+      resetFirebaseRecaptcha()
       throw new Error(getFirebaseOtpErrorMessage(err))
     }
-  }, [clearFirebaseState, phone])
+  }, [phone, resetFirebaseRecaptcha])
 
   async function signOutFirebaseIfConfigured() {
     try {
@@ -502,7 +516,7 @@ export default function AuthPage() {
           )}
 
         </div>
-        <div id="firebase-recaptcha-container" />
+        <div key={recaptchaContainerKey} id="firebase-recaptcha-container" />
         <div className="mt-5 text-center text-xs">
           <a
             href="https://bbsoft.com.tr"
