@@ -20,8 +20,8 @@ from app.modules.superadmin.service import (
 
 router = APIRouter(prefix="/superadmin/auth", tags=["superadmin-auth"])
 
-_SESSION_MAX_AGE = 60 * 60 * 24 * 40
-_SESSION_EXPIRES_MINUTES = 60 * 24 * 40
+_SESSION_MAX_AGE = 60 * 60 * 24 * 5
+_SESSION_EXPIRES_MINUTES = 60 * 24 * 5
 
 
 def _set_super_admin_session_cookie(

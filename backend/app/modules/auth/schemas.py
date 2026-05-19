@@ -25,7 +25,8 @@ class VerifyOTPRequest(BaseModel):
 
 class FirebaseVerifyPhoneRequest(BaseModel):
     phone: str
-    id_token: str
+    id_token: str | None = None
+    code: str | None = None
 
 
 class CompleteRegistrationRequest(BaseModel):
@@ -54,9 +55,10 @@ class UnifiedVerifyOTPResponse(BaseModel):
     - next=admin: admin_session cookie yazildi, /admin'a yonlen
     - next=user: user_session cookie yazildi, /'a yonlen
     - next=register: yeni kullanici, registration_token ile kayit adimina gec
+    - next=admin_otp: OTP kapali olsa bile admin icin kod ekranina gec
     """
 
-    next: Literal["admin", "user", "register"]
+    next: Literal["admin", "user", "register", "admin_otp"]
     registration_token: str | None = None
 
 

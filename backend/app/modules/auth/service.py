@@ -19,6 +19,7 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.phone import normalize_tr_phone, phone_variants
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.models.admin import Admin
@@ -28,12 +29,15 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-_BYPASS_OTP_CODE = "123456"
-
 
 def _generate_otp() -> str:
     """Kriptografik güvenli rastgele 6 haneli OTP üretir."""
     return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def is_otp_bypass_code(code: str | None) -> bool:
+    bypass_code = get_settings().otp_bypass_code.strip()
+    return bool(code and bypass_code and secrets.compare_digest(code, bypass_code))
 
 
 async def send_otp(db: AsyncSession, tenant_id, phone: str) -> str:
@@ -132,7 +136,7 @@ async def verify_otp(
         # Zaten 3 yanlÄ±ÅŸ giriÅŸten geÃ§miÅŸ, iptal edilmiÅŸ sayÄ±lÄ±r
         raise HTTPException(401, {"error": "otp_invalid"})
 
-    if code != _BYPASS_OTP_CODE and not verify_password(code, record.code_hash):
+    if not is_otp_bypass_code(code) and not verify_password(code, record.code_hash):
         # YanlÄ±ÅŸ kod: deneme sayÄ±sÄ±nÄ± artÄ±r
         record.attempt_count += 1
         if record.attempt_count >= 3:
@@ -321,7 +325,7 @@ async def verify_admin_otp(
         # 3 yanlÄ±ÅŸ denemeden geÃ§miÅŸ, iptal edilmiÅŸ sayÄ±lÄ±r
         raise HTTPException(401, {"error": "otp_invalid"})
 
-    if code != _BYPASS_OTP_CODE and not verify_password(code, record.code_hash):
+    if not is_otp_bypass_code(code) and not verify_password(code, record.code_hash):
         # YanlÄ±ÅŸ kod: deneme sayÄ±sÄ±nÄ± artÄ±r
         record.attempt_count += 1
         if record.attempt_count >= 3:

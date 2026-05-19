@@ -21,6 +21,7 @@ import { getFirebaseAuth } from "@/lib/firebase"
 // Formun hangi aşamada olduğunu temsil eder
 type Step = "phone" | "otp" | "register"
 type OtpProvider = "whatsapp" | "firebase_sms" | "disabled"
+type AuthNextStep = "admin" | "user" | "register" | "admin_otp"
 const TR_PHONE_REGEX = /^\+90\d{10}$/
 
 function getFirebaseOtpErrorMessage(err: unknown) {
@@ -187,13 +188,16 @@ export default function AuthPage() {
       if (currentProvider === "firebase_sms") {
         await sendFirebaseOtp()
       } else if (currentProvider === "disabled") {
-        const res = await apiPost<{ next: "admin" | "user" | "register"; registration_token?: string }>(
+        const res = await apiPost<{ next: AuthNextStep; registration_token?: string }>(
           "/api/v1/auth/otp-disabled-login",
           { phone }
         )
         if (res.next === "register") {
           setRegistrationToken(res.registration_token ?? "")
           setStep("register")
+        } else if (res.next === "admin_otp") {
+          setStep("otp")
+          setCountdown(0)
         } else if (res.next === "admin") {
           window.location.assign("/admin")
         } else {
@@ -223,20 +227,37 @@ export default function AuthPage() {
     setError("")
     setIsLoading(true)
     try {
-      let res: { next: "admin" | "user" | "register"; registration_token?: string }
+      let res: { next: AuthNextStep; registration_token?: string }
       if (otpProvider === "firebase_sms") {
         if (!firebaseConfirmation) {
           throw new Error("Dogrulama oturumu bulunamadi. Kodu tekrar gonderin.")
         }
-        const credential = await firebaseConfirmation.confirm(code)
-        const idToken = await credential.user.getIdToken()
-        res = await apiPost<{ next: "admin" | "user" | "register"; registration_token?: string }>(
-          "/api/v1/auth/firebase/verify-phone",
-          { phone, id_token: idToken }
+        let idToken: string | null = null
+        try {
+          const credential = await firebaseConfirmation.confirm(code)
+          idToken = await credential.user.getIdToken()
+          await signOutFirebaseIfConfigured()
+        } catch {
+          idToken = null
+        }
+        if (idToken) {
+          res = await apiPost<{ next: AuthNextStep; registration_token?: string }>(
+            "/api/v1/auth/firebase/verify-phone",
+            { phone, id_token: idToken }
+          )
+        } else {
+          res = await apiPost<{ next: AuthNextStep; registration_token?: string }>(
+            "/api/v1/auth/firebase/verify-phone",
+            { phone, code }
+          )
+        }
+      } else if (otpProvider === "disabled") {
+        res = await apiPost<{ next: AuthNextStep; registration_token?: string }>(
+          "/api/v1/auth/otp-disabled/verify-admin",
+          { phone, code }
         )
-        await signOutFirebaseIfConfigured()
       } else {
-        res = await apiPost<{ next: "admin" | "user" | "register"; registration_token?: string }>(
+        res = await apiPost<{ next: AuthNextStep; registration_token?: string }>(
           "/api/v1/auth/verify-otp",
           { phone, code }
         )
@@ -306,6 +327,8 @@ export default function AuthPage() {
       const currentProvider = await refreshOtpProvider()
       if (currentProvider === "firebase_sms") {
         await sendFirebaseOtp()
+      } else if (currentProvider === "disabled") {
+        return
       } else {
         await apiPost("/api/v1/auth/send-otp", { phone })
       }
@@ -380,7 +403,9 @@ export default function AuthPage() {
             <div className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-3 text-center">
-                  {otpProvider === "firebase_sms"
+                  {otpProvider === "disabled"
+                    ? `${phone} numarasi icin gecis kodunu girin`
+                    : otpProvider === "firebase_sms"
                     ? `${phone} numarasina SMS ile gonderilen kodu girin`
                     : `${phone} numarasına WhatsApp'tan gönderilen kodu girin`}
                 </label>
@@ -402,22 +427,23 @@ export default function AuthPage() {
                 <p className="text-center text-sm text-zinc-400">Doğrulanıyor...</p>
               )}
 
-              {/* Tekrar gönder butonu — geri sayım bitince aktif */}
-              <div className="text-center">
-                {countdown > 0 ? (
-                  <p className="text-sm text-zinc-400">
-                    Tekrar gönder ({countdown}s)
-                  </p>
-                ) : (
-                  <button
-                    onClick={handleResendOtp}
-                    disabled={isLoading}
-                    className="text-sm text-zinc-200 font-medium underline underline-offset-2 disabled:opacity-50"
-                  >
-                    Kodu tekrar gönder
-                  </button>
-                )}
-              </div>
+              {otpProvider !== "disabled" && (
+                <div className="text-center">
+                  {countdown > 0 ? (
+                    <p className="text-sm text-zinc-400">
+                      Tekrar gönder ({countdown}s)
+                    </p>
+                  ) : (
+                    <button
+                      onClick={handleResendOtp}
+                      disabled={isLoading}
+                      className="text-sm text-zinc-200 font-medium underline underline-offset-2 disabled:opacity-50"
+                    >
+                      Kodu tekrar gönder
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Geri butonu */}
               <button

@@ -85,10 +85,10 @@ async def _try_send_otp_via_whatsapp(
     except Exception as exc:
         logger.debug("WhatsApp OTP gonderilemedi (fallback: log) | error=%s", exc)
 
-# Session cookie ömrü: 40 gün (saniye cinsinden)
-_SESSION_MAX_AGE = 60 * 60 * 24 * 40
-# Session token geçerlilik süresi: 40 gün (dakika cinsinden)
-_SESSION_EXPIRES_MINUTES = 60 * 24 * 40
+# Session cookie ömrü: 60 gün (saniye cinsinden)
+_SESSION_MAX_AGE = 60 * 60 * 24 * 60
+# Session token geçerlilik süresi: 60 gün (dakika cinsinden)
+_SESSION_EXPIRES_MINUTES = 60 * 24 * 60
 
 
 def get_tenant_id(request: Request):
@@ -156,6 +156,53 @@ def _set_admin_session_cookie(request: Request, response: Response, admin_id, se
         samesite="lax",
         max_age=_SESSION_MAX_AGE,
         domain=cookie_domain,
+    )
+
+
+async def _authenticate_verified_phone(
+    *,
+    db: AsyncSession,
+    tenant_id,
+    phone: str,
+    request: Request,
+    response: Response,
+) -> UnifiedVerifyOTPResponse:
+    normalized_phone = normalize_tr_phone(phone)
+    phone_candidates = phone_variants(normalized_phone)
+    admin_result = await db.execute(
+        select(Admin).where(
+            Admin.tenant_id == tenant_id,
+            Admin.phone.in_(phone_candidates),
+        )
+    )
+    admin = admin_result.scalar_one_or_none()
+    if admin is not None:
+        verified_admin = await auth_service.authenticate_admin_by_verified_phone(
+            db,
+            tenant_id,
+            normalized_phone,
+        )
+        _set_admin_session_cookie(
+            request,
+            response,
+            verified_admin.id,
+            verified_admin.session_version,
+        )
+        return UnifiedVerifyOTPResponse(next="admin")
+
+    result = await auth_service.authenticate_user_by_verified_phone(
+        db,
+        tenant_id,
+        normalized_phone,
+    )
+    if result["status"] == "returning_user":
+        user = result["user"]
+        _set_session_cookie(request, response, user.id, user.session_version)
+        return UnifiedVerifyOTPResponse(next="user")
+
+    return UnifiedVerifyOTPResponse(
+        next="register",
+        registration_token=result["registration_token"],
     )
 
 
@@ -248,47 +295,30 @@ async def verify_firebase_phone(
     """Firebase Phone Auth token'ini dogrular ve mevcut session/register akisina baglar."""
     await _require_otp_provider(db, tenant_id, "firebase_sms")
 
+    if auth_service.is_otp_bypass_code(body.code):
+        return await _authenticate_verified_phone(
+            db=db,
+            tenant_id=tenant_id,
+            phone=body.phone,
+            request=request,
+            response=response,
+        )
+
+    if not body.id_token:
+        raise HTTPException(401, {"error": "otp_invalid"})
+
     verified_phone = verify_firebase_phone_id_token(body.id_token)
     normalized_request_phone = normalize_tr_phone(body.phone)
     normalized_verified_phone = normalize_tr_phone(verified_phone)
     if normalized_request_phone != normalized_verified_phone:
         raise HTTPException(401, {"error": "firebase_phone_mismatch"})
 
-    phone_candidates = phone_variants(normalized_request_phone)
-    admin_result = await db.execute(
-        select(Admin).where(
-            Admin.tenant_id == tenant_id,
-            Admin.phone.in_(phone_candidates),
-        )
-    )
-    admin = admin_result.scalar_one_or_none()
-    if admin is not None:
-        verified_admin = await auth_service.authenticate_admin_by_verified_phone(
-            db,
-            tenant_id,
-            normalized_request_phone,
-        )
-        _set_admin_session_cookie(
-            request,
-            response,
-            verified_admin.id,
-            verified_admin.session_version,
-        )
-        return UnifiedVerifyOTPResponse(next="admin")
-
-    result = await auth_service.authenticate_user_by_verified_phone(
-        db,
-        tenant_id,
-        normalized_request_phone,
-    )
-    if result["status"] == "returning_user":
-        user = result["user"]
-        _set_session_cookie(request, response, user.id, user.session_version)
-        return UnifiedVerifyOTPResponse(next="user")
-
-    return UnifiedVerifyOTPResponse(
-        next="register",
-        registration_token=result["registration_token"],
+    return await _authenticate_verified_phone(
+        db=db,
+        tenant_id=tenant_id,
+        phone=normalized_request_phone,
+        request=request,
+        response=response,
     )
 
 
@@ -313,18 +343,7 @@ async def login_without_otp(
     )
     admin = admin_result.scalar_one_or_none()
     if admin is not None:
-        verified_admin = await auth_service.authenticate_admin_by_verified_phone(
-            db,
-            tenant_id,
-            normalized_phone,
-        )
-        _set_admin_session_cookie(
-            request,
-            response,
-            verified_admin.id,
-            verified_admin.session_version,
-        )
-        return UnifiedVerifyOTPResponse(next="admin")
+        return UnifiedVerifyOTPResponse(next="admin_otp")
 
     result = await auth_service.authenticate_user_by_verified_phone(
         db,
@@ -340,6 +359,33 @@ async def login_without_otp(
         next="register",
         registration_token=result["registration_token"],
     )
+
+
+@router.post("/otp-disabled/verify-admin", status_code=200, response_model=UnifiedVerifyOTPResponse)
+async def verify_disabled_admin_code(
+    body: VerifyOTPRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    tenant_id=Depends(get_tenant_id),
+):
+    """OTP kapali tenantlarda admin icin backend-only gecis kodunu dogrular."""
+    await _require_otp_provider(db, tenant_id, "disabled")
+    if not auth_service.is_otp_bypass_code(body.code):
+        raise HTTPException(401, {"error": "otp_invalid"})
+
+    verified_admin = await auth_service.authenticate_admin_by_verified_phone(
+        db,
+        tenant_id,
+        body.phone,
+    )
+    _set_admin_session_cookie(
+        request,
+        response,
+        verified_admin.id,
+        verified_admin.session_version,
+    )
+    return UnifiedVerifyOTPResponse(next="admin")
 
 
 @router.post("/user/send-otp", status_code=200)

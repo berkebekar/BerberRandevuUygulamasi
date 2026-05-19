@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import decode_token, hash_password
 from app.main import app
@@ -62,8 +63,10 @@ def _make_otp_record(phone: str, role: str, code: str = "123456") -> SimpleNames
 @pytest.fixture(autouse=True)
 def reset_dependency_overrides():
     app.dependency_overrides.clear()
+    get_settings.cache_clear()
     yield
     app.dependency_overrides.clear()
+    get_settings.cache_clear()
 
 
 async def _override_tenant_id():
@@ -264,6 +267,102 @@ async def test_disabled_otp_login_user_phone_sets_user_cookie():
         response = await client.post(
             "/api/v1/auth/otp-disabled-login",
             json={"phone": user.phone},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"next": "user", "registration_token": None}
+    assert "user_session" in response.cookies
+
+
+@pytest.mark.asyncio
+async def test_disabled_otp_login_admin_phone_requires_code():
+    admin = _make_admin()
+
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _make_db_result("disabled"),  # provider check
+            _make_db_result(admin),       # endpoint: admin var mi?
+        ]
+    )
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_tenant_id] = _override_tenant_id
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        response = await client.post(
+            "/api/v1/auth/otp-disabled-login",
+            json={"phone": admin.phone},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"next": "admin_otp", "registration_token": None}
+    assert "admin_session" not in response.cookies
+
+
+@pytest.mark.asyncio
+async def test_disabled_otp_admin_bypass_code_sets_admin_cookie(monkeypatch):
+    monkeypatch.setenv("OTP_BYPASS_CODE", "654321")
+    get_settings.cache_clear()
+    admin = _make_admin()
+
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _make_db_result("disabled"),  # provider check
+            _make_db_result(admin),       # authenticate_admin_by_verified_phone: admin kaydi
+        ]
+    )
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_tenant_id] = _override_tenant_id
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        response = await client.post(
+            "/api/v1/auth/otp-disabled/verify-admin",
+            json={"phone": admin.phone, "code": "654321"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"next": "admin", "registration_token": None}
+    assert "admin_session" in response.cookies
+
+
+@pytest.mark.asyncio
+async def test_firebase_bypass_code_sets_user_cookie_without_id_token(monkeypatch):
+    monkeypatch.setenv("OTP_BYPASS_CODE", "654321")
+    get_settings.cache_clear()
+    user = _make_user()
+
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _make_db_result("firebase_sms"),  # provider check
+            _make_db_result(None),            # shared auth: admin var mi?
+            _make_db_result(user),            # authenticate_user_by_verified_phone: user kaydi
+        ]
+    )
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+
+    async def override_db():
+        yield session
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_tenant_id] = _override_tenant_id
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
+        response = await client.post(
+            "/api/v1/auth/firebase/verify-phone",
+            json={"phone": user.phone, "code": "654321"},
         )
 
     assert response.status_code == 200

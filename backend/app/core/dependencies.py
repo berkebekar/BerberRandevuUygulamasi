@@ -35,9 +35,13 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-# Sliding session süresi: 40 gün.
-_SESSION_MAX_AGE = 60 * 60 * 24 * 40
-_SESSION_EXPIRES_MINUTES = 60 * 24 * 40
+# User/admin sliding session süresi: 60 gün.
+_SESSION_MAX_AGE = 60 * 60 * 24 * 60
+_SESSION_EXPIRES_MINUTES = 60 * 24 * 60
+
+# Superadmin sliding session süresi: 5 gün.
+_SUPERADMIN_SESSION_MAX_AGE = 60 * 60 * 24 * 5
+_SUPERADMIN_SESSION_EXPIRES_MINUTES = 60 * 24 * 5
 
 
 def _renew_user_cookie(request: Request, user: User) -> None:
@@ -85,7 +89,7 @@ def _renew_super_admin_cookie(request: Request, super_admin: SuperAdmin) -> None
     settings = get_settings()
     token = create_token_with_secret(
         {"sub": str(super_admin.id), "role": "superadmin", "sv": super_admin.session_version},
-        expires_minutes=_SESSION_EXPIRES_MINUTES,
+        expires_minutes=_SUPERADMIN_SESSION_EXPIRES_MINUTES,
         secret_key=get_superadmin_secret(),
     )
     request.state._renew_super_admin_session_cookie = {
@@ -94,7 +98,7 @@ def _renew_super_admin_cookie(request: Request, super_admin: SuperAdmin) -> None
         "httponly": True,
         "secure": (settings.env == "production"),
         "samesite": "lax",
-        "max_age": _SESSION_MAX_AGE,
+        "max_age": _SUPERADMIN_SESSION_MAX_AGE,
         "domain": resolve_cookie_domain(request),
     }
 

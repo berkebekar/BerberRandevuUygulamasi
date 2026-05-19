@@ -160,7 +160,7 @@ async def test_dogru_otp_mevcut_kullanici_200_cookie():
     exp_ts = payload.get("exp")
     assert isinstance(exp_ts, int)
     delta_seconds = exp_ts - int(datetime.now(timezone.utc).timestamp())
-    assert 39 * 24 * 60 * 60 <= delta_seconds <= 40 * 24 * 60 * 60 + 120
+    assert 59 * 24 * 60 * 60 <= delta_seconds <= 60 * 24 * 60 * 60 + 120
 
 
 @pytest.mark.asyncio

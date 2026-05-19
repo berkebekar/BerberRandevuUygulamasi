@@ -211,11 +211,11 @@ async def test_otp_ile_giris_basarili_cookie():
     assert payload.get("role") == "admin"
     assert payload.get("sv")
 
-    # Exp suresi 40 gun civari olmalı (dakika bazli toleransli kontrol).
+    # Exp suresi 60 gun civari olmalı (dakika bazli toleransli kontrol).
     exp_ts = payload.get("exp")
     assert isinstance(exp_ts, int)
     delta_seconds = exp_ts - int(datetime.now(timezone.utc).timestamp())
-    assert 39 * 24 * 60 * 60 <= delta_seconds <= 40 * 24 * 60 * 60 + 120
+    assert 59 * 24 * 60 * 60 <= delta_seconds <= 60 * 24 * 60 * 60 + 120
 
 
 @pytest.mark.asyncio

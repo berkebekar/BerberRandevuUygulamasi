@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     firebase_project_id: str = ""
     firebase_service_account_json: str = ""
 
+    # Optional backend-only OTP bypass code for emergency/testing flows.
+    otp_bypass_code: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
