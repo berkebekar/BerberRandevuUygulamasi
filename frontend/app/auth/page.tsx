@@ -79,7 +79,6 @@ export default function AuthPage() {
   const [registrationToken, setRegistrationToken] = useState("")
   const [firebaseConfirmation, setFirebaseConfirmation] = useState<ConfirmationResult | null>(null)
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null)
-  const [recaptchaContainerKey, setRecaptchaContainerKey] = useState(0)
 
   // Yükleme ve hata durumları
   const [isLoading, setIsLoading] = useState(false)
@@ -104,11 +103,6 @@ export default function AuthPage() {
     }
   }, [])
 
-  const resetFirebaseRecaptcha = useCallback(function resetFirebaseRecaptcha() {
-    clearFirebaseState()
-    setRecaptchaContainerKey((key) => key + 1)
-  }, [clearFirebaseState])
-
   const refreshOtpProvider = useCallback(async function refreshOtpProvider() {
     const data = await apiFetch<{ name: string; otp_provider?: OtpProvider }>(
       "/api/v1/tenant/info",
@@ -129,17 +123,17 @@ export default function AuthPage() {
 
   const sendFirebaseOtp = useCallback(async function sendFirebaseOtp() {
     const auth = getFirebaseAuth()
-    resetFirebaseRecaptcha()
+    clearFirebaseState()
     const verifier = new RecaptchaVerifier(auth, "firebase-recaptcha-container", { size: "invisible" })
     recaptchaVerifierRef.current = verifier
     try {
       const confirmation = await signInWithPhoneNumber(auth, phone, verifier)
       setFirebaseConfirmation(confirmation)
     } catch (err) {
-      resetFirebaseRecaptcha()
+      clearFirebaseState()
       throw new Error(getFirebaseOtpErrorMessage(err))
     }
-  }, [phone, resetFirebaseRecaptcha])
+  }, [clearFirebaseState, phone])
 
   async function signOutFirebaseIfConfigured() {
     try {
@@ -516,7 +510,7 @@ export default function AuthPage() {
           )}
 
         </div>
-        <div key={recaptchaContainerKey} id="firebase-recaptcha-container" />
+        <div id="firebase-recaptcha-container" />
         <div className="mt-5 text-center text-xs">
           <a
             href="https://bbsoft.com.tr"
